@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline'; media-src 'self' file: blob:; worker-src 'self' blob:; img-src 'self' data:;" />
+  <title>ChurchRecorder</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-status="idle">
+
+  <div id="tally" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="service">
+      <button id="btn-service" class="service-name" title="Gottesdienst aus ChurchTools wählen">
+        <span id="service-name">Kein Gottesdienst gewählt</span>
+        <span id="service-date" class="service-date"></span>
+      </button>
+    </div>
+    <div class="top-actions">
+      <span id="net-badge" class="badge" title="Netzwerkschnittstelle">Netzwerk</span>
+      <span id="trans-badge" class="badge" title="Transkription">Transkript</span>
+      <button id="btn-update" class="ghost" hidden>Update bereit</button>
+      <button id="btn-library" class="ghost" title="Frühere Aufnahmen">Aufnahmen</button>
+      <button id="btn-settings" class="ghost" title="Einstellungen">Einstellungen</button>
+    </div>
+  </header>
+
+  <section class="transport">
+    <div class="transport-controls">
+      <button id="btn-record" class="record" title="Aufnahme starten (Strg+R)">
+        <span class="dot"></span>
+        <span id="record-label">Aufnahme starten</span>
+      </button>
+      <button id="btn-pause" class="secondary" disabled title="Pausieren">Pause</button>
+      <button id="btn-stop" class="secondary" disabled title="Aufnahme beenden">Beenden</button>
+    </div>
+
+    <div class="clock">
+      <div id="timecode" class="timecode">00:00:00</div>
+      <div id="current-item" class="current-item">Bereit</div>
+    </div>
+
+    <div class="meters">
+      <div class="meter"><span class="meter-label">L</span><div class="bar"><i id="meter-l"></i></div></div>
+      <div class="meter"><span class="meter-label">R</span><div class="bar"><i id="meter-r"></i></div></div>
+      <div id="clip" class="clip">Übersteuert</div>
+    </div>
+  </section>
+
+  <section class="wave-section">
+    <div class="wave-toolbar">
+      <button id="btn-marker" class="secondary" disabled title="Marker an aktueller Stelle setzen (M)">Marker setzen</button>
+      <button id="btn-next-item" class="secondary" disabled title="Nächsten Ablaufpunkt hier beginnen (N)">Nächster Ablaufpunkt</button>
+      <div class="spacer"></div>
+      <button id="btn-play" class="secondary" disabled title="Abspielen (Leertaste)">Abspielen</button>
+      <label class="follow"><input type="checkbox" id="chk-follow" checked /> Ansicht folgt</label>
+      <div class="zoom">
+        <button id="btn-zoom-out" class="icon" title="Herauszoomen">−</button>
+        <button id="btn-zoom-in" class="icon" title="Hineinzoomen">+</button>
+      </div>
+    </div>
+    <canvas id="wave" class="wave"></canvas>
+  </section>
+
+  <section class="panels">
+    <div class="panel panel-plan">
+      <div class="panel-head">
+        <h2>Ablaufplan</h2>
+        <span id="plan-hint" class="hint">Punkte auf die Wellenform ziehen</span>
+      </div>
+      <ol id="pending-list" class="pending"></ol>
+      <div class="panel-sub">
+        <h3>Gesetzte Marker</h3>
+        <ol id="marker-list" class="markers"></ol>
+      </div>
+    </div>
+
+    <div class="panel panel-transcript">
+      <div class="panel-head">
+        <h2>Mitschrift</h2>
+        <span id="transcript-hint" class="hint">läuft lokal mit</span>
+      </div>
+      <div id="transcript" class="transcript"></div>
+    </div>
+
+    <div class="panel panel-export">
+      <div class="panel-head"><h2>Abschnitt exportieren</h2></div>
+      <select id="segment-select" class="select" disabled>
+        <option>Noch keine Abschnitte</option>
+      </select>
+      <div id="segment-info" class="segment-info">Marker setzen, um Abschnitte zu erhalten.</div>
+      <button id="btn-export" class="primary" disabled>Als MP3 speichern</button>
+      <div id="export-progress" class="progress" hidden><i></i></div>
+      <div id="export-result" class="export-result"></div>
+    </div>
+  </section>
+
+  <div id="toasts" class="toasts"></div>
+  <audio id="player" preload="none"></audio>
+
+  <!-- Einstellungen -->
+  <div id="modal-settings" class="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>Einstellungen</h2>
+        <button class="icon close" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <fieldset>
+          <legend>Audio</legend>
+          <label>Eingang
+            <select id="set-device" class="select"></select>
+          </label>
+          <label>Abtastrate
+            <select id="set-samplerate" class="select">
+              <option value="44100">44,1 kHz</option>
+              <option value="48000">48 kHz</option>
+            </select>
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Ablage</legend>
+          <label>Ordner für Aufnahmen
+            <span class="row">
+              <input id="set-dir" type="text" readonly />
+              <button id="btn-choose-dir" class="secondary">Wählen</button>
+            </span>
+          </label>
+          <label>Dateiname
+            <input id="set-pattern" type="text" placeholder="{datum}_{gottesdienst}_{abschnitt}" />
+            <small>Platzhalter: {datum}, {zeit}, {gottesdienst}, {abschnitt}</small>
+          </label>
+          <label>MP3-Qualität
+            <select id="set-bitrate" class="select">
+              <option value="128">128 kbit/s</option>
+              <option value="192">192 kbit/s</option>
+              <option value="256">256 kbit/s</option>
+              <option value="320">320 kbit/s</option>
+            </select>
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>ChurchTools</legend>
+          <label>Adresse
+            <input id="set-ct-url" type="text" placeholder="https://meinegemeinde.church.tools" />
+          </label>
+          <label>Personal Access Token
+            <input id="set-ct-token" type="password" placeholder="Token eingeben oder leer lassen" />
+            <small id="ct-token-state"></small>
+          </label>
+          <label class="check"><input type="checkbox" id="set-ct-auto" /> Beim Start den heutigen Gottesdienst vorschlagen</label>
+          <button id="btn-ct-test" class="secondary">Verbindung prüfen</button>
+          <span id="ct-test-result" class="inline-result"></span>
+        </fieldset>
+
+        <fieldset>
+          <legend>Netzwerk</legend>
+          <label class="check"><input type="checkbox" id="set-net-on" /> Netzwerkschnittstelle aktiv</label>
+          <label>Port
+            <input id="set-net-port" type="number" min="1024" max="65535" />
+          </label>
+          <label>Passwort für Steuerung (Companion)
+            <input id="set-net-pass" type="text" />
+          </label>
+          <label>Passwort nur zum Mitlesen (Dashboard, optional)
+            <input id="set-monitor-pass" type="text" />
+          </label>
+          <div id="net-info" class="inline-result"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Transkription (lokal)</legend>
+          <label class="check"><input type="checkbox" id="set-trans-on" /> Mitschrift während der Aufnahme erstellen</label>
+          <label>Whisper-Programm
+            <span class="row">
+              <input id="set-whisper-bin" type="text" readonly placeholder="whisper-cli.exe" />
+              <button id="btn-choose-bin" class="secondary">Wählen</button>
+            </span>
+          </label>
+          <label>Modelldatei
+            <span class="row">
+              <input id="set-whisper-model" type="text" readonly placeholder="ggml-small.bin" />
+              <button id="btn-choose-model" class="secondary">Wählen</button>
+            </span>
+          </label>
+          <label>Blocklänge
+            <select id="set-chunk" class="select">
+              <option value="8">8 Sekunden</option>
+              <option value="12">12 Sekunden</option>
+              <option value="20">20 Sekunden</option>
+              <option value="30">30 Sekunden</option>
+            </select>
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Programm</legend>
+          <label class="check"><input type="checkbox" id="set-autoupdate" /> Automatisch nach Updates suchen</label>
+          <div id="version-info" class="inline-result"></div>
+          <button id="btn-check-update" class="secondary">Jetzt nach Update suchen</button>
+        </fieldset>
+      </div>
+      <div class="modal-foot">
+        <button id="btn-save-settings" class="primary">Einstellungen speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gottesdienst wählen -->
+  <div id="modal-service" class="modal" hidden>
+    <div class="modal-card narrow">
+      <div class="modal-head">
+        <h2>Gottesdienst wählen</h2>
+        <button class="icon close" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <label>Datum
+          <input id="service-date-input" type="date" />
+        </label>
+        <div id="service-list" class="list"></div>
+        <div class="divider">oder</div>
+        <label>Ohne ChurchTools aufnehmen
+          <span class="row">
+            <input id="manual-service-name" type="text" placeholder="Name des Gottesdienstes" />
+            <button id="btn-manual-service" class="secondary">Übernehmen</button>
+          </span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Aufnahmen -->
+  <div id="modal-library" class="modal" hidden>
+    <div class="modal-card narrow">
+      <div class="modal-head">
+        <h2>Frühere Aufnahmen</h2>
+        <button class="icon close" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <div id="library-list" class="list"></div>
+      </div>
+      <div class="modal-foot">
+        <button id="btn-open-folder" class="secondary">Ordner öffnen</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="capture.js"></script>
+  <script src="waveform.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

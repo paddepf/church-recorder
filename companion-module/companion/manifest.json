@@ -1,0 +1,32 @@
+{
+  "id": "churchrecorder",
+  "name": "churchrecorder",
+  "shortname": "ChurchRecorder",
+  "description": "Steuert ChurchRecorder: Aufnahme, Marker und Ablaufplan",
+  "version": "1.0.0",
+  "license": "MIT",
+  "repository": "",
+  "bugs": "",
+  "maintainers": [
+    {
+      "name": "",
+      "email": ""
+    }
+  ],
+  "legacyIds": [],
+  "runtime": {
+    "type": "node22",
+    "api": "nodejs-ipc",
+    "apiVersion": "1.0.0",
+    "entrypoint": "../main.js"
+  },
+  "manufacturer": "Eigenentwicklung",
+  "products": [
+    "ChurchRecorder"
+  ],
+  "keywords": [
+    "Recording",
+    "Audio",
+    "Church"
+  ]
+}
