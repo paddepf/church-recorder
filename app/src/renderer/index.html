@@ -249,6 +249,23 @@
     </div>
   </div>
 
+  <!-- Texteingabe (ersetzt window.prompt, das Electron nicht unterstützt) -->
+  <div id="modal-prompt" class="modal" hidden>
+    <div class="modal-card narrow">
+      <div class="modal-head">
+        <h2 id="prompt-title">Eingabe</h2>
+        <button id="prompt-close" class="icon close">×</button>
+      </div>
+      <div class="modal-body">
+        <input id="prompt-input" type="text" />
+      </div>
+      <div class="modal-foot">
+        <button id="prompt-cancel" class="secondary">Abbrechen</button>
+        <button id="prompt-ok" class="primary">OK</button>
+      </div>
+    </div>
+  </div>
+
   <script src="capture.js"></script>
   <script src="waveform.js"></script>
   <script src="app.js"></script>

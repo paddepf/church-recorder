@@ -302,7 +302,7 @@
       });
       li.querySelector('[data-rename]').addEventListener('click', async (e) => {
         e.stopPropagation();
-        const name = window.prompt('Neuer Name für den Marker:', m.label);
+        const name = await promptDialog('Neuer Name für den Marker:', m.label);
         if (name && name.trim()) await window.api.marker.update(m.id, { label: name.trim() });
       });
       li.querySelector('[data-remove]').addEventListener('click', async (e) => {
@@ -402,7 +402,7 @@
     $('btn-stop').addEventListener('click', stopRecording);
 
     $('btn-marker').addEventListener('click', async () => {
-      const label = window.prompt('Bezeichnung des Markers:', 'Marker');
+      const label = await promptDialog('Bezeichnung des Markers:', 'Marker');
       if (label === null) return;
       const res = await window.api.marker.add({ label: label.trim() || 'Marker' });
       if (!res.ok) toast('error', res.error);
@@ -449,6 +449,44 @@
   }
 
   function openModal(id) { $(id).hidden = false; }
+
+  /** Ersatz für window.prompt(), das Electron nicht unterstützt. */
+  function promptDialog(title, defaultValue = '') {
+    const modal = $('modal-prompt');
+    const input = $('prompt-input');
+    $('prompt-title').textContent = title;
+    input.value = defaultValue;
+    modal.hidden = false;
+    input.focus();
+    input.select();
+
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (value) => {
+        if (done) return;
+        done = true;
+        modal.hidden = true;
+        modal.removeEventListener('click', onBackdrop);
+        $('prompt-close').removeEventListener('click', onCancel);
+        $('prompt-cancel').removeEventListener('click', onCancel);
+        $('prompt-ok').removeEventListener('click', onOk);
+        input.removeEventListener('keydown', onKey);
+        resolve(value);
+      };
+      const onOk = () => finish(input.value);
+      const onCancel = () => finish(null);
+      const onBackdrop = (e) => { if (e.target === modal) onCancel(); };
+      const onKey = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); onOk(); }
+        if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+      };
+      modal.addEventListener('click', onBackdrop);
+      $('prompt-close').addEventListener('click', onCancel);
+      $('prompt-cancel').addEventListener('click', onCancel);
+      $('prompt-ok').addEventListener('click', onOk);
+      input.addEventListener('keydown', onKey);
+    });
+  }
 
   function bindShortcuts() {
     document.addEventListener('keydown', (e) => {
