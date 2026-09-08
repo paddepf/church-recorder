@@ -80,11 +80,41 @@ exportiert werden.
 Die Transkription nutzt [whisper.cpp](https://github.com/ggerganov/whisper.cpp)
 und läuft vollständig auf dem Aufnahmerechner.
 
+**Windows:**
+
 1. Fertige Windows-Binaries von whisper.cpp herunterladen oder selbst bauen.
 2. Ein Modell holen, zum Beispiel `ggml-small.bin` oder ein deutsches Modell.
    `small` ist ein guter Kompromiss; `medium` ist genauer, braucht aber deutlich
    mehr Rechenleistung.
 3. In den Einstellungen beide Pfade angeben.
+
+**macOS:**
+
+Fertige Windows-`.exe`-Dateien laufen auf macOS nicht – whisper.cpp muss dort
+als natives macOS-Programm vorliegen. Am zuverlässigsten ist, es selbst zu
+bauen:
+
+1. Einmalig die Xcode-Kommandozeilenwerkzeuge installieren:
+   ```bash
+   xcode-select --install
+   ```
+2. whisper.cpp klonen und bauen:
+   ```bash
+   git clone https://github.com/ggerganov/whisper.cpp
+   cd whisper.cpp
+   cmake -B build
+   cmake --build build --config Release
+   ```
+   Auf Apple Silicon (M1 bis M4) wird dabei standardmäßig Metal-Unterstützung
+   eingebaut – die Berechnung läuft dann über die GPU statt nur über die CPU
+   und die Transkription ist spürbar schneller. Das fertige Programm liegt
+   danach unter `build/bin/whisper-cli` (in älteren Versionen `build/bin/main`).
+3. Ein Modell holen, zum Beispiel mit dem mitgelieferten Skript:
+   ```bash
+   bash ./models/download-ggml-model.sh small
+   ```
+4. In den Einstellungen den Pfad zu `whisper-cli` sowie zur Modelldatei
+   (`.bin` unter `models/`) angeben.
 
 Die Mitschrift arbeitet blockweise mit einigen Sekunden Verzögerung. Sie ist
 eine Orientierungshilfe, kein wortgenaues Protokoll. Kommt der Rechner nicht
