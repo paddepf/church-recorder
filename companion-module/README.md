@@ -40,8 +40,8 @@ die Verbindung abbricht.
 | Aufnahme beenden | beendet und speichert |
 | Aufnahme starten/beenden | eine Taste für beides |
 | Aufnahme pausieren / fortsetzen / Pause umschalten | Pause steuern |
-| Marker setzen | Marker an der aktuellen Stelle, Bezeichnung frei wählbar (Variablen erlaubt) |
-| Nächster Programmpunkt beginnt hier | setzt den nächsten offenen Ablaufpunkt des ChurchTools-Plans |
+| Abschnitt starten / beenden | erster Druck setzt den Anfang eines Abschnitts (Bezeichnung frei wählbar, Variablen erlaubt), der nächste Druck das Ende |
+| Nächster Programmpunkt beginnt hier | beendet den laufenden Abschnitt und beginnt den nächsten offenen Ablaufpunkt des ChurchTools-Plans |
 
 ## Feedbacks
 
@@ -66,6 +66,6 @@ $(churchrecorder:current_item)
 
 ## Mitgelieferte Presets
 
-Unter **Aufnahme**, **Marker**, **Ablaufplan** und **Anzeige** liegen fertige
+Unter **Aufnahme**, **Abschnitte**, **Ablaufplan** und **Anzeige** liegen fertige
 Tasten, unter anderem eine Aufnahmetaste mit Laufzeit, eine Taste „Predigt" und
 eine Weiter-Taste, die den nächsten Programmpunkt anzeigt.

@@ -54,17 +54,19 @@ Wird direkt nach der Anmeldung und bei jeder Änderung gesendet (max. 10×/s).
     "sampleRate": 48000,
     "channels": 2,
     "levels": { "l": 0.42, "r": 0.39, "clip": false },
-    "markers": [
-      { "id": "mk_x1", "label": "Predigt", "category": "Verkündigung",
-        "time": 1420.5, "placed": true, "source": "churchtools" }
+    "sections": [
+      { "id": "sec_x1", "label": "Predigt", "category": "Verkündigung", "color": 2,
+        "start": 1420.5, "end": null, "source": "churchtools" },
+      { "id": "sec_x2", "label": "Segen", "color": 3,
+        "start": null, "end": null, "source": "churchtools" }
     ],
     "pending": [
-      { "id": "mk_x2", "label": "Segen", "placed": false, "source": "churchtools" }
+      { "id": "sec_x2", "label": "Segen", "start": null, "end": null, "source": "churchtools" }
     ],
     "segments": [
-      { "id": "seg_mk_x1", "label": "Predigt", "start": 1420.5, "end": 1832.4, "markerId": "mk_x1" }
+      { "id": "seg_sec_x1", "label": "Predigt", "start": 1420.5, "end": 1832.4, "markerId": "sec_x1", "open": true }
     ],
-    "currentSegment": { "id": "seg_mk_x1", "label": "Predigt", "start": 1420.5, "end": 1832.4 },
+    "currentSegment": { "id": "seg_sec_x1", "label": "Predigt", "start": 1420.5, "end": 1832.4, "open": true },
     "wavPath": "C:\\Aufnahmen\\2026-09-06_0930_Sonntagsgottesdienst.wav",
     "transcriptCount": 42
   }
@@ -116,14 +118,16 @@ Ereignisse: `recording.started`, `recording.stopped`, `export.finished`.
 | `record.toggle` | Starten bzw. beenden |
 | `record.pause` | Pausieren |
 | `record.resume` | Fortsetzen |
-| `marker.add` | Marker an der aktuellen Stelle setzen, optional `params.label` |
-| `marker.next` | Nächsten offenen Ablaufpunkt hier beginnen lassen |
+| `marker.add` | Abschnitt beginnen (Anfangsmarke, optional `params.label`); läuft schon einer, wird er beendet (Endmarke) |
+| `marker.next` | Laufenden Abschnitt beenden und den nächsten offenen Ablaufpunkt beginnen lassen |
 
 Antwort:
 
 ```json
-{ "type": "result", "id": 17, "action": "marker.add", "ok": true, "marker": { "…": "…" } }
+{ "type": "result", "id": 17, "action": "marker.add", "ok": true, "change": "started", "section": { "…": "…" } }
 ```
+
+`change` ist `started` oder `ended`, je nachdem, ob eine Anfangs- oder Endmarke gesetzt wurde.
 
 Das mitgesendete `id`-Feld kommt unverändert zurück und dient der Zuordnung.
 

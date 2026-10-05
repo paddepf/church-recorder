@@ -118,7 +118,7 @@ function setupApplicationMenu() {
           click: () => send('menu', { action: 'toggle-record' })
         },
         {
-          label: 'Marker setzen',
+          label: 'Abschnitt starten / beenden',
           accelerator: 'Cmd+M',
           click: () => send('menu', { action: 'marker' })
         },
@@ -206,7 +206,17 @@ function createWindow() {
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   win.once('ready-to-show', () => win.show());
   if (isDev) {
-    win.webContents.openDevTools({ mode: 'detach' });
+    // Die DevTools stören bei jedem Neustart (sie holen sich den Fokus). Daher nur
+    // auf Wunsch: per F12 / Strg+Umschalt+I, oder dauerhaft mit "npm run dev:tools".
+    if (process.argv.includes('--devtools')) win.webContents.openDevTools({ mode: 'detach', activate: false });
+    win.webContents.on('before-input-event', (event, input) => {
+      const toggle = input.type === 'keyDown' && (input.key === 'F12'
+        || (input.key.toLowerCase() === 'i' && input.shift && (input.control || input.meta)));
+      if (toggle) {
+        event.preventDefault();
+        win.webContents.toggleDevTools();
+      }
+    });
     setupLiveReload();
   }
 
@@ -290,15 +300,14 @@ net.on('command', ({ action, params, reply }) => {
       if (session.status !== 'recording' && session.status !== 'paused') {
         return done({ ok: false, error: 'Es läuft keine Aufnahme.' });
       }
-      const m = session.addMarker({ label: params.label, category: params.category, source: 'manual' });
-      return done({ ok: true, marker: m });
+      // Abschnitt beginnen bzw. – wenn einer läuft – beenden.
+      return done(session.toggleSection({ label: params.label, category: params.category }));
     }
     case 'marker.next': {
       if (session.status !== 'recording' && session.status !== 'paused') {
         return done({ ok: false, error: 'Es läuft keine Aufnahme.' });
       }
-      const m = session.placeNextPending();
-      return done(m ? { ok: true, marker: m } : { ok: false, error: 'Keine offenen Ablaufplan-Punkte mehr.' });
+      return done(session.startNextPending());
     }
     default:
       return done({ ok: false, error: 'Unbekannter Befehl.' });
@@ -425,17 +434,14 @@ ipcMain.on('audio:chunk', (_e, arrayBuffer) => {
   }
 });
 
-/* --- Marker --- */
+/* --- Abschnitte (je zwei Marker: Anfang und Ende) --- */
 
-ipcMain.handle('marker:add', (_e, params) => ok({ marker: session.addMarker(params || {}) }));
-ipcMain.handle('marker:place', (_e, { id, time }) => ok({ marker: session.placeMarker(id, time) }));
-ipcMain.handle('marker:next', (_e, { time } = {}) => {
-  const m = session.placeNextPending(time);
-  return m ? ok({ marker: m }) : fail('Keine offenen Ablaufplan-Punkte mehr.');
-});
-ipcMain.handle('marker:move', (_e, { id, time }) => ok({ marker: session.moveMarker(id, time) }));
-ipcMain.handle('marker:update', (_e, { id, ...patch }) => ok({ marker: session.updateMarker(id, patch) }));
-ipcMain.handle('marker:delete', (_e, { id }) => ok({ removed: session.removeMarker(id) }));
+ipcMain.handle('section:toggle', (_e, params) => session.toggleSection(params || {}));
+ipcMain.handle('section:start', (_e, { id, time }) => session.startPending(id, time));
+ipcMain.handle('section:next', (_e, { time } = {}) => session.startNextPending(time));
+ipcMain.handle('section:edge', (_e, { id, edge, time }) => ok({ section: session.moveEdge(id, edge, time) }));
+ipcMain.handle('section:update', (_e, { id, ...patch }) => ok({ section: session.updateSection(id, patch) }));
+ipcMain.handle('section:delete', (_e, { id }) => ok({ removed: session.removeSection(id) }));
 
 /* --- Export --- */
 
@@ -496,7 +502,9 @@ function listSessions() {
         startedAt: data.startedAt || null,
         duration: data.duration || 0,
         finalized: data.finalized !== false,
-        markerCount: (data.markers || []).filter((m) => m.placed).length,
+        sectionCount: Array.isArray(data.sections)
+          ? data.sections.filter((x) => x.start != null).length
+          : (data.markers || []).filter((m) => m.placed).length,
         wavExists: data.wavPath ? fs.existsSync(data.wavPath) : false
       };
     } catch {

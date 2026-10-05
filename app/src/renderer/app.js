@@ -11,7 +11,7 @@
     session: null,
     peaks: [],
     duration: 0,
-    selectedMarkerId: null,
+    selectedSectionId: null,
     selectedSegmentId: null,
     playing: false,
     starting: false,
@@ -71,18 +71,18 @@
     wave = new window.Waveform($('wave'), {
       pxPerSec: state.settings.waveformZoom || 12,
       colors: readColors(),
-      onMarkerMove: () => renderLists(),
-      onMarkerMoveEnd: async (id, time) => {
-        await window.api.marker.move(id, time);
+      onEdgeMove: () => renderLists(),
+      onEdgeMoveEnd: async (id, edge, time) => {
+        await window.api.section.moveEdge(id, edge, time);
       },
       onSeek: (t) => setPlayhead(t, true),
-      onRenameMarker: (id) => renameMarker(id),
-      onSelectMarker: (id) => {
-        state.selectedMarkerId = id;
+      onRenameSection: (id) => renameSection(id),
+      onSelectSection: (id) => {
+        state.selectedSectionId = id;
         renderLists();
       },
       onDropPending: async (id, time) => {
-        const res = await window.api.marker.place(id, time);
+        const res = await window.api.section.start(id, time);
         if (!res.ok) toast('error', res.error);
       }
     });
@@ -103,7 +103,7 @@
     await checkRecovery();
 
     if (state.settings.autoLoadTodaysService && state.settings.churchToolsUrl && state.settings.churchToolsTokenSet) {
-      loadServicesForDate(new Date().toISOString().slice(0, 10), true);
+      loadServicesForDate(localIsoDate(), true);
     }
   }
 
@@ -194,7 +194,8 @@
     $('btn-pause').textContent = paused ? 'Fortsetzen' : 'Pause';
     $('btn-stop').disabled = !(rec || paused);
     $('btn-marker').disabled = !(rec || paused);
-    $('btn-next-item').disabled = !(rec || paused) || (session.pending || []).length === 0;
+    $('btn-marker').textContent = session.currentSegment ? 'Abschnitt beenden' : 'Abschnitt starten';
+    $('btn-next-item').disabled = !(rec || paused) || ((session.pending || []).length === 0 && !session.currentSegment);
     $('btn-play').disabled = !((stopped && session.wavPath) || rec || paused);
     updatePlayButton();
 
@@ -211,7 +212,7 @@
 
     wave.update({
       duration: session.duration || 0,
-      markers: (session.markers || []).map((m) => ({ ...m })),
+      sections: (session.sections || []).map((x) => ({ ...x })),
       recording: rec,
       selectedSegment: session.segments?.find((s) => s.id === state.selectedSegmentId) || null
     });
@@ -242,12 +243,12 @@
     try {
       // Eine angezeigte, beendete Aufnahme würde sonst aus der Ansicht verschwinden.
       if (state.session?.status === 'stopped' && state.session.wavPath) {
-        const markers = (state.session.markers || []).filter((m) => m.placed).length;
+        const sections = (state.session.sections || []).filter((x) => x.start != null).length;
         const go = await confirmDialog(
           'Neue Aufnahme starten?',
-          `Die angezeigte Aufnahme (${longTime(state.session.duration || 0)}, ${markers} Marker) ist als Datei gespeichert ` +
+          `Die angezeigte Aufnahme (${longTime(state.session.duration || 0)}, ${sections} Abschnitte) ist als Datei gespeichert ` +
           'und lässt sich über „Aufnahmen" jederzeit wieder öffnen. Die neue Aufnahme beginnt mit leerer Wellenform, ' +
-          'die gesetzten Marker werden zurückgesetzt. Noch nicht exportierte MP3-Abschnitte bitte vorher speichern.',
+          'die gesetzten Abschnitte werden zurückgesetzt. Noch nicht exportierte MP3-Abschnitte bitte vorher speichern.',
           'Neue Aufnahme starten'
         );
         if (!go) return;
@@ -285,7 +286,7 @@
     }
   }
 
-  /** Hängt eine neue Aufnahme an die beendete an (gleiche Datei, gleiche Marker). */
+  /** Hängt eine neue Aufnahme an die beendete an (gleiche Datei, gleiche Abschnitte). */
   async function continueRecording() {
     if (state.starting || state.session?.status !== 'stopped') return;
     state.starting = true;
@@ -364,70 +365,75 @@
   function renderLists() {
     const session = state.session;
     const pendingEl = $('pending-list');
-    const markerEl = $('marker-list');
+    const sectionEl = $('marker-list');
     pendingEl.innerHTML = '';
-    markerEl.innerHTML = '';
+    sectionEl.innerHTML = '';
     if (!session) return;
+    const live = session.status === 'recording' || session.status === 'paused';
 
     const pending = (session.pending || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
     if (pending.length === 0) {
       pendingEl.innerHTML = '<li class="empty">Keine offenen Ablaufpunkte.</li>';
     }
-    pending.forEach((m) => {
+    pending.forEach((x) => {
       const li = document.createElement('li');
       li.className = 'item';
-      li.dataset.source = m.source;
+      li.dataset.hue = '';
+      li.style.setProperty('--hue', window.sectionHue(x));
       li.draggable = true;
       li.innerHTML = `<span class="label"></span>
-        <button class="mini" data-place title="An aktueller Stelle setzen">jetzt</button>`;
-      li.querySelector('.label').textContent = m.label;
+        <button class="mini" data-place title="Diesen Abschnitt jetzt beginnen">starten</button>`;
+      li.querySelector('.label').textContent = x.label;
       li.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/marker-id', m.id);
+        e.dataTransfer.setData('text/marker-id', x.id);
         e.dataTransfer.effectAllowed = 'move';
       });
-      li.querySelector('[data-place]').addEventListener('click', async () => {
-        const res = await window.api.marker.place(m.id, null);
+      const btn = li.querySelector('[data-place]');
+      btn.disabled = !live;
+      btn.addEventListener('click', async () => {
+        const res = await window.api.section.start(x.id, null);
         if (!res.ok) toast('error', res.error);
       });
       pendingEl.appendChild(li);
     });
 
-    const placed = (session.markers || []).filter((m) => m.placed).sort((a, b) => a.time - b.time);
+    const placed = (session.sections || []).filter((x) => x.start != null).sort((a, b) => a.start - b.start);
     if (placed.length === 0) {
-      markerEl.innerHTML = '<li class="empty">Noch keine Marker gesetzt.</li>';
+      sectionEl.innerHTML = '<li class="empty">Noch keine Abschnitte.</li>';
     }
-    placed.forEach((m) => {
+    placed.forEach((x) => {
       const li = document.createElement('li');
-      li.className = 'item' + (state.selectedMarkerId === m.id ? ' selected' : '');
-      li.dataset.source = m.source;
+      li.className = 'item' + (state.selectedSectionId === x.id ? ' selected' : '');
+      li.dataset.hue = '';
+      li.style.setProperty('--hue', window.sectionHue(x));
       li.innerHTML = `<span class="time"></span><span class="label"></span>
         <button class="mini" data-rename title="Umbenennen">✎</button>
         <button class="mini" data-remove title="Entfernen">×</button>`;
-      li.querySelector('.time').textContent = fmt(m.time);
-      li.querySelector('.label').textContent = m.label;
+      li.querySelector('.time').textContent = `${fmt(x.start)} – ${x.end != null ? fmt(x.end) : 'läuft'}`;
+      li.querySelector('.label').textContent = x.label;
       li.addEventListener('click', () => {
-        state.selectedMarkerId = m.id;
-        wave.scrollTo(m.time);
+        state.selectedSectionId = x.id;
+        wave.scrollTo(x.start);
         renderLists();
       });
       li.querySelector('[data-rename]').addEventListener('click', (e) => {
         e.stopPropagation();
-        renameMarker(m.id);
+        renameSection(x.id);
       });
-      li.querySelector('.label').addEventListener('dblclick', () => renameMarker(m.id));
+      li.querySelector('.label').addEventListener('dblclick', () => renameSection(x.id));
       li.querySelector('[data-remove]').addEventListener('click', async (e) => {
         e.stopPropagation();
-        await window.api.marker.remove(m.id);
+        await window.api.section.remove(x.id);
       });
-      markerEl.appendChild(li);
+      sectionEl.appendChild(li);
     });
   }
 
-  async function renameMarker(id) {
-    const m = (state.session?.markers || []).find((x) => x.id === id);
-    if (!m) return;
-    const name = await promptDialog('Neuer Name für den Marker:', m.label);
-    if (name && name.trim()) await window.api.marker.update(id, { label: name.trim() });
+  async function renameSection(id) {
+    const x = (state.session?.sections || []).find((y) => y.id === id);
+    if (!x) return;
+    const name = await promptDialog('Neuer Name für den Abschnitt:', x.label);
+    if (name && name.trim()) await window.api.section.update(id, { label: name.trim() });
   }
 
   function renderSegments() {
@@ -441,7 +447,7 @@
       sel.innerHTML = '<option>Noch keine Abschnitte</option>';
       sel.disabled = true;
       $('btn-export').disabled = true;
-      $('segment-info').textContent = 'Marker setzen, um Abschnitte zu erhalten.';
+      $('segment-info').textContent = 'Abschnitt starten und beenden, um ihn zu exportieren.';
       return;
     }
 
@@ -453,8 +459,10 @@
     });
 
     const stillThere = segments.find((s) => s.id === previous);
-    // Vorauswahl: der längste Abschnitt ist meist die Predigt.
-    const preferred = stillThere || segments.slice().sort((a, b) => (b.end - b.start) - (a.end - a.start))[0];
+    // Vorauswahl: der längste Abschnitt ist meist die Predigt; ohne Abschnitte die ganze Aufnahme.
+    const real = segments.filter((x) => x.markerId);
+    const preferred = stillThere
+      || (real.length ? real : segments).slice().sort((a, b) => (b.end - b.start) - (a.end - a.start))[0];
     state.selectedSegmentId = preferred.id;
     sel.value = preferred.id;
     sel.disabled = false;
@@ -554,16 +562,16 @@
     $('btn-stop').addEventListener('click', stopRecording);
     $('btn-continue').addEventListener('click', continueRecording);
 
-    // Der Marker wird sofort gesetzt; umbenannt wird bei Bedarf danach.
+    // Beginnt sofort einen Abschnitt bzw. beendet den laufenden; umbenannt wird bei Bedarf danach.
     $('btn-marker').addEventListener('click', async () => {
-      const res = await window.api.marker.add({});
+      const res = await window.api.section.toggle({});
       if (!res.ok) return toast('error', res.error);
-      state.selectedMarkerId = res.marker.id;
+      state.selectedSectionId = res.section.id;
       renderLists();
     });
 
     $('btn-next-item').addEventListener('click', async () => {
-      const res = await window.api.marker.next();
+      const res = await window.api.section.next();
       if (!res.ok) toast('warn', res.error);
     });
 
@@ -695,9 +703,9 @@
         if (!$('btn-next-item').disabled) { e.preventDefault(); $('btn-next-item').click(); }
         return;
       }
-      if (e.key === 'F2' && state.selectedMarkerId) {
+      if (e.key === 'F2' && state.selectedSectionId) {
         e.preventDefault();
-        renameMarker(state.selectedMarkerId);
+        renameSection(state.selectedSectionId);
         return;
       }
       if (e.code === 'Space') {
@@ -806,18 +814,95 @@
 
   /* ---------------------------------------------------------- ChurchTools-UI */
 
-  async function openServicePicker() {
-    const input = $('service-date-input');
-    if (!input.value) input.value = new Date().toISOString().slice(0, 10);
-    openModal('modal-service');
-    loadServicesForDate(input.value, false);
+  const OVERVIEW_COUNT = 5;      // so viele vergangene und kommende Termine werden angeboten
+  const OVERVIEW_PAST_DAYS = 90;
+  const OVERVIEW_FUTURE_DAYS = 120;
+
+  /** Lokales Datum als YYYY-MM-DD (toISOString würde nach UTC umrechnen). */
+  function localIsoDate(d = new Date()) {
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
   }
 
-  $('service-date-input')?.addEventListener('change', (e) => loadServicesForDate(e.target.value, false));
+  function shiftDays(iso, days) {
+    const d = new Date(iso + 'T12:00:00');
+    d.setDate(d.getDate() + days);
+    return localIsoDate(d);
+  }
+
+  function germanDate(iso) {
+    const d = new Date(iso + 'T12:00:00');
+    return d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+
+  async function openServicePicker() {
+    $('service-date-input').value = '';
+    openModal('modal-service');
+    loadServiceOverview();
+  }
+
+  // Ein gewähltes Datum zeigt nur diesen Tag; leeren zeigt wieder die Übersicht.
+  $('service-date-input')?.addEventListener('change', (e) => {
+    if (e.target.value) loadServicesForDate(e.target.value, false);
+    else loadServiceOverview();
+  });
+
+  function ctConfigured() {
+    return Boolean(state.settings.churchToolsUrl && state.settings.churchToolsTokenSet);
+  }
+
+  function serviceItem(s) {
+    const el = document.createElement('div');
+    const current = state.session?.service?.id != null && String(state.session.service.id) === String(s.id);
+    el.className = 'list-item' + (current ? ' current' : '');
+    el.innerHTML = '<span class="name"></span><span class="meta"></span>';
+    el.querySelector('.name').textContent = s.name + (current ? ' ✓' : '');
+    el.querySelector('.meta').textContent = `${germanDate(s.date)} · ${(s.start || '').slice(11, 16)}`.replace(/ · $/, '');
+    el.addEventListener('click', () => chooseService(s, false));
+    return el;
+  }
+
+  /** Zeigt die zuletzt vergangenen und die nächsten Termine zur Auswahl. */
+  async function loadServiceOverview() {
+    const list = $('service-list');
+    if (!ctConfigured()) {
+      list.innerHTML = '<div class="empty">ChurchTools ist noch nicht eingerichtet.</div>';
+      return;
+    }
+    list.innerHTML = '<div class="empty">Wird geladen …</div>';
+    const today = localIsoDate();
+    const res = await window.api.churchtools.services({
+      from: shiftDays(today, -OVERVIEW_PAST_DAYS),
+      to: shiftDays(today, OVERVIEW_FUTURE_DAYS)
+    });
+    if ($('service-date-input').value) return;      // inzwischen ein Datum gewählt
+    if (!res.ok) {
+      list.innerHTML = '';
+      toast('warn', res.error);
+      return;
+    }
+    const upcoming = res.services.filter((s) => s.date >= today).slice(0, OVERVIEW_COUNT);
+    const past = res.services.filter((s) => s.date < today).slice(-OVERVIEW_COUNT).reverse();
+
+    list.innerHTML = '';
+    const group = (title, items, emptyText) => {
+      const head = document.createElement('div');
+      head.className = 'list-head';
+      head.textContent = title;
+      list.appendChild(head);
+      if (items.length === 0) {
+        list.insertAdjacentHTML('beforeend', `<div class="empty">${emptyText}</div>`);
+        return;
+      }
+      items.forEach((s) => list.appendChild(serviceItem(s)));
+    };
+    group('Heute und kommende', upcoming, 'Keine kommenden Termine gefunden.');
+    group('Zuletzt', past, 'Keine vergangenen Termine gefunden.');
+  }
 
   async function loadServicesForDate(date, silent) {
     const list = $('service-list');
-    if (!state.settings.churchToolsUrl || !state.settings.churchToolsTokenSet) {
+    if (!ctConfigured()) {
       if (!silent) list.innerHTML = '<div class="empty">ChurchTools ist noch nicht eingerichtet.</div>';
       return;
     }
@@ -831,6 +916,7 @@
     if (silent) {
       if (res.services.length === 1) chooseService(res.services[0], true);
       else if (res.services.length > 1) toast('info', `${res.services.length} Termine heute – bitte oben auswählen.`);
+      else toast('info', 'Heute ist kein Termin in ChurchTools – über den Namen oben lassen sich frühere oder kommende wählen.', 9000);
       return;
     }
     list.innerHTML = '';
@@ -838,15 +924,7 @@
       list.innerHTML = '<div class="empty">Keine Termine an diesem Tag.</div>';
       return;
     }
-    res.services.forEach((s) => {
-      const el = document.createElement('div');
-      el.className = 'list-item';
-      el.innerHTML = '<span class="name"></span><span class="meta"></span>';
-      el.querySelector('.name').textContent = s.name;
-      el.querySelector('.meta').textContent = (s.start || '').slice(11, 16);
-      el.addEventListener('click', () => chooseService(s, false));
-      list.appendChild(el);
-    });
+    res.services.forEach((s) => list.appendChild(serviceItem(s)));
   }
 
   async function chooseService(service, silent) {
@@ -863,7 +941,7 @@
   $('btn-manual-service')?.addEventListener('click', async () => {
     const name = $('manual-service-name').value.trim();
     if (!name) return;
-    await window.api.session.setService({ name, date: new Date().toISOString().slice(0, 10) });
+    await window.api.session.setService({ name, date: localIsoDate() });
     $('modal-service').hidden = true;
   });
 
@@ -884,7 +962,7 @@
       el.className = 'list-item' + (s.finalized ? '' : ' unfinished');
       el.innerHTML = '<span class="name"></span><span class="meta"></span>';
       el.querySelector('.name').textContent = s.name + (s.finalized ? '' : ' · unterbrochen');
-      el.querySelector('.meta').textContent = `${s.date} · ${fmt(s.duration)} · ${s.markerCount} Marker`;
+      el.querySelector('.meta').textContent = `${s.date} · ${fmt(s.duration)} · ${s.sectionCount} Abschnitte`;
       el.addEventListener('click', () => openSession(s.path));
       list.appendChild(el);
     });

@@ -9,6 +9,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "dev:tools": "electron . --dev --devtools",
     "dist": "electron-builder --win",
     "publish": "electron-builder --win --publish always",
     "dist:mac": "electron-builder --mac",

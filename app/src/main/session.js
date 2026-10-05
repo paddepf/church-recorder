@@ -8,6 +8,7 @@ const settings = require('./settings');
 
 const PEAK_BUCKET_MS = 50;   // Auflösung der Wellenform
 const AUTOSAVE_MS = 3000;
+const MIN_SECTION = 0.1;   // kürzester Abschnitt in Sekunden
 
 let counter = 0;
 function newId(prefix) {
@@ -32,6 +33,38 @@ function dateStamp(d = new Date()) {
 }
 
 /**
+ * Liest die Abschnitte einer gespeicherten Session. Ältere Sessions kennen nur
+ * einzelne Marker; sie werden zu Abschnitten bis zum jeweils nächsten Marker.
+ */
+function migrateSections(data, duration) {
+  let list;
+  if (Array.isArray(data.sections)) {
+    list = data.sections.map((x) => ({ ...x }));
+  } else {
+    const old = data.markers || [];
+    const placed = old.filter((m) => m.placed && m.time != null).sort((a, b) => a.time - b.time);
+    list = old.map((m) => {
+      const idx = placed.indexOf(m);
+      const next = idx >= 0 ? placed[idx + 1] : null;
+      return {
+        id: m.id, ctId: m.ctId ?? null, label: m.label, category: m.category || null,
+        plannedDuration: m.plannedDuration || null, order: m.order || 0, source: m.source || 'manual',
+        start: idx >= 0 ? m.time : null,
+        end: idx >= 0 ? (next ? next.time : duration) : null
+      };
+    });
+  }
+  let color = 0;
+  list.forEach((x) => {
+    if (x.color == null) { x.color = color; }
+    color = Math.max(color, x.color) + 1;
+    // Unterbrochene Aufnahme: ein offener Abschnitt reicht bis zum Ende der Datei.
+    if (x.start != null && x.end == null) x.end = Math.max(duration, x.start + MIN_SECTION);
+  });
+  return list;
+}
+
+/**
  * Eine Session ist eine Aufnahme: eine durchgehende WAV-Masterdatei plus
  * Marker, Transkript und Metadaten. Marker sind reine Metadaten – die
  * Audiodatei wird davon nie verändert.
@@ -45,7 +78,8 @@ class Session extends EventEmitter {
   reset() {
     this.status = 'idle';               // idle | recording | paused | stopped
     this.service = { id: null, name: '', date: dateStamp() };
-    this.markers = [];                  // {id,label,category,time|null,source,placed}
+    this.sections = [];                 // {id,label,category,color,start|null,end|null,source}
+    this._colorSeq = 0;
     this.transcript = [];               // {start,end,text}
     this.peaks = [];                    // 0..255 je 50 ms
     this.writer = null;
@@ -68,50 +102,49 @@ class Session extends EventEmitter {
     return this.writer ? this.writer.durationSeconds : (this._restoredDuration || 0);
   }
 
-  /** Marker mit Position, chronologisch sortiert. */
-  placedMarkers() {
-    return this.markers.filter((m) => m.placed && m.time != null).sort((a, b) => a.time - b.time);
+  /** Abschnitte mit gesetztem Anfang, chronologisch sortiert. */
+  placedSections() {
+    return this.sections.filter((x) => x.start != null).sort((a, b) => a.start - b.start);
   }
 
-  /** Offene Ablaufplan-Punkte, die noch nicht auf der Zeitachse liegen. */
-  pendingMarkers() {
-    return this.markers.filter((m) => !m.placed);
+  /** Offene Ablaufplan-Punkte, deren Anfang noch nicht gesetzt ist. */
+  pendingSections() {
+    return this.sections.filter((x) => x.start == null);
+  }
+
+  /** Der Abschnitt, der gerade läuft (Anfang gesetzt, Ende noch offen). */
+  openSection() {
+    return this.sections.find((x) => x.start != null && x.end == null) || null;
+  }
+
+  _segmentOf(x) {
+    return {
+      id: 'seg_' + x.id,
+      label: x.label,
+      category: x.category || null,
+      start: x.start,
+      end: x.end != null ? x.end : this.duration,
+      markerId: x.id,
+      open: x.end == null
+    };
   }
 
   /**
-   * Aus den Markern abgeleitete Abschnitte. Vor dem ersten Marker entsteht
-   * automatisch ein Abschnitt "Vorspann".
+   * Exportierbare Abschnitte: jeder Abschnitt aus Anfang und Ende, dazu immer
+   * die gesamte Aufnahme.
    */
   segments() {
-    const placed = this.placedMarkers();
-    const end = this.duration;
-    const out = [];
-    if (placed.length === 0) {
-      if (end > 0) out.push({ id: 'seg_full', label: 'Gesamte Aufnahme', category: null, start: 0, end, markerId: null });
-      return out;
+    const out = this.placedSections().map((x) => this._segmentOf(x));
+    if (this.duration > 0) {
+      out.push({ id: 'seg_full', label: 'Gesamte Aufnahme', category: null, start: 0, end: this.duration, markerId: null });
     }
-    if (placed[0].time > 0.05) {
-      out.push({ id: 'seg_vorspann', label: 'Vorspann', category: null, start: 0, end: placed[0].time, markerId: null });
-    }
-    placed.forEach((m, i) => {
-      const next = placed[i + 1];
-      out.push({
-        id: 'seg_' + m.id,
-        label: m.label,
-        category: m.category || null,
-        start: m.time,
-        end: next ? next.time : end,
-        markerId: m.id
-      });
-    });
     return out;
   }
 
   /** Der Abschnitt, in dem die Aufnahme gerade läuft. */
   currentSegment() {
-    const segs = this.segments();
-    const t = this.duration;
-    return segs.find((s) => t >= s.start && t <= s.end) || segs[segs.length - 1] || null;
+    const open = this.openSection();
+    return open ? this._segmentOf(open) : null;
   }
 
   snapshot() {
@@ -123,8 +156,8 @@ class Session extends EventEmitter {
       sampleRate: this.sampleRate,
       channels: this.channels,
       levels: this.levels,
-      markers: this.markers,
-      pending: this.pendingMarkers(),
+      sections: this.sections,
+      pending: this.pendingSections(),
       segments: this.segments(),
       currentSegment: this.currentSegment(),
       wavPath: this.wavPath,
@@ -148,93 +181,147 @@ class Session extends EventEmitter {
     this._changed();
   }
 
-  /** Übernimmt Ablaufplan-Punkte als noch nicht positionierte Platzhalter. */
+  _nextColor() {
+    const c = this._colorSeq;
+    this._colorSeq += 1;
+    return c;
+  }
+
+  /** Übernimmt Ablaufplan-Punkte als noch nicht gesetzte Abschnitte. */
   setAgenda(items) {
-    const manual = this.markers.filter((m) => m.source === 'manual');
-    const placedFromPlan = this.markers.filter((m) => m.source === 'churchtools' && m.placed);
-    const keepIds = new Set(placedFromPlan.map((m) => m.ctId));
+    const manual = this.sections.filter((x) => x.source === 'manual');
+    const placedFromPlan = this.sections.filter((x) => x.source === 'churchtools' && x.start != null);
+    const keepIds = new Set(placedFromPlan.map((x) => x.ctId));
     const fresh = (items || [])
       .filter((it) => !keepIds.has(it.id))
       .map((it, i) => ({
-        id: newId('mk'),
+        id: newId('sec'),
         ctId: it.id ?? null,
         label: it.title || `Punkt ${i + 1}`,
         category: it.category || null,
         plannedDuration: it.duration || null,
         order: i,
-        time: null,
-        placed: false,
+        color: this._nextColor(),
+        start: null,
+        end: null,
         source: 'churchtools'
       }));
-    this.markers = [...placedFromPlan, ...fresh, ...manual];
+    this.sections = [...placedFromPlan, ...fresh, ...manual];
     this._changed();
   }
 
-  addMarker({ label, category, time, source = 'manual' } = {}) {
+  _closeOpen(time) {
+    const open = this.openSection();
+    if (!open) return null;
+    open.end = Math.max(open.start + MIN_SECTION, time);
+    return open;
+  }
+
+  /** Beginnt einen neuen, selbst benannten Abschnitt. */
+  startSection({ label, category, time, source = 'manual' } = {}) {
+    if (this.openSection()) return { ok: false, error: 'Es läuft bereits ein Abschnitt – zuerst beenden.' };
     const t = time == null ? this.duration : Math.max(0, time);
-    const marker = {
-      id: newId('mk'),
+    const section = {
+      id: newId('sec'),
       ctId: null,
-      label: label || `Marker ${this.placedMarkers().length + 1}`,
+      label: label || `Abschnitt ${this.placedSections().length + 1}`,
       category: category || null,
       plannedDuration: null,
-      order: this.markers.length,
-      time: t,
-      placed: true,
+      order: this.sections.length,
+      color: this._nextColor(),
+      start: t,
+      end: null,
       source
     };
-    this.markers.push(marker);
+    this.sections.push(section);
     this._changed();
-    return marker;
+    return { ok: true, section };
   }
 
-  /** Setzt einen bisher offenen Ablaufplan-Punkt auf die Zeitachse. */
-  placeMarker(id, time) {
-    const m = this.markers.find((x) => x.id === id);
-    if (!m) return null;
-    m.time = Math.max(0, time == null ? this.duration : time);
-    m.placed = true;
+  /** Beendet den laufenden Abschnitt. */
+  endSection(time) {
+    const open = this._closeOpen(time == null ? this.duration : time);
+    if (!open) return { ok: false, error: 'Es läuft kein Abschnitt.' };
     this._changed();
-    return m;
+    return { ok: true, section: open };
   }
 
-  /** Nächsten offenen Ablaufplan-Punkt an der aktuellen Position setzen. */
-  placeNextPending(time) {
-    const pending = this.pendingMarkers().sort((a, b) => (a.order || 0) - (b.order || 0));
-    if (pending.length === 0) return null;
-    return this.placeMarker(pending[0].id, time);
+  /** "Marker setzen": beendet den laufenden Abschnitt, sonst beginnt ein neuer. */
+  toggleSection(params = {}) {
+    return this.openSection() ? { ...this.endSection(params.time), change: 'ended' }
+      : { ...this.startSection(params), change: 'started' };
   }
 
-  moveMarker(id, time) {
-    const m = this.markers.find((x) => x.id === id);
-    if (!m || !m.placed) return null;
-    m.time = Math.max(0, Math.min(time, Math.max(this.duration, 0)));
-    this._changed();
-    return m;
-  }
-
-  updateMarker(id, patch) {
-    const m = this.markers.find((x) => x.id === id);
-    if (!m) return null;
-    if (patch.label != null) m.label = patch.label;
-    if (patch.category !== undefined) m.category = patch.category;
-    this._changed();
-    return m;
-  }
-
-  removeMarker(id) {
-    const before = this.markers.length;
-    const m = this.markers.find((x) => x.id === id);
-    if (!m) return false;
-    // Ablaufplan-Punkte werden nicht gelöscht, sondern nur von der Zeitachse genommen.
-    if (m.source === 'churchtools' && m.placed) {
-      m.placed = false;
-      m.time = null;
-    } else {
-      this.markers = this.markers.filter((x) => x.id !== id);
+  /**
+   * Beginnt einen Ablaufplan-Punkt. Ein gerade laufender Abschnitt endet dabei
+   * an derselben Stelle. Außerhalb der Aufnahme (Nachbearbeiten) wird der
+   * Abschnitt sofort mit Ende gesetzt.
+   */
+  startPending(id, time) {
+    const x = this.sections.find((y) => y.id === id && y.start == null);
+    if (!x) return { ok: false, error: 'Ablaufpunkt nicht gefunden.' };
+    const t = Math.max(0, time == null ? this.duration : time);
+    const open = this.openSection();
+    if (open) {
+      if (t <= open.start) return { ok: false, error: 'Der laufende Abschnitt beginnt später als diese Stelle.' };
+      open.end = t;
+    }
+    x.start = t;
+    const live = this.status === 'recording' || this.status === 'paused';
+    if (!live) {
+      const planned = x.plannedDuration ? t + x.plannedDuration : this.duration;
+      x.end = Math.min(Math.max(planned, t + MIN_SECTION), Math.max(this.duration, t + MIN_SECTION));
     }
     this._changed();
-    return this.markers.length !== before || !m.placed;
+    return { ok: true, section: x };
+  }
+
+  /** Beendet einen laufenden Abschnitt und beginnt den nächsten offenen Ablaufpunkt. */
+  startNextPending(time) {
+    const pending = this.pendingSections().sort((a, b) => (a.order || 0) - (b.order || 0));
+    if (pending.length === 0) {
+      const closed = this.openSection() ? this.endSection(time) : null;
+      return closed || { ok: false, error: 'Keine offenen Ablaufplan-Punkte mehr.' };
+    }
+    return this.startPending(pending[0].id, time);
+  }
+
+  /** Verschiebt Anfang oder Ende eines Abschnitts. */
+  moveEdge(id, edge, time) {
+    const x = this.sections.find((y) => y.id === id && y.start != null);
+    if (!x) return null;
+    const max = Math.max(this.duration, 0);
+    if (edge === 'start') {
+      const limit = x.end != null ? x.end - MIN_SECTION : max;
+      x.start = Math.max(0, Math.min(time, limit));
+    } else if (x.end != null) {
+      x.end = Math.min(max, Math.max(time, x.start + MIN_SECTION));
+    }
+    this._changed();
+    return x;
+  }
+
+  updateSection(id, patch) {
+    const x = this.sections.find((y) => y.id === id);
+    if (!x) return null;
+    if (patch.label != null) x.label = patch.label;
+    if (patch.category !== undefined) x.category = patch.category;
+    this._changed();
+    return x;
+  }
+
+  removeSection(id) {
+    const x = this.sections.find((y) => y.id === id);
+    if (!x) return false;
+    // Ablaufplan-Punkte werden nicht gelöscht, sondern nur von der Zeitachse genommen.
+    if (x.source === 'churchtools' && x.start != null) {
+      x.start = null;
+      x.end = null;
+    } else {
+      this.sections = this.sections.filter((y) => y.id !== id);
+    }
+    this._changed();
+    return true;
   }
 
   /* ----------------------------------------------------------------- Aufnahme */
@@ -249,9 +336,9 @@ class Session extends EventEmitter {
     const dir = settings.get('recordingsDir');
     fs.mkdirSync(dir, { recursive: true });
 
-    // Eine frühere Aufnahme bleibt als Datei erhalten; die Marker gehören aber
+    // Eine frühere Aufnahme bleibt als Datei erhalten; die Abschnitte gehören aber
     // zu ihr und werden für die neue Aufnahme zurückgesetzt.
-    if (this.status === 'stopped') this._resetMarkersForNewRecording();
+    if (this.status === 'stopped') this._resetSectionsForNewRecording();
 
     const stamp = `${dateStamp()}_${new Date().toTimeString().slice(0, 5).replace(':', '')}`;
     const base = this._freeBasePath(path.join(dir, `${stamp}_${slug(this.service.name, 'Gottesdienst')}`));
@@ -283,11 +370,11 @@ class Session extends EventEmitter {
     return candidate;
   }
 
-  /** Ablaufplan-Punkte werden wieder offen, selbst gesetzte Marker entfallen. */
-  _resetMarkersForNewRecording() {
-    this.markers = this.markers
-      .filter((m) => m.source === 'churchtools')
-      .map((m) => ({ ...m, placed: false, time: null }));
+  /** Ablaufplan-Punkte werden wieder offen, selbst angelegte Abschnitte entfallen. */
+  _resetSectionsForNewRecording() {
+    this.sections = this.sections
+      .filter((x) => x.source === 'churchtools')
+      .map((x) => ({ ...x, start: null, end: null }));
   }
 
   /** Setzt die beendete Aufnahme fort: neue Audiodaten werden an die WAV-Datei angehängt. */
@@ -337,6 +424,7 @@ class Session extends EventEmitter {
       return { ok: false, error: 'Es läuft keine Aufnahme.' };
     }
     this._restoredDuration = this.duration;
+    this._closeOpen(this._restoredDuration);
     if (this.writer) this.writer.close();
     this.status = 'stopped';
     this.finalized = true;
@@ -433,7 +521,7 @@ class Session extends EventEmitter {
     const target = this.sessionFilePath();
     if (!target) return;
     const data = {
-      version: 1,
+      version: 2,
       app: 'church-recorder',
       service: this.service,
       status: this.status,
@@ -443,7 +531,7 @@ class Session extends EventEmitter {
       channels: this.channels,
       duration: this.duration,
       wavPath: this.wavPath,
-      markers: this.markers,
+      sections: this.sections,
       transcript: this.transcript,
       peaks: this.peaks
     };
@@ -464,7 +552,6 @@ class Session extends EventEmitter {
     this.basePath = sessionPath.replace(/\.session\.json$/, '');
     this.wavPath = data.wavPath && fs.existsSync(data.wavPath) ? data.wavPath : `${this.basePath}.wav`;
     this.service = data.service || this.service;
-    this.markers = data.markers || [];
     this.transcript = data.transcript || [];
     this.peaks = data.peaks || [];
     this.sampleRate = data.sampleRate || this.sampleRate;
@@ -479,6 +566,8 @@ class Session extends EventEmitter {
       if (fs.existsSync(this.wavPath)) duration = readInfo(this.wavPath).duration;
     } catch { /* Dauer aus der Session-Datei verwenden */ }
     this._restoredDuration = duration;
+    this.sections = migrateSections(data, duration);
+    this._colorSeq = this.sections.reduce((m, x) => Math.max(m, (x.color ?? -1) + 1), 0);
 
     this._changed();
     return this.snapshot();

@@ -206,7 +206,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 			{ variableId: 'service_name', name: 'Name des Gottesdienstes' },
 			{ variableId: 'current_item', name: 'Aktueller Programmpunkt' },
 			{ variableId: 'next_item', name: 'Nächster offener Programmpunkt' },
-			{ variableId: 'marker_count', name: 'Anzahl gesetzter Marker' },
+			{ variableId: 'marker_count', name: 'Anzahl gesetzter Abschnitte' },
 			{ variableId: 'pending_count', name: 'Anzahl offener Programmpunkte' },
 			{ variableId: 'level_left', name: 'Pegel links (0-100)' },
 			{ variableId: 'level_right', name: 'Pegel rechts (0-100)' },
@@ -245,7 +245,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 			service_name: s.service?.name || '-',
 			current_item: s.currentSegment?.label || '-',
 			next_item: pending.length > 0 ? pending[0].label : '-',
-			marker_count: (s.markers || []).filter((m) => m.placed).length,
+			marker_count: (s.sections || []).filter((x) => x.start != null).length,
 			pending_count: pending.length,
 		})
 		this.checkFeedbacks('recording', 'paused', 'has_pending')
@@ -294,23 +294,23 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				},
 			},
 			marker_add: {
-				name: 'Marker setzen',
+				name: 'Abschnitt starten / beenden',
 				options: [
 					{
 						type: 'textinput',
 						id: 'label',
-						label: 'Bezeichnung',
-						default: 'Marker',
+						label: 'Bezeichnung (beim Start)',
+						default: 'Abschnitt',
 						useVariables: true,
 					},
 				],
 				callback: async (action, context) => {
-					const label = await context.parseVariablesInString(action.options.label || 'Marker')
+					const label = await context.parseVariablesInString(action.options.label || 'Abschnitt')
 					this.command('marker.add', { label })
 				},
 			},
 			marker_next: {
-				name: 'Nächster Programmpunkt beginnt hier',
+				name: 'Nächster Programmpunkt beginnt hier (beendet den laufenden Abschnitt)',
 				options: [],
 				callback: () => this.command('marker.next'),
 			},
@@ -393,16 +393,16 @@ class GottesdienstRecorderInstance extends InstanceBase {
 			},
 			marker: {
 				type: 'button',
-				category: 'Marker',
-				name: 'Marker setzen',
-				style: { ...base, text: 'Marker\\nsetzen' },
-				steps: [{ down: [{ actionId: 'marker_add', options: { label: 'Marker' } }], up: [] }],
+				category: 'Abschnitte',
+				name: 'Abschnitt starten / beenden',
+				style: { ...base, text: 'Abschnitt\\nStart/Ende' },
+				steps: [{ down: [{ actionId: 'marker_add', options: { label: 'Abschnitt' } }], up: [] }],
 				feedbacks: [],
 			},
 			marker_predigt: {
 				type: 'button',
-				category: 'Marker',
-				name: 'Marker „Predigt"',
+				category: 'Abschnitte',
+				name: 'Abschnitt „Predigt" starten / beenden',
 				style: { ...base, text: 'Predigt' },
 				steps: [{ down: [{ actionId: 'marker_add', options: { label: 'Predigt' } }], up: [] }],
 				feedbacks: [],

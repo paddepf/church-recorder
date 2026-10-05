@@ -45,13 +45,16 @@ contextBridge.exposeInMainWorld('api', {
     chunk: (arrayBuffer) => ipcRenderer.send('audio:chunk', arrayBuffer)
   },
 
-  marker: {
-    add: (params) => invoke('marker:add', params),
-    place: (id, time) => invoke('marker:place', { id, time }),
-    next: (time) => invoke('marker:next', { time }),
-    move: (id, time) => invoke('marker:move', { id, time }),
-    update: (id, patch) => invoke('marker:update', { id, ...patch }),
-    remove: (id) => invoke('marker:delete', { id })
+  section: {
+    /** Abschnitt beginnen bzw. den laufenden beenden. */
+    toggle: (params) => invoke('section:toggle', params),
+    /** Offenen Ablaufpunkt beginnen (time = null: jetzt). */
+    start: (id, time) => invoke('section:start', { id, time }),
+    /** Laufenden Abschnitt beenden und nächsten Ablaufpunkt beginnen. */
+    next: (time) => invoke('section:next', { time }),
+    moveEdge: (id, edge, time) => invoke('section:edge', { id, edge, time }),
+    update: (id, patch) => invoke('section:update', { id, ...patch }),
+    remove: (id) => invoke('section:delete', { id })
   },
 
   exportSegment: (params) => invoke('export:segment', params),

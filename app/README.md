@@ -1,10 +1,10 @@
 # ChurchRecorder
 
 Aufnahmeprogramm für Gottesdienste. Nimmt eine Stereospur des Audioeingangs auf,
-gliedert sie über verschiebbare Marker in die Programmpunkte des Ablaufplans und
+gliedert sie über Abschnitte mit verschiebbarer Anfangs- und Endmarke in die Programmpunkte des Ablaufplans und
 speichert einen ausgewählten Abschnitt – zum Beispiel die Predigt – als MP3.
 
-- Durchgehende, verlustfreie WAV-Masteraufnahme; Marker sind nur Metadaten
+- Durchgehende, verlustfreie WAV-Masteraufnahme; Abschnitte sind nur Metadaten
 - Ablaufplan aus ChurchTools, Punkte per Drag-and-Drop auf die Wellenform
 - Lokale Mitschrift zum Auffinden der richtigen Stelle, ohne Internet
 - Netzwerkschnittstelle für ein eigenes Monitoring-Dashboard
@@ -39,6 +39,9 @@ Das Repository ist auf beiden Systemen gleich einzurichten:
    npm install
    npm run dev
    ```
+   Die Entwicklerwerkzeuge öffnen sich nicht von selbst (sie würden bei jedem
+   Neustart den Fokus holen): per `F12` bzw. `Strg`/`Cmd` + `Umschalt` + `I`
+   ein- und ausblenden, oder dauerhaft starten mit `npm run dev:tools`.
 3. Arbeitsablauf: vor dem Arbeiten `git pull`, danach committen und pushen.
    Aktuell wird auf beiden Rechnern direkt auf `main` gearbeitet (Testphase);
    bei produktiver Nutzung sollten Änderungen am Aufnahmerechner auf Branches.
@@ -74,16 +77,22 @@ Windows erzeugen. Der mitgelieferte Workflow erledigt beides auf GitHub.
    Programmpunkte erscheinen links als offene Punkte.
 2. **Neue Aufnahme starten.** Die Wellenform wächst mit, die Pegelanzeige zeigt den
    Eingang, der obere Fensterrand leuchtet rot.
-3. Beginnt ein Programmpunkt, auf „Nächster Ablaufpunkt" drücken (Taste **N**)
-   oder in der Liste auf „jetzt". Für ungeplantes „Marker setzen" (Taste **M**).
-4. Marker sitzen selten sofort richtig. Sie lassen sich jederzeit – auch während
+3. Jeder Abschnitt besteht aus zwei Marken: Anfang und Ende. „Abschnitt starten"
+   (Taste **M**) setzt die Anfangsmarke, derselbe Knopf („Abschnitt beenden",
+   wieder **M**) die Endmarke. Beginnt ein Programmpunkt des Ablaufplans, auf
+   „Nächster Ablaufpunkt" drücken (Taste **N**) oder in der Liste auf „starten":
+   Ein laufender Abschnitt endet dabei an derselben Stelle. Die Marke wird sofort
+   gesetzt, benannt wird danach (✎, Doppelklick oder **F2**). Jeder Abschnitt hat
+   eine eigene dezente Farbe in Wellenform und Liste.
+4. Marken sitzen selten sofort richtig. Sie lassen sich jederzeit – auch während
    der Aufnahme – am Fähnchen auf der Wellenform verschieben. Die Mitschrift
-   darunter hilft beim Finden der genauen Stelle.
+   darunter hilft beim Finden der genauen Stelle. Nach „Beenden" werden noch
+   laufende Abschnitte am Ende der Aufnahme geschlossen.
 5. **Beenden.** Danach unten rechts den Abschnitt wählen und als MP3 speichern.
    Vorausgewählt ist der längste Abschnitt, weil das meist die Predigt ist.
 
 Die WAV-Masteraufnahme bleibt erhalten. Über „Aufnahmen" kann eine frühere
-Session erneut geöffnet, die Marker nachjustiert und ein weiterer Abschnitt
+Session erneut geöffnet, die Marken nachjustiert und ein weiterer Abschnitt
 exportiert werden.
 
 ### Tastaturkürzel
@@ -91,8 +100,8 @@ exportiert werden.
 | Taste | Wirkung |
 |---|---|
 | `Strg` + `R` (macOS: `Cmd` + `R`) | Aufnahme starten bzw. beenden |
-| `M` | Marker an der aktuellen Stelle setzen |
-| `N` | Nächsten Ablaufpunkt hier beginnen lassen |
+| `M` | Abschnitt starten bzw. beenden (Anfangs-/Endmarke setzen) |
+| `N` | Laufenden Abschnitt beenden und nächsten Ablaufpunkt beginnen |
 | `Leertaste` | Abspielen/Pause (nach dem Beenden) |
 | Mausrad | auf der Wellenform scrollen |
 | `Strg` + Mausrad | zoomen |

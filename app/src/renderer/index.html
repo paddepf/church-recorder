@@ -52,8 +52,8 @@
 
   <section class="wave-section">
     <div class="wave-toolbar">
-      <button id="btn-marker" class="secondary" disabled title="Marker sofort an der aktuellen Stelle setzen (M) – Namen danach per Doppelklick oder ✎ ändern">Marker setzen</button>
-      <button id="btn-next-item" class="secondary" disabled title="Nächsten Ablaufpunkt hier beginnen (N)">Nächster Ablaufpunkt</button>
+      <button id="btn-marker" class="secondary" disabled title="Abschnitt an der aktuellen Stelle beginnen bzw. beenden (M) – Namen danach per Doppelklick oder ✎ ändern">Abschnitt starten</button>
+      <button id="btn-next-item" class="secondary" disabled title="Laufenden Abschnitt beenden und den nächsten Ablaufpunkt beginnen (N)">Nächster Ablaufpunkt</button>
       <div class="spacer"></div>
       <button id="btn-play" class="secondary" disabled title="Abspielen bzw. während der Aufnahme ab dem Cursor mithören (Leertaste)">Abspielen</button>
       <label class="follow"><input type="checkbox" id="chk-follow" checked /> Ansicht folgt</label>
@@ -73,7 +73,7 @@
       </div>
       <ol id="pending-list" class="pending"></ol>
       <div class="panel-sub">
-        <h3>Gesetzte Marker</h3>
+        <h3>Abschnitte</h3>
         <ol id="marker-list" class="markers"></ol>
       </div>
     </div>
@@ -91,7 +91,7 @@
       <select id="segment-select" class="select" disabled>
         <option>Noch keine Abschnitte</option>
       </select>
-      <div id="segment-info" class="segment-info">Marker setzen, um Abschnitte zu erhalten.</div>
+      <div id="segment-info" class="segment-info">Abschnitt starten und beenden, um ihn zu exportieren.</div>
       <button id="btn-export" class="primary" disabled>Als MP3 speichern</button>
       <div id="export-progress" class="progress" hidden><i></i></div>
       <div id="export-result" class="export-result"></div>
@@ -229,7 +229,7 @@
         <button class="icon close" data-close>×</button>
       </div>
       <div class="modal-body">
-        <label>Datum
+        <label>Bestimmter Tag (leer lassen für die Übersicht)
           <input id="service-date-input" type="date" />
         </label>
         <div id="service-list" class="list"></div>

@@ -1,5 +1,6 @@
-/* Wellenform-Ansicht: zeichnet die laufende Aufnahme und die Marker,
-   erlaubt Verschieben der Marker und Ablegen offener Ablaufplan-Punkte. */
+/* Wellenform-Ansicht: zeichnet die laufende Aufnahme und die Abschnitte
+   (je eine Anfangs- und Endmarke), erlaubt Verschieben der Marken und
+   Ablegen offener Ablaufplan-Punkte. */
 
 (function () {
   'use strict';
@@ -7,6 +8,10 @@
   const BUCKET_SEC = 0.05;   // Auflösung der Peak-Daten (muss zu session.js passen)
   const RULER_H = 22;
   const FLAG_H = 26;
+  const MIN_SECTION = 0.1;
+  // Dezente, gut unterscheidbare Farbtöne für die Abschnitte (Reihenfolge der Anlage).
+  const HUES = [212, 28, 150, 300, 48, 182, 346, 262];
+  const hueOf = (section) => HUES[(section.color || 0) % HUES.length];
 
   function fmt(t) {
     if (!isFinite(t) || t < 0) t = 0;
@@ -23,7 +28,8 @@
       this.ctx = canvas.getContext('2d');
       this.peaks = [];
       this.duration = 0;
-      this.markers = [];
+      this.sections = [];
+      this._hit = [];             // Trefferflächen der Griffe, beim Zeichnen gefüllt
       this.pxPerSec = opts.pxPerSec || 12;
       this.scrollT = 0;
       this.playhead = 0;          // Hörposition (null = keine)
@@ -34,12 +40,12 @@
       this.dragging = null;
       this.colors = opts.colors || {};
 
-      this.onMarkerMove = opts.onMarkerMove || (() => {});
-      this.onMarkerMoveEnd = opts.onMarkerMoveEnd || (() => {});
+      this.onEdgeMove = opts.onEdgeMove || (() => {});
+      this.onEdgeMoveEnd = opts.onEdgeMoveEnd || (() => {});
       this.onSeek = opts.onSeek || (() => {});
-      this.onSelectMarker = opts.onSelectMarker || (() => {});
+      this.onSelectSection = opts.onSelectSection || (() => {});
       this.onDropPending = opts.onDropPending || (() => {});
-      this.onRenameMarker = opts.onRenameMarker || (() => {});
+      this.onRenameSection = opts.onRenameSection || (() => {});
 
       this._bind();
       this.resize();
@@ -83,10 +89,10 @@
       this.draw();
     }
 
-    update({ peaks, duration, markers, playhead, recording, selectedSegment }) {
+    update({ peaks, duration, sections, playhead, recording, selectedSegment }) {
       if (peaks) this.peaks = peaks;
       if (duration != null) this.duration = duration;
-      if (markers) this.markers = markers;
+      if (sections) this.sections = sections;
       if (playhead !== undefined) this.playhead = playhead;
       if (recording != null) this.recording = recording;
       if (selectedSegment !== undefined) this.selectedSegment = selectedSegment;
@@ -114,6 +120,7 @@
       const laneH = h - laneTop;
       const mid = laneTop + laneH / 2;
 
+      this._hit = [];
       this._drawSegmentBands(laneTop, laneH);
       this._drawRuler();
 
@@ -154,24 +161,20 @@
       ctx.lineTo(w, mid + 0.5);
       ctx.stroke();
 
-      this._drawMarkers(laneTop, h);
+      this._drawHandles(laneTop, h);
       this._drawPlayhead(h);
       this._drawHover(h);
     }
 
     _drawSegmentBands(laneTop, laneH) {
       const ctx = this.ctx;
-      const placed = this.markers.filter((m) => m.placed).sort((a, b) => a.time - b.time);
-      placed.forEach((m, i) => {
-        const start = m.time;
-        const end = i + 1 < placed.length ? placed[i + 1].time : this.duration;
-        const x1 = this.timeToX(start);
+      this.sections.filter((x) => x.start != null).forEach((x) => {
+        const end = x.end != null ? x.end : this.duration;
+        const x1 = this.timeToX(x.start);
         const x2 = this.timeToX(end);
         if (x2 < 0 || x1 > this.width) return;
-        const isSelected = this.selectedSegment && this.selectedSegment.markerId === m.id;
-        ctx.fillStyle = isSelected
-          ? (this.colors.selection || 'rgba(108,124,224,0.22)')
-          : (i % 2 === 0 ? (this.colors.stripe || 'rgba(255,255,255,0.022)') : 'transparent');
+        const selected = this.selectedSegment && this.selectedSegment.markerId === x.id;
+        ctx.fillStyle = `hsla(${hueOf(x)}, 60%, 55%, ${selected ? 0.3 : 0.15})`;
         ctx.fillRect(x1, laneTop, x2 - x1, laneH);
       });
     }
@@ -206,21 +209,20 @@
       }
     }
 
-    _drawMarkers(laneTop, h) {
+    /** Zeichnet je Abschnitt eine Anfangs- und eine Endmarke in dessen Farbe. */
+    _drawHandles(laneTop, h) {
       const ctx = this.ctx;
       const c = this.colors;
-      const placed = this.markers.filter((m) => m.placed).sort((a, b) => a.time - b.time);
+      const placed = this.sections.filter((x) => x.start != null).sort((a, b) => a.start - b.start);
 
       ctx.font = '12px system-ui, "Segoe UI", sans-serif';
       ctx.textBaseline = 'middle';
 
-      placed.forEach((m) => {
-        const x = this.timeToX(m.time);
-        if (x < -200 || x > this.width + 200) return;
-        const color = m.source === 'churchtools'
-          ? (c.plan || '#6C7CE0')
-          : (c.manual || '#2BB3A3');
-        const active = this.dragging && this.dragging.id === m.id;
+      const flag = (section, edge, t, text, rightSide) => {
+        const x = this.timeToX(t);
+        if (x < -240 || x > this.width + 240) return;
+        const color = `hsl(${hueOf(section)}, 55%, 62%)`;
+        const active = this.dragging && this.dragging.id === section.id && this.dragging.edge === edge;
 
         ctx.strokeStyle = color;
         ctx.lineWidth = active ? 2 : 1;
@@ -230,20 +232,27 @@
         ctx.stroke();
         ctx.lineWidth = 1;
 
-        // Fähnchen mit Beschriftung
-        const label = m.label || 'Marker';
-        const tw = Math.min(220, ctx.measureText(label).width + 16);
+        // Fähnchen: Anfang steht rechts der Linie, Ende links davon.
+        const tw = Math.min(220, ctx.measureText(text).width + 16);
+        const fx = rightSide ? x : x - tw;
         ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.roundRect(x, RULER_H + 3, tw, FLAG_H - 6, 3);
+        ctx.roundRect(fx, RULER_H + 3, tw, FLAG_H - 6, 3);
         ctx.fill();
         ctx.save();
         ctx.beginPath();
-        ctx.rect(x, RULER_H + 3, tw, FLAG_H - 6);
+        ctx.rect(fx, RULER_H + 3, tw, FLAG_H - 6);
         ctx.clip();
         ctx.fillStyle = c.flagText || '#0E1318';
-        ctx.fillText(label, x + 8, RULER_H + FLAG_H / 2);
+        ctx.fillText(text, fx + 8, RULER_H + FLAG_H / 2);
         ctx.restore();
+
+        this._hit.push({ id: section.id, edge, flag: [fx, fx + tw], x });
+      };
+
+      placed.forEach((x) => {
+        flag(x, 'start', x.start, x.label || 'Abschnitt', true);
+        if (x.end != null) flag(x, 'end', x.end, 'Ende', false);
       });
     }
 
@@ -281,17 +290,18 @@
 
     /* ---------------------------------------------------------- Interaktion */
 
-    _markerAt(x, y) {
+    /** Findet den Griff (Anfang/Ende eines Abschnitts) unter dem Zeiger. */
+    _handleAt(x, y) {
       if (y < RULER_H) return null;
-      const tolerance = 6;
-      const placed = this.markers.filter((m) => m.placed);
-      // Fähnchen zuerst (größere Trefferfläche)
-      for (const m of placed) {
-        const mx = this.timeToX(m.time);
-        if (y >= RULER_H && y <= RULER_H + FLAG_H && x >= mx - 2 && x <= mx + 220) return m;
+      // Fähnchen zuerst (größere Trefferfläche), von hinten, damit das oberste gewinnt.
+      if (y <= RULER_H + FLAG_H) {
+        for (let i = this._hit.length - 1; i >= 0; i--) {
+          const hit = this._hit[i];
+          if (x >= hit.flag[0] - 2 && x <= hit.flag[1] + 2) return hit;
+        }
       }
-      for (const m of placed) {
-        if (Math.abs(this.timeToX(m.time) - x) <= tolerance) return m;
+      for (let i = this._hit.length - 1; i >= 0; i--) {
+        if (Math.abs(this._hit[i].x - x) <= 6) return this._hit[i];
       }
       return null;
     }
@@ -306,11 +316,11 @@
 
       cv.addEventListener('pointerdown', (e) => {
         const { x, y } = this._pos(e);
-        const marker = this._markerAt(x, y);
-        if (marker) {
-          this.dragging = { id: marker.id, offset: x - this.timeToX(marker.time) };
+        const handle = this._handleAt(x, y);
+        if (handle) {
+          this.dragging = { id: handle.id, edge: handle.edge, offset: x - handle.x };
           cv.setPointerCapture(e.pointerId);
-          this.onSelectMarker(marker.id);
+          this.onSelectSection(handle.id);
           this.draw();
         } else if (y > RULER_H) {
           const t = Math.max(0, Math.min(this.duration, this.xToTime(x)));
@@ -324,10 +334,15 @@
       cv.addEventListener('pointermove', (e) => {
         const { x, y } = this._pos(e);
         if (this.dragging) {
-          const t = Math.max(0, Math.min(this.duration, this.xToTime(x - this.dragging.offset)));
-          const m = this.markers.find((mm) => mm.id === this.dragging.id);
-          if (m) m.time = t;
-          this.onMarkerMove(this.dragging.id, t);
+          const { id, edge } = this.dragging;
+          const sec = this.sections.find((ss) => ss.id === id);
+          if (sec) {
+            let t = Math.max(0, Math.min(this.duration, this.xToTime(x - this.dragging.offset)));
+            if (edge === 'start' && sec.end != null) t = Math.min(t, sec.end - MIN_SECTION);
+            if (edge === 'end') t = Math.max(t, sec.start + MIN_SECTION);
+            sec[edge] = t;
+            this.onEdgeMove(id, edge, t);
+          }
           this.draw();
           return;
         }
@@ -339,14 +354,15 @@
           return;
         }
         this.hoverTime = this.xToTime(x);
-        cv.style.cursor = this._markerAt(x, y) ? 'ew-resize' : (y < RULER_H ? 'grab' : 'pointer');
+        cv.style.cursor = this._handleAt(x, y) ? 'ew-resize' : (y < RULER_H ? 'grab' : 'pointer');
         this.draw();
       });
 
       const endDrag = (e) => {
         if (this.dragging) {
-          const m = this.markers.find((mm) => mm.id === this.dragging.id);
-          this.onMarkerMoveEnd(this.dragging.id, m ? m.time : 0);
+          const { id, edge } = this.dragging;
+          const sec = this.sections.find((ss) => ss.id === id);
+          if (sec) this.onEdgeMoveEnd(id, edge, sec[edge]);
           this.dragging = null;
           this.draw();
         }
@@ -358,8 +374,8 @@
 
       cv.addEventListener('dblclick', (e) => {
         const { x, y } = this._pos(e);
-        const marker = this._markerAt(x, y);
-        if (marker) this.onRenameMarker(marker.id);
+        const handle = this._handleAt(x, y);
+        if (handle) this.onRenameSection(handle.id);
       });
 
       cv.addEventListener('pointerleave', () => {
@@ -401,5 +417,6 @@
   }
 
   window.Waveform = Waveform;
+  window.sectionHue = hueOf;
   window.formatTime = fmt;
 })();
