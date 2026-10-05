@@ -20,6 +20,11 @@ Befehle (im Ordner `app/`): `npm install`, `npm run dev` (Live-Reload),
   `app/README.md` (Bedienung, Dateiübersicht), bei Schnittstellenänderungen auch
   `app/docs/websocket-api.md` und `companion-module/README.md`. Die Doku-Änderung
   gehört in denselben Commit wie die Code-Änderung.
+- Muss die App nach einer Änderung neu gestartet werden (Hauptprozess, Preload,
+  `src/shared`), führt Claude den Neustart selbst im Terminal aus (Befehl siehe
+  „Entwicklung“) und meldet es. **Nie**, wenn gerade eine Aufnahme läuft oder
+  pausiert ist: vorher prüfen (jüngste `.session.json` im Aufnahmeordner hat
+  `status` `recording`/`paused` bzw. die WAV wächst) und dann nachfragen.
 - Plattformneutral bleiben: Pfade mit `path`, keine festen Laufwerks- oder
   `/Users`-Pfade, Plattformunterschiede nur über `process.platform`.
 - whisper.cpp-Binary und Modell sind pro Rechner verschieden und stehen nur in
@@ -73,6 +78,21 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   dieselbe Datei weitergeschrieben (roter Balken, Lücke wird gemeldet). Anlass: Der
   Mac schlief ein, der Eingang blieb nach dem Aufwachen stumm, die Aufnahme stand
   still, die App zeigte weiter „läuft“.
+
+### MP3-Export
+- Einstellung `exportDir` (Oberordner). Gesetzt: Export ohne Dialog nach
+  `<exportDir>/<Datum>_<Gottesdienstname aus ChurchTools>/`, vorhandene Dateien
+  werden nie überschrieben (` (2)`). Leer: Zielordner wird beim Export abgefragt,
+  die Dateien liegen dann direkt darin. Ordnername nutzt `slug()` und
+  `session.service` (Datum lokal, Name aus ChurchTools).
+- Der Export-Bereich ist eine Auswahlliste mit Häkchen (kein Dropdown): alle echten,
+  beendeten Abschnitte plus „Gesamte Aufnahme“; ein Knopf „Ausgewählte als MP3
+  speichern“ (`export:batch`, nacheinander, ein Fehler stoppt die übrigen nicht,
+  `failed` in der Antwort). Vorausgewählt sind Abschnitte, die noch nicht gesichert
+  wurden. Fortschritt über `export-progress` mit `index`/`total`.
+- Gesicherte Abschnitte werden in der Session gemerkt (`exports`, Schlüssel =
+  Segment-ID, mit Datei und Zeitraum). Weichen Anfang/Ende später ab, zeigt die
+  Liste „geändert seit Export“. `exports` wird bei einer neuen Aufnahme geleert.
 
 ### Mithören
 - Klick in die Wellenform setzt während der Aufnahme einen Hörcursor, Leertaste =

@@ -59,7 +59,9 @@ Windows erzeugen. Der mitgelieferte Workflow erledigt beides auf GitHub.
 1. **Einstellungen → Audio:** Eingang und Abtastrate wählen. Die Auswahl wird
    gespeichert und beim nächsten Start wiederverwendet.
 2. **Einstellungen → Ablage:** Ordner für die Aufnahmen festlegen. Rechne mit
-   etwa 700 MB pro Stunde für die WAV-Masteraufnahme.
+   etwa 700 MB pro Stunde für die WAV-Masteraufnahme. Zusätzlich lässt sich ein
+   Oberordner für die MP3-Exporte angeben (z. B. „Aufnahmen 2026"); darin
+   entsteht je Gottesdienst ein Unterordner `Datum_Gottesdienstname`.
 3. **Einstellungen → ChurchTools:** Adresse und Personal Access Token eintragen,
    dann „Verbindung prüfen". Der Token wird über die Schlüsselverwaltung des
    Betriebssystems verschlüsselt abgelegt.
@@ -88,8 +90,15 @@ Windows erzeugen. Der mitgelieferte Workflow erledigt beides auf GitHub.
    der Aufnahme – am Fähnchen auf der Wellenform verschieben. Die Mitschrift
    darunter hilft beim Finden der genauen Stelle. Nach „Beenden" werden noch
    laufende Abschnitte am Ende der Aufnahme geschlossen.
-5. **Beenden.** Danach unten rechts den Abschnitt wählen und als MP3 speichern.
-   Vorausgewählt ist der längste Abschnitt, weil das meist die Predigt ist.
+5. **Beenden.** Danach unten rechts unter „Abschnitte exportieren" die gewünschten
+   Abschnitte anhaken (neue sind vorausgewählt, „Alle"/„Keine" schalten um; ein
+   Klick auf den Namen zeigt den Abschnitt in der Wellenform) und mit „Ausgewählte
+   als MP3 speichern" exportieren. Bereits gesicherte Abschnitte tragen den
+   Vermerk „✓ gesichert" (oder „✓ geändert seit Export", wenn ihre Marken seitdem
+   verschoben wurden) und sind nicht mehr vorausgewählt. „Gesamte Aufnahme" steht
+   ebenfalls zur Wahl. Ist ein Export-Oberordner eingestellt, wird ohne Rückfrage
+   in dessen Unterordner `Datum_Gottesdienstname` gespeichert (bei gleichem Namen
+   mit „ (2)" usw.); ohne Oberordner wird ein Zielordner abgefragt.
 
 Die WAV-Masteraufnahme bleibt erhalten. Über „Aufnahmen" kann eine frühere
 Session erneut geöffnet, die Marken nachjustiert und ein weiterer Abschnitt

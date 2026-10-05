@@ -454,6 +454,25 @@ label small { color: var(--muted); font-size: 11px; }
 .list-item:hover { border-color: var(--plan); }
 .list-item .meta { color: var(--muted); font-size: 12px; font-family: var(--mono); }
 .list-item.unfinished { border-color: rgba(255,176,32,.5); }
+.export-list { margin: 8px 12px 0; display: grid; gap: 4px; overflow-y: auto; min-height: 0; max-height: 34vh; }
+.export-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border-left: 3px solid hsl(var(--hue, 0), 55%, 62%);
+  background: var(--panel-2);
+}
+.export-item.selected { outline: 1px solid var(--plan); }
+.export-item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.export-item .meta { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+.export-item .done { color: var(--manual); font-size: 12px; white-space: nowrap; }
+.export-item .done.stale { color: var(--amber); }
+.export-item input:disabled + .name { color: var(--muted); cursor: default; }
+.export-select { display: flex; gap: 2px; }
+.export-select .mini { margin: 0; width: auto; border: none; background: transparent; color: var(--muted); padding: 2px 6px; font-size: 12px; }
+.export-select .mini:hover { color: var(--text); background: transparent; }
 .list-item.current { border-color: var(--plan); }
 .list-head { color: var(--muted); font-size: 12px; font-weight: 500; padding: 6px 2px 0; }
 

@@ -89,12 +89,16 @@
     </div>
 
     <div class="panel panel-export">
-      <div class="panel-head"><h2>Abschnitt exportieren</h2></div>
-      <select id="segment-select" class="select" disabled>
-        <option>Noch keine Abschnitte</option>
-      </select>
-      <div id="segment-info" class="segment-info">Abschnitt starten und beenden, um ihn zu exportieren.</div>
-      <button id="btn-export" class="primary" disabled>Als MP3 speichern</button>
+      <div class="panel-head">
+        <h2>Abschnitte exportieren</h2>
+        <span class="export-select">
+          <button id="export-all" class="mini" title="Alle auswählen">Alle</button>
+          <button id="export-none" class="mini" title="Auswahl aufheben">Keine</button>
+        </span>
+      </div>
+      <div id="export-list" class="export-list"></div>
+      <div id="export-target" class="segment-info"></div>
+      <button id="btn-export" class="primary" disabled>Ausgewählte als MP3 speichern</button>
       <div id="export-progress" class="progress" hidden><i></i></div>
       <div id="export-result" class="export-result"></div>
     </div>
@@ -134,6 +138,14 @@
               <input id="set-dir" type="text" readonly />
               <button id="btn-choose-dir" class="secondary">Wählen</button>
             </span>
+          </label>
+          <label>Ordner für MP3-Exporte (Oberordner)
+            <span class="row">
+              <input id="set-export-dir" type="text" readonly placeholder="Nicht gesetzt – beim Export wird gefragt" />
+              <button id="btn-choose-export-dir" class="secondary">Wählen</button>
+              <button id="btn-clear-export-dir" class="secondary" title="Zurücksetzen">×</button>
+            </span>
+            <small>Darin entsteht je Gottesdienst ein Unterordner „Datum_Gottesdienstname“, die MP3-Dateien werden ohne Rückfrage dort abgelegt.</small>
           </label>
           <label>Dateiname
             <input id="set-pattern" type="text" placeholder="{datum}_{gottesdienst}_{abschnitt}" />

@@ -460,29 +460,71 @@ ipcMain.handle('section:delete', (_e, { id }) => ok({ removed: session.removeSec
 
 /* --- Export --- */
 
-ipcMain.handle('export:segment', async (_e, { start, end, label }) => {
+/** Unterordner je Gottesdienst im Export-Oberordner: "Datum_Gottesdienstname". */
+function exportSubfolderName() {
+  return `${session.service.date || dateStamp()}_${slug(session.service.name, 'Gottesdienst')}`;
+}
+
+/** Hängt " (2)", " (3)" … an, damit ein früherer Export nie überschrieben wird. */
+function freeFilePath(filePath) {
+  if (!fs.existsSync(filePath)) return filePath;
+  const { dir, name, ext } = path.parse(filePath);
+  for (let n = 2; ; n++) {
+    const candidate = path.join(dir, `${name} (${n})${ext}`);
+    if (!fs.existsSync(candidate)) return candidate;
+  }
+}
+
+/** Zielordner für Exporte bei gesetztem Oberordner, sonst null (dann wird gefragt). */
+function exportTargetFolder() {
+  const base = settings.get('exportDir');
+  return base ? path.join(base, exportSubfolderName()) : null;
+}
+
+ipcMain.handle('export:target', () => ok({ folder: exportTargetFolder() }));
+
+/** Ausgewählte Abschnitte nacheinander als MP3 speichern und als gesichert vermerken. */
+ipcMain.handle('export:batch', async (_e, { items } = {}) => {
   try {
     if (!session.wavPath || !fs.existsSync(session.wavPath)) {
       return fail('Es ist keine Masteraufnahme vorhanden.');
     }
-    const suggested = path.join(settings.get('recordingsDir'), buildFileName(label));
-    const res = await dialog.showSaveDialog(win, {
-      title: 'Abschnitt als MP3 speichern',
-      defaultPath: suggested,
-      filters: [{ name: 'MP3-Audio', extensions: ['mp3'] }]
-    });
-    if (res.canceled || !res.filePath) return ok({ canceled: true });
+    if (!Array.isArray(items) || items.length === 0) return fail('Es ist kein Abschnitt ausgewählt.');
 
-    const result = await mp3.exportSegment({
-      wavPath: session.wavPath,
-      start,
-      end,
-      outPath: res.filePath,
-      bitrate: settings.get('mp3Bitrate') || 192,
-      onProgress: (p) => send('export-progress', { progress: p })
-    });
-    net.publishEvent('export.finished', { file: result.outPath, label });
-    return ok(result);
+    let folder = exportTargetFolder();
+    if (!folder) {
+      const res = await dialog.showOpenDialog(win, {
+        title: 'Zielordner für die MP3-Dateien wählen',
+        defaultPath: settings.get('recordingsDir'),
+        properties: ['openDirectory', 'createDirectory']
+      });
+      if (res.canceled || !res.filePaths[0]) return ok({ canceled: true });
+      folder = res.filePaths[0];
+    }
+    fs.mkdirSync(folder, { recursive: true });
+
+    const files = [];
+    const failed = [];
+    for (let i = 0; i < items.length; i++) {
+      const { id, start, end, label } = items[i];
+      try {
+        const result = await mp3.exportSegment({
+          wavPath: session.wavPath,
+          start,
+          end,
+          outPath: freeFilePath(path.join(folder, buildFileName(label))),
+          bitrate: settings.get('mp3Bitrate') || 192,
+          onProgress: (p) => send('export-progress', { progress: (i + p) / items.length, index: i + 1, total: items.length })
+        });
+        files.push(result.outPath);
+        if (id) session.recordExport(id, { file: result.outPath, start, end });
+        net.publishEvent('export.finished', { file: result.outPath, label });
+      } catch (err) {
+        failed.push({ label, error: String(err?.message || err) });
+      }
+    }
+    send('export-progress', { progress: 1, index: items.length, total: items.length });
+    return ok({ folder, files, failed });
   } catch (err) {
     return fail(err);
   }

@@ -16,6 +16,7 @@ const DEFAULTS = {
   // Ablage
   recordingsDir: '',            // wird beim ersten Start gesetzt
   fileNamePattern: '{datum}_{gottesdienst}_{abschnitt}',
+  exportDir: '',                // Oberordner für MP3-Exporte; leer = beim Export nachfragen
   mp3Bitrate: 192,
   keepMasterWavDays: 0,         // 0 = nie automatisch löschen
 

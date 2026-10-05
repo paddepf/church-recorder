@@ -59,7 +59,8 @@ contextBridge.exposeInMainWorld('api', {
     remove: (id) => invoke('section:delete', { id })
   },
 
-  exportSegment: (params) => invoke('export:segment', params),
+  exportBatch: (items) => invoke('export:batch', { items }),
+  exportTarget: () => invoke('export:target'),
 
   net: {
     status: () => invoke('net:status'),

@@ -13,6 +13,8 @@
     duration: 0,
     selectedSectionId: null,
     selectedSegmentId: null,
+    exportChecked: new Set(),   // zum Export angehakte Segment-IDs
+    exportSeen: new Set(),      // schon einmal angezeigte Segment-IDs (für die Vorauswahl)
     playing: false,
     starting: false,
     bucketAcc: 0,
@@ -497,49 +499,86 @@
     if (name && name.trim()) await window.api.section.update(id, { label: name.trim() });
   }
 
+  /** Abschnitte zum Export; beendete Abschnitte sind anklickbar, bereits gesicherte tragen einen Vermerk. */
   function renderSegments() {
-    const sel = $('segment-select');
+    const list = $('export-list');
     const session = state.session;
     const segments = session?.segments || [];
-    const previous = state.selectedSegmentId;
-    sel.innerHTML = '';
+    const canExport = session?.status === 'stopped';
+    const sections = new Map((session?.sections || []).map((x) => [x.id, x]));
+    list.innerHTML = '';
 
     if (segments.length === 0) {
-      sel.innerHTML = '<option>Noch keine Abschnitte</option>';
-      sel.disabled = true;
+      list.innerHTML = '<div class="empty">Abschnitt starten und beenden, um ihn zu exportieren.</div>';
       $('btn-export').disabled = true;
-      $('segment-info').textContent = 'Abschnitt starten und beenden, um ihn zu exportieren.';
+      updateExportButton();
       return;
     }
 
-    segments.forEach((s) => {
-      const opt = document.createElement('option');
-      opt.value = s.id;
-      opt.textContent = `${s.label} · ${fmt(s.start)}–${fmt(s.end)}`;
-      sel.appendChild(opt);
+    segments.forEach((seg) => {
+      // Neue Abschnitte sind vorausgewählt, sofern sie noch nicht gesichert wurden (die ganze Aufnahme nie).
+      const done = (session.exports || {})[seg.id];
+      if (!state.exportSeen.has(seg.id)) {
+        state.exportSeen.add(seg.id);
+        if (seg.markerId && !seg.open && !done) state.exportChecked.add(seg.id);
+      }
+
+      const row = document.createElement('div');
+      row.className = 'export-item' + (state.selectedSegmentId === seg.id ? ' selected' : '');
+      row.dataset.id = seg.id;
+      row.style.setProperty('--hue', window.sectionHue(sections.get(seg.markerId) || { color: 4 }));
+      row.innerHTML = '<input type="checkbox" /><span class="name"></span><span class="meta"></span><span class="done"></span>';
+
+      const box = row.querySelector('input');
+      box.checked = state.exportChecked.has(seg.id);
+      box.disabled = !canExport || seg.open;
+      box.addEventListener('change', () => {
+        if (box.checked) state.exportChecked.add(seg.id); else state.exportChecked.delete(seg.id);
+        updateExportButton();
+      });
+
+      const name = row.querySelector('.name');
+      name.textContent = seg.label;
+      name.title = 'Abschnitt in der Wellenform zeigen';
+      name.addEventListener('click', () => {
+        state.selectedSegmentId = state.selectedSegmentId === seg.id ? null : seg.id;
+        renderSegments();
+        wave.update({ selectedSegment: segments.find((x) => x.id === state.selectedSegmentId) || null });
+        if (state.selectedSegmentId) wave.scrollTo(seg.start);
+      });
+      row.querySelector('.meta').textContent = `${fmt(seg.start)}–${fmt(seg.end)} · ${fmt(Math.max(0, seg.end - seg.start))}`;
+
+      const mark = row.querySelector('.done');
+      if (done) {
+        const changed = Math.abs(done.start - seg.start) > 0.05 || Math.abs(done.end - seg.end) > 0.05;
+        mark.textContent = changed ? '✓ geändert seit Export' : '✓ gesichert';
+        mark.classList.toggle('stale', changed);
+        mark.title = done.file;
+      }
+      list.appendChild(row);
     });
 
-    const stillThere = segments.find((s) => s.id === previous);
-    // Vorauswahl: der längste Abschnitt ist meist die Predigt; ohne Abschnitte die ganze Aufnahme.
-    const real = segments.filter((x) => x.markerId);
-    const preferred = stillThere
-      || (real.length ? real : segments).slice().sort((a, b) => (b.end - b.start) - (a.end - a.start))[0];
-    state.selectedSegmentId = preferred.id;
-    sel.value = preferred.id;
-    sel.disabled = false;
-
-    const canExport = state.session.status === 'stopped';
-    $('btn-export').disabled = !canExport;
-    updateSegmentInfo();
-    if (!canExport) $('segment-info').textContent = 'Export ist nach dem Beenden der Aufnahme möglich.';
+    $('export-target').textContent = canExport
+      ? ''
+      : 'Der Export ist nach dem Beenden der Aufnahme möglich.';
+    updateExportButton();
+    refreshExportTarget();
   }
 
-  function updateSegmentInfo() {
-    const seg = (state.session?.segments || []).find((s) => s.id === state.selectedSegmentId);
-    if (!seg) return;
-    const len = Math.max(0, seg.end - seg.start);
-    $('segment-info').textContent = `${fmt(seg.start)} bis ${fmt(seg.end)} · Länge ${fmt(len)}`;
-    wave.update({ selectedSegment: seg });
+  function updateExportButton() {
+    const canExport = state.session?.status === 'stopped';
+    const n = $('export-list').querySelectorAll('input:checked').length;
+    $('btn-export').disabled = !canExport || n === 0;
+    $('btn-export').textContent = n > 1 ? `${n} Ausgewählte als MP3 speichern` : 'Ausgewählte als MP3 speichern';
+  }
+
+  /** Zeigt, wohin exportiert wird (Unterordner des Export-Oberordners). */
+  async function refreshExportTarget() {
+    if (state.session?.status !== 'stopped') return;
+    const target = await window.api.exportTarget();
+    $('export-target').textContent = target.ok && target.folder
+      ? `Ziel: ${target.folder}`
+      : 'Der Zielordner wird beim Speichern abgefragt.';
   }
 
   function renderTranscript(list) {
@@ -648,12 +687,9 @@
       if (state.playing) setPlayhead(player.currentTime, false);
     });
 
-    $('segment-select').addEventListener('change', (e) => {
-      state.selectedSegmentId = e.target.value;
-      updateSegmentInfo();
-    });
-
     $('btn-export').addEventListener('click', exportSelected);
+    $('export-all').addEventListener('click', () => setExportChecks(true));
+    $('export-none').addEventListener('click', () => setExportChecks(false));
 
     $('btn-settings').addEventListener('click', () => openModal('modal-settings'));
     $('btn-library').addEventListener('click', openLibrary);
@@ -839,9 +875,10 @@
       if (s.state === 'error') $('version-info').title = s.message || '';
     });
 
-    window.api.on('export-progress', ({ progress }) => {
+    window.api.on('export-progress', ({ progress, index, total }) => {
       const bar = $('export-progress');
       bar.hidden = false;
+      if (total && progress < 1) $('export-result').textContent = `MP3 ${index} von ${total} wird erstellt …`;
       bar.querySelector('i').style.width = Math.round(progress * 100) + '%';
       if (progress >= 1) setTimeout(() => { bar.hidden = true; }, 800);
     });
@@ -849,27 +886,49 @@
 
   /* ----------------------------------------------------------------- Export */
 
+  function setExportChecks(on) {
+    $('export-list').querySelectorAll('input:not(:disabled)').forEach((box) => {
+      box.checked = on;
+      const id = box.closest('.export-item').dataset.id;
+      if (on) state.exportChecked.add(id); else state.exportChecked.delete(id);
+    });
+    updateExportButton();
+  }
+
+  /** Speichert alle angehakten Abschnitte nacheinander als MP3. */
   async function exportSelected() {
-    const seg = (state.session?.segments || []).find((s) => s.id === state.selectedSegmentId);
-    if (!seg) return;
+    const items = (state.session?.segments || [])
+      .filter((seg) => state.exportChecked.has(seg.id) && !seg.open)
+      .map((seg) => ({ id: seg.id, start: seg.start, end: seg.end, label: seg.label }));
+    if (items.length === 0) return;
+
     $('btn-export').disabled = true;
-    $('export-result').textContent = 'MP3 wird erstellt …';
+    $('export-result').textContent = `MP3 1 von ${items.length} wird erstellt …`;
     try {
-      const res = await window.api.exportSegment({ start: seg.start, end: seg.end, label: seg.label });
+      const res = await window.api.exportBatch(items);
       if (res.canceled) {
         $('export-result').textContent = '';
-      } else if (res.ok) {
-        const mb = (res.bytes / 1048576).toFixed(1);
-        $('export-result').innerHTML = `Gespeichert (${mb} MB). <a data-reveal>Im Ordner zeigen</a>`;
-        $('export-result').querySelector('[data-reveal]').addEventListener('click',
-          () => window.api.app.reveal(res.outPath));
-        toast('success', 'MP3 wurde gespeichert.');
-      } else {
+      } else if (!res.ok) {
         $('export-result').textContent = '';
         toast('error', res.error);
+      } else {
+        // Gesicherte Abschnitte sind danach nicht mehr vorausgewählt.
+        items.forEach((item) => {
+          if (!res.failed.some((f) => f.label === item.label)) state.exportChecked.delete(item.id);
+        });
+        const n = res.files.length;
+        $('export-result').innerHTML = `${n} von ${items.length} MP3-Dateien gespeichert. <a data-reveal>Im Ordner zeigen</a>`;
+        const first = res.files[0];
+        $('export-result').querySelector('[data-reveal]').addEventListener('click',
+          () => window.api.app.reveal(first || res.folder));
+        if (res.failed.length) {
+          toast('error', `Nicht exportiert: ${res.failed.map((f) => `${f.label} (${f.error})`).join('; ')}`, 12000);
+        } else {
+          toast('success', n === 1 ? 'Die MP3 wurde gespeichert.' : `${n} MP3-Dateien wurden gespeichert.`);
+        }
       }
     } finally {
-      $('btn-export').disabled = false;
+      renderSegments();
     }
   }
 
@@ -1125,6 +1184,7 @@
     const s = state.settings;
     $('set-samplerate').value = String(s.sampleRate);
     $('set-dir').value = s.recordingsDir;
+    $('set-export-dir').value = s.exportDir || '';
     $('set-pattern').value = s.fileNamePattern;
     $('set-bitrate').value = String(s.mp3Bitrate);
     $('set-ct-url').value = s.churchToolsUrl;
@@ -1149,6 +1209,11 @@
       const res = await window.api.settings.chooseFolder();
       if (res.ok && res.path) $('set-dir').value = res.path;
     });
+    $('btn-choose-export-dir').addEventListener('click', async () => {
+      const res = await window.api.settings.chooseFolder();
+      if (res.ok && res.path) $('set-export-dir').value = res.path;
+    });
+    $('btn-clear-export-dir').addEventListener('click', () => { $('set-export-dir').value = ''; });
     $('btn-choose-bin').addEventListener('click', async () => {
       const res = await window.api.settings.chooseFile({
         title: 'Whisper-Programm wählen',
@@ -1189,6 +1254,7 @@
       outputDeviceLabel: $('set-output').selectedOptions[0]?.textContent || '',
       sampleRate: Number($('set-samplerate').value),
       recordingsDir: $('set-dir').value,
+      exportDir: $('set-export-dir').value,
       fileNamePattern: $('set-pattern').value.trim() || '{datum}_{gottesdienst}_{abschnitt}',
       mp3Bitrate: Number($('set-bitrate').value),
       churchToolsUrl: $('set-ct-url').value.trim(),

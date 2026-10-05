@@ -80,6 +80,7 @@ class Session extends EventEmitter {
     this.status = 'idle';               // idle | recording | paused | stopped
     this.service = { id: null, name: '', date: dateStamp() };
     this.sections = [];                 // {id,label,category,color,start|null,end|null,source}
+    this.exports = {};                  // Segment-ID -> {file,start,end,at}: bereits als MP3 gesichert
     this._colorSeq = 0;
     this.transcript = [];               // {start,end,text}
     this.peaks = [];                    // 0..255 je 50 ms
@@ -158,6 +159,7 @@ class Session extends EventEmitter {
       channels: this.channels,
       levels: this.levels,
       sections: this.sections,
+      exports: this.exports,
       pending: this.pendingSections(),
       segments: this.segments(),
       currentSegment: this.currentSegment(),
@@ -336,6 +338,13 @@ class Session extends EventEmitter {
     return result.section;
   }
 
+  /** Merkt, dass ein Abschnitt als MP3 gesichert wurde (mit Zeitraum, um spätere Änderungen zu erkennen). */
+  recordExport(segmentId, { file, start, end }) {
+    this.exports[segmentId] = { file, start, end, at: new Date().toISOString() };
+    this._changed();
+    this.save();
+  }
+
   updateSection(id, patch) {
     const x = this.sections.find((y) => y.id === id);
     if (!x) return null;
@@ -407,6 +416,7 @@ class Session extends EventEmitter {
 
   /** Ablaufplan-Punkte werden wieder offen, selbst angelegte Abschnitte entfallen. */
   _resetSectionsForNewRecording() {
+    this.exports = {};
     this.sections = this.sections
       .filter((x) => x.source === 'churchtools')
       .map((x) => ({ ...x, start: null, end: null }));
@@ -567,6 +577,7 @@ class Session extends EventEmitter {
       duration: this.duration,
       wavPath: this.wavPath,
       sections: this.sections,
+      exports: this.exports,
       transcript: this.transcript,
       peaks: this.peaks
     };
@@ -602,6 +613,7 @@ class Session extends EventEmitter {
     } catch { /* Dauer aus der Session-Datei verwenden */ }
     this._restoredDuration = duration;
     this.sections = migrateSections(data, duration);
+    this.exports = data.exports || {};
     this._colorSeq = this.sections.reduce((m, x) => Math.max(m, (x.color ?? -1) + 1), 0);
 
     this._changed();
