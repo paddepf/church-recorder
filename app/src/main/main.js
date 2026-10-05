@@ -163,6 +163,28 @@ function setupApplicationMenu() {
 
 /* ------------------------------------------------------------------- Fenster */
 
+// Nur im Dev-Modus: Renderer-Änderungen laden das Fenster neu, Änderungen an
+// Main/Preload starten die App neu (nicht während einer laufenden Aufnahme).
+function setupLiveReload() {
+  const srcDir = path.join(__dirname, '..');
+  let timer = null;
+  fs.watch(srcDir, { recursive: true }, (_evt, filename) => {
+    if (!filename) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const inRenderer = filename.split(path.sep)[0] === 'renderer';
+      if (inRenderer) {
+        if (win && !win.isDestroyed()) win.webContents.reloadIgnoringCache();
+      } else if (session.status === 'recording' || session.status === 'paused') {
+        toast('warn', 'Main-Prozess geändert – Neustart nach der Aufnahme nötig.');
+      } else {
+        app.relaunch({ args: process.argv.slice(1) });
+        app.exit(0);
+      }
+    }, 200);
+  });
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1360,
@@ -183,7 +205,10 @@ function createWindow() {
 
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   win.once('ready-to-show', () => win.show());
-  if (isDev) win.webContents.openDevTools({ mode: 'detach' });
+  if (isDev) {
+    win.webContents.openDevTools({ mode: 'detach' });
+    setupLiveReload();
+  }
 
   // Mikrofon-/Eingangszugriff im Renderer erlauben.
   win.webContents.session.setPermissionRequestHandler((wc, permission, callback) => {
