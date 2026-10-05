@@ -72,7 +72,7 @@ Windows erzeugen. Der mitgelieferte Workflow erledigt beides auf GitHub.
 1. Oben auf den Namen klicken und den Gottesdienst wählen. Ist für heute genau
    ein Termin eingetragen, wird er beim Start automatisch geladen. Die
    Programmpunkte erscheinen links als offene Punkte.
-2. **Aufnahme starten.** Die Wellenform wächst mit, die Pegelanzeige zeigt den
+2. **Neue Aufnahme starten.** Die Wellenform wächst mit, die Pegelanzeige zeigt den
    Eingang, der obere Fensterrand leuchtet rot.
 3. Beginnt ein Programmpunkt, auf „Nächster Ablaufpunkt" drücken (Taste **N**)
    oder in der Liste auf „jetzt". Für ungeplantes „Marker setzen" (Taste **M**).

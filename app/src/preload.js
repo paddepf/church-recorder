@@ -35,10 +35,13 @@ contextBridge.exposeInMainWorld('api', {
 
   record: {
     start: (params) => invoke('rec:start', params),
+    continue: () => invoke('rec:continue'),
     pause: () => invoke('rec:pause'),
     resume: () => invoke('rec:resume'),
     stop: () => invoke('rec:stop'),
     /** Audioblock (Int16 interleaved) an den Hauptprozess übergeben. */
+    /** Ausschnitt der (laufenden) Aufnahme zum Mithören lesen. */
+    readAudio: (start, seconds) => invoke('audio:read', { start, seconds }),
     chunk: (arrayBuffer) => ipcRenderer.send('audio:chunk', arrayBuffer)
   },
 

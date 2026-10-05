@@ -26,7 +26,7 @@
       this.markers = [];
       this.pxPerSec = opts.pxPerSec || 12;
       this.scrollT = 0;
-      this.playhead = 0;
+      this.playhead = 0;          // Hörposition (null = keine)
       this.follow = true;
       this.recording = false;
       this.selectedSegment = null;
@@ -39,6 +39,7 @@
       this.onSeek = opts.onSeek || (() => {});
       this.onSelectMarker = opts.onSelectMarker || (() => {});
       this.onDropPending = opts.onDropPending || (() => {});
+      this.onRenameMarker = opts.onRenameMarker || (() => {});
 
       this._bind();
       this.resize();
@@ -86,7 +87,7 @@
       if (peaks) this.peaks = peaks;
       if (duration != null) this.duration = duration;
       if (markers) this.markers = markers;
-      if (playhead != null) this.playhead = playhead;
+      if (playhead !== undefined) this.playhead = playhead;
       if (recording != null) this.recording = recording;
       if (selectedSegment !== undefined) this.selectedSegment = selectedSegment;
 
@@ -247,16 +248,22 @@
     }
 
     _drawPlayhead(h) {
-      const x = this.timeToX(this.playhead);
-      if (x < 0 || x > this.width) return;
       const ctx = this.ctx;
-      ctx.strokeStyle = this.recording ? (this.colors.tally || '#FF3B30') : (this.colors.text || '#E6EBF0');
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(Math.round(x) + 0.5, RULER_H);
-      ctx.lineTo(Math.round(x) + 0.5, h);
-      ctx.stroke();
-      ctx.lineWidth = 1;
+      const line = (t, color) => {
+        const x = this.timeToX(t);
+        if (x < 0 || x > this.width) return;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(Math.round(x) + 0.5, RULER_H);
+        ctx.lineTo(Math.round(x) + 0.5, h);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+      };
+      // Während der Aufnahme markiert die rote Linie das Live-Ende,
+      // die helle Linie ist der Hörcursor.
+      if (this.recording) line(this.duration, this.colors.tally || '#FF3B30');
+      if (this.playhead != null) line(this.playhead, this.colors.text || '#E6EBF0');
     }
 
     _drawHover(h) {
@@ -348,6 +355,12 @@
       };
       cv.addEventListener('pointerup', endDrag);
       cv.addEventListener('pointercancel', endDrag);
+
+      cv.addEventListener('dblclick', (e) => {
+        const { x, y } = this._pos(e);
+        const marker = this._markerAt(x, y);
+        if (marker) this.onRenameMarker(marker.id);
+      });
 
       cv.addEventListener('pointerleave', () => {
         this.hoverTime = null;

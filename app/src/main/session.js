@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
-const { WavWriter, readInfo } = require('./wav');
+const { WavWriter, readInfo, readSlice } = require('./wav');
 const settings = require('./settings');
 
 const PEAK_BUCKET_MS = 50;   // Auflösung der Wellenform
@@ -249,8 +249,12 @@ class Session extends EventEmitter {
     const dir = settings.get('recordingsDir');
     fs.mkdirSync(dir, { recursive: true });
 
+    // Eine frühere Aufnahme bleibt als Datei erhalten; die Marker gehören aber
+    // zu ihr und werden für die neue Aufnahme zurückgesetzt.
+    if (this.status === 'stopped') this._resetMarkersForNewRecording();
+
     const stamp = `${dateStamp()}_${new Date().toTimeString().slice(0, 5).replace(':', '')}`;
-    const base = path.join(dir, `${stamp}_${slug(this.service.name, 'Gottesdienst')}`);
+    const base = this._freeBasePath(path.join(dir, `${stamp}_${slug(this.service.name, 'Gottesdienst')}`));
     this.basePath = base;
     this.wavPath = `${base}.wav`;
     this.writer = new WavWriter(this.wavPath, this.sampleRate, this.channels);
@@ -260,11 +264,56 @@ class Session extends EventEmitter {
     this.peaks = [];
     this.transcript = [];
     this._restoredDuration = 0;
+    this._bucketAcc = 0;
+    this._bucketFrames = 0;
+    this.levels = { l: 0, r: 0, clip: false };
 
     this._startAutosave();
     this._changed();
     this.emit('recording-started', { wavPath: this.wavPath, sampleRate: this.sampleRate, channels: this.channels });
     return { ok: true, wavPath: this.wavPath };
+  }
+
+  /** Hängt bei Namensgleichheit (gleiche Minute) eine Nummer an, damit nie eine Aufnahme überschrieben wird. */
+  _freeBasePath(base) {
+    let candidate = base;
+    for (let n = 2; fs.existsSync(`${candidate}.wav`) || fs.existsSync(`${candidate}.session.json`); n++) {
+      candidate = `${base}_${n}`;
+    }
+    return candidate;
+  }
+
+  /** Ablaufplan-Punkte werden wieder offen, selbst gesetzte Marker entfallen. */
+  _resetMarkersForNewRecording() {
+    this.markers = this.markers
+      .filter((m) => m.source === 'churchtools')
+      .map((m) => ({ ...m, placed: false, time: null }));
+  }
+
+  /** Setzt die beendete Aufnahme fort: neue Audiodaten werden an die WAV-Datei angehängt. */
+  continueRecording() {
+    if (this.status !== 'stopped') return { ok: false, error: 'Es gibt keine beendete Aufnahme zum Fortsetzen.' };
+    if (!this.wavPath || !fs.existsSync(this.wavPath)) {
+      return { ok: false, error: 'Die Audiodatei dieser Aufnahme wurde nicht gefunden.' };
+    }
+    const info = readInfo(this.wavPath);
+    this.sampleRate = info.sampleRate;
+    this.channels = info.channels;
+    this.writer = new WavWriter(this.wavPath, this.sampleRate, this.channels, { append: true });
+    this.status = 'recording';
+    this.finalized = false;
+    this._bucketAcc = 0;
+    this._bucketFrames = 0;
+    this.levels = { l: 0, r: 0, clip: false };
+    // Wellenform bis zum Dateiende auffüllen, falls die Peak-Daten kürzer sind.
+    const wanted = Math.floor((this.writer.durationSeconds * 1000) / PEAK_BUCKET_MS);
+    while (this.peaks.length < wanted) this.peaks.push(0);
+    this.peaks.length = Math.min(this.peaks.length, wanted);
+
+    this._startAutosave();
+    this._changed();
+    this.emit('recording-started', { wavPath: this.wavPath, sampleRate: this.sampleRate, channels: this.channels });
+    return { ok: true, wavPath: this.wavPath, sampleRate: this.sampleRate, channels: this.channels };
   }
 
   pause() {
@@ -340,6 +389,19 @@ class Session extends EventEmitter {
       startTime: startFrame / this.sampleRate
     });
     this.emit('levels', { ...this.levels, duration: this.duration });
+  }
+
+  /**
+   * Liest einen Ausschnitt der Aufnahme zum Mithören – auch während sie läuft.
+   * Beim Schreiben wird jeder Block sofort in die Datei übergeben, daher
+   * genügt ein separater Lesezugriff.
+   */
+  readAudio(startSec, seconds) {
+    if (!this.wavPath || !fs.existsSync(this.wavPath)) return null;
+    const start = Math.max(0, startSec || 0);
+    const end = Math.min(start + Math.min(Math.max(seconds || 1, 0.1), 10), this.duration);
+    if (end <= start) return { sampleRate: this.sampleRate, channels: this.channels, samples: new Int16Array(0) };
+    return readSlice(this.wavPath, start, end);
   }
 
   addTranscript(segment) {

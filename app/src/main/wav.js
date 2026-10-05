@@ -34,13 +34,22 @@ function buildHeader(sampleRate, channels, dataBytes) {
 }
 
 class WavWriter {
-  constructor(filePath, sampleRate, channels) {
+  /** @param {{append?:boolean}} [opts] append: bestehende Datei am Ende weiterschreiben */
+  constructor(filePath, sampleRate, channels, opts = {}) {
     this.filePath = filePath;
     this.sampleRate = sampleRate;
     this.channels = channels;
     this.dataBytes = 0;
-    this.fd = fs.openSync(filePath, 'w');
-    fs.writeSync(this.fd, buildHeader(sampleRate, channels, 0), 0, HEADER_BYTES, 0);
+    if (opts.append) {
+      this.fd = fs.openSync(filePath, 'r+');
+      const blockAlign = channels * 2;
+      const existing = Math.max(0, fs.fstatSync(this.fd).size - HEADER_BYTES);
+      this.dataBytes = existing - (existing % blockAlign);   // angefangenes Frame verwerfen
+      this.updateHeader();
+    } else {
+      this.fd = fs.openSync(filePath, 'w');
+      fs.writeSync(this.fd, buildHeader(sampleRate, channels, 0), 0, HEADER_BYTES, 0);
+    }
     this._sinceHeaderUpdate = 0;
     this.closed = false;
   }

@@ -29,10 +29,11 @@
 
   <section class="transport">
     <div class="transport-controls">
-      <button id="btn-record" class="record" title="Aufnahme starten (Strg+R)">
+      <button id="btn-record" class="record" title="Neue Aufnahme starten (Strg+R)">
         <span class="dot"></span>
-        <span id="record-label">Aufnahme starten</span>
+        <span id="record-label">Neue Aufnahme starten</span>
       </button>
+      <button id="btn-continue" class="secondary" hidden title="Die beendete Aufnahme an ihrem Ende fortsetzen">Fortsetzen</button>
       <button id="btn-pause" class="secondary" disabled title="Pausieren">Pause</button>
       <button id="btn-stop" class="secondary" disabled title="Aufnahme beenden">Beenden</button>
     </div>
@@ -51,10 +52,10 @@
 
   <section class="wave-section">
     <div class="wave-toolbar">
-      <button id="btn-marker" class="secondary" disabled title="Marker an aktueller Stelle setzen (M)">Marker setzen</button>
+      <button id="btn-marker" class="secondary" disabled title="Marker sofort an der aktuellen Stelle setzen (M) – Namen danach per Doppelklick oder ✎ ändern">Marker setzen</button>
       <button id="btn-next-item" class="secondary" disabled title="Nächsten Ablaufpunkt hier beginnen (N)">Nächster Ablaufpunkt</button>
       <div class="spacer"></div>
-      <button id="btn-play" class="secondary" disabled title="Abspielen (Leertaste)">Abspielen</button>
+      <button id="btn-play" class="secondary" disabled title="Abspielen bzw. während der Aufnahme ab dem Cursor mithören (Leertaste)">Abspielen</button>
       <label class="follow"><input type="checkbox" id="chk-follow" checked /> Ansicht folgt</label>
       <div class="zoom">
         <button id="btn-zoom-out" class="icon" title="Herauszoomen">−</button>
@@ -273,7 +274,25 @@
     </div>
   </div>
 
+  <!-- Bestätigung (z. B. vor dem Überschreiben der angezeigten Aufnahme) -->
+  <div id="modal-confirm" class="modal" hidden>
+    <div class="modal-card narrow">
+      <div class="modal-head">
+        <h2 id="confirm-title">Bestätigen</h2>
+        <button id="confirm-close" class="icon close">×</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-text"></p>
+      </div>
+      <div class="modal-foot">
+        <button id="confirm-cancel" class="secondary">Abbrechen</button>
+        <button id="confirm-ok" class="primary">OK</button>
+      </div>
+    </div>
+  </div>
+
   <script src="capture.js"></script>
+  <script src="monitor.js"></script>
   <script src="waveform.js"></script>
   <script src="app.js"></script>
 </body>

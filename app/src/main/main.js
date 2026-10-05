@@ -395,10 +395,25 @@ ipcMain.handle('session:service', (_e, service) => {
 ipcMain.handle('rec:start', (_e, { sampleRate, channels } = {}) => {
   try { return session.start({ sampleRate, channels }); } catch (err) { return fail(err); }
 });
+ipcMain.handle('rec:continue', () => {
+  try { return session.continueRecording(); } catch (err) { return fail(err); }
+});
 ipcMain.handle('rec:pause', () => session.pause());
 ipcMain.handle('rec:resume', () => session.resume());
 ipcMain.handle('rec:stop', () => {
   try { return session.stop(); } catch (err) { return fail(err); }
+});
+
+ipcMain.handle('audio:read', (_e, { start, seconds } = {}) => {
+  try {
+    const slice = session.readAudio(start, seconds);
+    if (!slice) return fail('Keine Aufnahme zum Anhören vorhanden.');
+    return ok({
+      sampleRate: slice.sampleRate,
+      channels: slice.channels,
+      buffer: slice.samples.buffer
+    });
+  } catch (err) { return fail(err); }
 });
 
 ipcMain.on('audio:chunk', (_e, arrayBuffer) => {

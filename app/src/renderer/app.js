@@ -17,11 +17,21 @@
     starting: false,
     bucketAcc: 0,
     bucketFrames: 0,
-    sampleRate: 48000
+    sampleRate: 48000,
+    cursorT: null            // Hörcursor während der Aufnahme
   };
 
   const capture = new window.Capture();
   let wave = null;
+  const monitor = new window.Monitor({
+    read: (start, seconds) => window.api.record.readAudio(start, seconds),
+    isLive: () => state.session?.status === 'recording',
+    onPosition: (t) => {
+      state.cursorT = t;
+      wave.update({ playhead: t });
+    },
+    onStateChange: () => updatePlayButton()
+  });
 
   /* ------------------------------------------------------------- Hilfsmittel */
 
@@ -66,6 +76,7 @@
         await window.api.marker.move(id, time);
       },
       onSeek: (t) => setPlayhead(t, true),
+      onRenameMarker: (id) => renameMarker(id),
       onSelectMarker: (id) => {
         state.selectedMarkerId = id;
         renderLists();
@@ -158,7 +169,9 @@
   /* ------------------------------------------------------------- Zustandsbild */
 
   function applyState(session, peaks, transcript) {
+    const wasRecording = state.session?.status === 'recording';
     state.session = session;
+    if (wasRecording && session.status === 'paused' && !peaks) resyncPeaks();
     if (peaks) {
       state.peaks = peaks;
       wave.peaks = state.peaks;
@@ -173,14 +186,17 @@
     const paused = session.status === 'paused';
     const stopped = session.status === 'stopped';
 
-    $('record-label').textContent = rec ? 'Aufnahme läuft' : (paused ? 'Fortsetzen' : 'Aufnahme starten');
+    $('record-label').textContent = rec ? 'Aufnahme läuft' : (paused ? 'Fortsetzen' : 'Neue Aufnahme starten');
     $('btn-record').disabled = rec || state.starting;
+    $('btn-continue').hidden = !(stopped && session.wavPath);
+    $('btn-continue').disabled = state.starting;
     $('btn-pause').disabled = !(rec || paused);
     $('btn-pause').textContent = paused ? 'Fortsetzen' : 'Pause';
     $('btn-stop').disabled = !(rec || paused);
     $('btn-marker').disabled = !(rec || paused);
     $('btn-next-item').disabled = !(rec || paused) || (session.pending || []).length === 0;
-    $('btn-play').disabled = !(stopped && session.wavPath);
+    $('btn-play').disabled = !((stopped && session.wavPath) || rec || paused);
+    updatePlayButton();
 
     if (stopped && session.wavPath) {
       const url = fileUrl(session.wavPath);
@@ -205,15 +221,39 @@
     if (transcript) renderTranscript(transcript);
   }
 
+  /** Gleicht die lokal mitgerechnete Wellenform mit der tatsächlich geschriebenen Datei ab. */
+  async function resyncPeaks() {
+    const full = await window.api.session.state();
+    if (!full.ok || state.session?.status === 'recording') return;
+    state.peaks = full.peaks || [];
+    wave.peaks = state.peaks;
+    state.bucketAcc = 0;
+    state.bucketFrames = 0;
+    wave.draw();
+  }
+
   /* --------------------------------------------------------------- Aufnahme */
 
   async function startRecording() {
     if (state.starting) return;
     if (state.session && (state.session.status === 'recording' || state.session.status === 'paused')) return;
     state.starting = true;
-    $('btn-record').disabled = true;
 
     try {
+      // Eine angezeigte, beendete Aufnahme würde sonst aus der Ansicht verschwinden.
+      if (state.session?.status === 'stopped' && state.session.wavPath) {
+        const markers = (state.session.markers || []).filter((m) => m.placed).length;
+        const go = await confirmDialog(
+          'Neue Aufnahme starten?',
+          `Die angezeigte Aufnahme (${longTime(state.session.duration || 0)}, ${markers} Marker) ist als Datei gespeichert ` +
+          'und lässt sich über „Aufnahmen" jederzeit wieder öffnen. Die neue Aufnahme beginnt mit leerer Wellenform, ' +
+          'die gesetzten Marker werden zurückgesetzt. Noch nicht exportierte MP3-Abschnitte bitte vorher speichern.',
+          'Neue Aufnahme starten'
+        );
+        if (!go) return;
+      }
+
+      $('btn-record').disabled = true;
       const result = await capture.start(state.settings.inputDeviceId, state.settings.sampleRate);
       state.sampleRate = result.sampleRate;
 
@@ -230,25 +270,78 @@
       wave.peaks = state.peaks;
       wave.follow = true;
       $('chk-follow').checked = true;
+      monitor.pause();
+      state.cursorT = null;
+      wave.update({ playhead: null });
       $('export-result').textContent = '';
       toast('success', `Aufnahme läuft – ${result.deviceLabel || 'Eingang'} bei ${Math.round(result.sampleRate / 1000)} kHz.`);
     } catch (err) {
       toast('error', err.message);
     } finally {
       state.starting = false;
+      // Knopf nur sperren, solange tatsächlich aufgenommen wird (auch nach Abbruch oder Fehler wieder frei).
+      const st = state.session?.status;
+      $('btn-record').disabled = st === 'recording';
+    }
+  }
+
+  /** Hängt eine neue Aufnahme an die beendete an (gleiche Datei, gleiche Marker). */
+  async function continueRecording() {
+    if (state.starting || state.session?.status !== 'stopped') return;
+    state.starting = true;
+    $('btn-continue').disabled = true;
+    try {
+      const rate = state.session.sampleRate;
+      const result = await capture.start(state.settings.inputDeviceId, rate);
+      if (result.sampleRate !== rate) {
+        await capture.stop();
+        return toast('error', `Der Eingang läuft mit ${result.sampleRate} Hz, die Aufnahme hat ${rate} Hz – Fortsetzen nicht möglich.`);
+      }
+      state.sampleRate = result.sampleRate;
+      const res = await window.api.record.continue();
+      if (!res.ok) {
+        await capture.stop();
+        return toast('error', res.error);
+      }
+      // Wellenform und Peak-Rest stammen aus der gespeicherten Aufnahme.
+      const full = await window.api.session.state();
+      if (full.ok) {
+        state.peaks = full.peaks || [];
+        wave.peaks = state.peaks;
+      }
+      state.bucketAcc = 0;
+      state.bucketFrames = 0;
+      wave.follow = true;
+      $('chk-follow').checked = true;
+      monitor.pause();
+      state.cursorT = null;
+      wave.update({ playhead: null });
+      $('player').pause();
+      $('export-result').textContent = '';
+      toast('success', 'Aufnahme wird fortgesetzt.');
+    } catch (err) {
+      toast('error', err.message);
+    } finally {
+      state.starting = false;
+      $('btn-continue').disabled = false;
     }
   }
 
   async function stopRecording() {
     const res = await window.api.record.stop();
     await capture.stop();
+    monitor.pause();
     if (!res.ok) return toast('error', res.error);
     toast('success', 'Aufnahme beendet und gespeichert.');
+    state.cursorT = null;
+    wave.update({ playhead: res.duration || 0 });
     wave.follow = false;
     $('chk-follow').checked = false;
   }
 
   capture.onChunk = (arrayBuffer) => {
+    // In der Pause läuft die Erfassung weiter, es wird aber nichts aufgezeichnet.
+    if (state.session?.status === 'paused') return;
     // Peaks lokal mitrechnen, damit die Wellenform ohne Zusatzverkehr wächst.
     const view = new Int16Array(arrayBuffer);
     const bucketFrames = Math.round(state.sampleRate * 0.05);
@@ -317,17 +410,24 @@
         wave.scrollTo(m.time);
         renderLists();
       });
-      li.querySelector('[data-rename]').addEventListener('click', async (e) => {
+      li.querySelector('[data-rename]').addEventListener('click', (e) => {
         e.stopPropagation();
-        const name = await promptDialog('Neuer Name für den Marker:', m.label);
-        if (name && name.trim()) await window.api.marker.update(m.id, { label: name.trim() });
+        renameMarker(m.id);
       });
+      li.querySelector('.label').addEventListener('dblclick', () => renameMarker(m.id));
       li.querySelector('[data-remove]').addEventListener('click', async (e) => {
         e.stopPropagation();
         await window.api.marker.remove(m.id);
       });
       markerEl.appendChild(li);
     });
+  }
+
+  async function renameMarker(id) {
+    const m = (state.session?.markers || []).find((x) => x.id === id);
+    if (!m) return;
+    const name = await promptDialog('Neuer Name für den Marker:', m.label);
+    if (name && name.trim()) await window.api.marker.update(id, { label: name.trim() });
   }
 
   function renderSegments() {
@@ -398,10 +498,45 @@
   /* -------------------------------------------------------------- Playhead */
 
   function setPlayhead(t, seekPlayer) {
+    const status = state.session?.status;
+    if (status === 'recording' || status === 'paused') {
+      // Hörcursor in der laufenden Aufnahme: Ansicht bleibt an der Stelle stehen.
+      state.cursorT = t;
+      wave.update({ playhead: t });
+      wave.follow = false;
+      $('chk-follow').checked = false;
+      if (monitor.playing) monitor.seek(t);
+      return;
+    }
     wave.update({ playhead: t });
     if (seekPlayer && $('player').src && state.session?.status === 'stopped') {
       $('player').currentTime = t;
     }
+  }
+
+  /** Leertaste / Abspielen-Knopf: Wiedergabe der fertigen Datei oder Mithören der laufenden Aufnahme. */
+  function togglePlayback() {
+    const status = state.session?.status;
+    if (status === 'recording' || status === 'paused') {
+      if (monitor.playing) return monitor.pause();
+      if (state.cursorT == null) {
+        return toast('info', 'Zum Mithören erst in die Wellenform klicken, um den Cursor zu setzen.', 4000);
+      }
+      if (state.cursorT >= state.duration - 0.5) {
+        return toast('info', 'Der Cursor steht am Live-Ende – bitte weiter vorne setzen.', 4000);
+      }
+      monitor.play(state.cursorT);
+      return;
+    }
+    const player = $('player');
+    if (player.paused) player.play(); else player.pause();
+  }
+
+  function updatePlayButton() {
+    const status = state.session?.status;
+    const live = status === 'recording' || status === 'paused';
+    const playing = live ? monitor.playing : state.playing;
+    $('btn-play').textContent = playing ? 'Pause' : (live ? 'Mithören' : 'Abspielen');
   }
 
   /* ------------------------------------------------------------ UI-Bindungen */
@@ -417,12 +552,14 @@
       if (!res.ok) toast('error', res.error);
     });
     $('btn-stop').addEventListener('click', stopRecording);
+    $('btn-continue').addEventListener('click', continueRecording);
 
+    // Der Marker wird sofort gesetzt; umbenannt wird bei Bedarf danach.
     $('btn-marker').addEventListener('click', async () => {
-      const label = await promptDialog('Bezeichnung des Markers:', 'Marker');
-      if (label === null) return;
-      const res = await window.api.marker.add({ label: label.trim() || 'Marker' });
-      if (!res.ok) toast('error', res.error);
+      const res = await window.api.marker.add({});
+      if (!res.ok) return toast('error', res.error);
+      state.selectedMarkerId = res.marker.id;
+      renderLists();
     });
 
     $('btn-next-item').addEventListener('click', async () => {
@@ -435,11 +572,9 @@
     $('chk-follow').addEventListener('change', (e) => { wave.follow = e.target.checked; });
 
     const player = $('player');
-    $('btn-play').addEventListener('click', () => {
-      if (player.paused) player.play(); else player.pause();
-    });
-    player.addEventListener('play', () => { state.playing = true; $('btn-play').textContent = 'Pause'; });
-    player.addEventListener('pause', () => { state.playing = false; $('btn-play').textContent = 'Abspielen'; });
+    $('btn-play').addEventListener('click', togglePlayback);
+    player.addEventListener('play', () => { state.playing = true; updatePlayButton(); });
+    player.addEventListener('pause', () => { state.playing = false; updatePlayButton(); });
     player.addEventListener('timeupdate', () => {
       if (state.playing) setPlayhead(player.currentTime, false);
     });
@@ -505,10 +640,43 @@
     });
   }
 
+  /** Ja/Nein-Abfrage; Abbrechen ist vorausgewählt. */
+  function confirmDialog(title, text, okLabel = 'OK') {
+    const modal = $('modal-confirm');
+    $('confirm-title').textContent = title;
+    $('confirm-text').textContent = text;
+    $('confirm-ok').textContent = okLabel;
+    modal.hidden = false;
+    $('confirm-cancel').focus();
+
+    return new Promise((resolve) => {
+      const finish = (value) => {
+        modal.hidden = true;
+        modal.removeEventListener('click', onBackdrop);
+        document.removeEventListener('keydown', onKey, true);
+        $('confirm-close').removeEventListener('click', onCancel);
+        $('confirm-cancel').removeEventListener('click', onCancel);
+        $('confirm-ok').removeEventListener('click', onOk);
+        resolve(value);
+      };
+      const onOk = () => finish(true);
+      const onCancel = () => finish(false);
+      const onBackdrop = (e) => { if (e.target === modal) onCancel(); };
+      const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); onCancel(); } };
+      modal.addEventListener('click', onBackdrop);
+      document.addEventListener('keydown', onKey, true);
+      $('confirm-close').addEventListener('click', onCancel);
+      $('confirm-cancel').addEventListener('click', onCancel);
+      $('confirm-ok').addEventListener('click', onOk);
+    });
+  }
+
   function bindShortcuts() {
     document.addEventListener('keydown', (e) => {
       const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName);
       if (typing) return;
+      // Während eines geöffneten Dialogs keine Kürzel auslösen.
+      if (document.querySelector('.modal:not([hidden])')) return;
 
       if (e.ctrlKey && e.key.toLowerCase() === 'r') {
         e.preventDefault();
@@ -523,8 +691,16 @@
         if (!$('btn-next-item').disabled) { e.preventDefault(); $('btn-next-item').click(); }
         return;
       }
+      if (e.key === 'F2' && state.selectedMarkerId) {
+        e.preventDefault();
+        renameMarker(state.selectedMarkerId);
+        return;
+      }
       if (e.code === 'Space') {
-        if (!$('btn-play').disabled) { e.preventDefault(); $('btn-play').click(); }
+        // Fokus von Knöpfen nehmen, sonst löst die Leertaste zusätzlich deren Klick aus.
+        if (e.target.tagName === 'BUTTON') e.target.blur();
+        e.preventDefault();
+        if (!$('btn-play').disabled) togglePlayback();
       }
     });
   }
@@ -540,7 +716,7 @@
       $('clip').dataset.on = String(Boolean(levels.clip));
       state.duration = levels.duration;
       $('timecode').textContent = longTime(levels.duration);
-      wave.update({ duration: levels.duration, playhead: levels.duration, peaks: state.peaks });
+      wave.update({ duration: levels.duration, peaks: state.peaks });
     });
 
     window.api.on('transcript', (seg) => appendTranscript(seg));
