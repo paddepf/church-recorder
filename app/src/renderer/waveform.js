@@ -28,6 +28,9 @@
       this.peaks = [];
       this.duration = 0;
       this.sections = [];
+      this.cuts = [];             // Schnitte: {id,start,end|null}, beim MP3-Export ausgelassen
+      this.pendingCut = null;     // Schnitt, der gerade mit Umschalt+Ziehen aufgezogen wird
+      this.draggingCut = null;
       this._hit = [];             // Trefferflächen der Griffe, beim Zeichnen gefüllt
       this.hoverHandle = null;    // Start-Fähnchen unter dem Zeiger
       this.pxPerSec = opts.pxPerSec || 12;
@@ -46,6 +49,9 @@
       this.onSelectSection = opts.onSelectSection || (() => {});
       this.onDropPending = opts.onDropPending || (() => {});
       this.onRenameSection = opts.onRenameSection || (() => {});
+      this.onCutAdd = opts.onCutAdd || (() => {});
+      this.onCutMoveEnd = opts.onCutMoveEnd || (() => {});
+      this.onCutRemove = opts.onCutRemove || (() => {});
 
       this._bind();
       this.resize();
@@ -89,10 +95,11 @@
       this.draw();
     }
 
-    update({ peaks, duration, sections, playhead, recording, selectedSegment }) {
+    update({ peaks, duration, sections, cuts, playhead, recording, selectedSegment }) {
       if (peaks) this.peaks = peaks;
       if (duration != null) this.duration = duration;
       if (sections) this.sections = sections;
+      if (cuts) this.cuts = cuts;
       if (playhead !== undefined) this.playhead = playhead;
       if (recording != null) this.recording = recording;
       if (selectedSegment !== undefined) this.selectedSegment = selectedSegment;
@@ -161,6 +168,7 @@
       ctx.lineTo(w, mid + 0.5);
       ctx.stroke();
 
+      this._drawCuts(laneTop, h);
       this._drawHandles(laneTop, h);
       this._drawPlayhead(h);
       this._drawHover(h);
@@ -207,6 +215,68 @@
         ctx.fillStyle = c.muted || '#7D8CA0';
         ctx.fillText(fmt(t), x + 4, RULER_H / 2);
       }
+    }
+
+    /** Schnitte: schraffierte rote Flächen mit Rand; offene reichen bis zum Live-Ende. */
+    _drawCuts(laneTop, h) {
+      const ctx = this.ctx;
+      if (!this._cutPattern) {
+        const tile = document.createElement('canvas');
+        tile.width = 8;
+        tile.height = 8;
+        const t = tile.getContext('2d');
+        t.strokeStyle = 'rgba(255,59,48,0.55)';
+        t.lineWidth = 1.5;
+        t.beginPath();
+        t.moveTo(-2, 10);
+        t.lineTo(10, -2);
+        t.stroke();
+        this._cutPattern = ctx.createPattern(tile, 'repeat');
+      }
+      const all = [...this.cuts];
+      if (this.pendingCut) all.push({ id: null, start: this.pendingCut.start, end: this.pendingCut.end });
+      all.forEach((cut) => {
+        const end = cut.end != null ? cut.end : this.duration;
+        const x1 = this.timeToX(cut.start);
+        const x2 = this.timeToX(end);
+        if (x2 < 0 || x1 > this.width) return;
+        const w = Math.max(2, x2 - x1);
+        ctx.fillStyle = 'rgba(255,59,48,0.14)';
+        ctx.fillRect(x1, laneTop, w, h - laneTop);
+        ctx.fillStyle = this._cutPattern;
+        ctx.fillRect(x1, laneTop, w, h - laneTop);
+        ctx.strokeStyle = 'rgba(255,59,48,0.9)';
+        ctx.beginPath();
+        ctx.moveTo(Math.round(x1) + 0.5, laneTop);
+        ctx.lineTo(Math.round(x1) + 0.5, h);
+        if (cut.end != null) {
+          ctx.moveTo(Math.round(x2) + 0.5, laneTop);
+          ctx.lineTo(Math.round(x2) + 0.5, h);
+        }
+        ctx.stroke();
+        if (w > 44) {
+          ctx.font = '12px system-ui, "Segoe UI", sans-serif';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = 'rgba(255,120,110,1)';
+          ctx.fillText('✂ Schnitt', x1 + 6, laneTop + 12);
+        }
+      });
+    }
+
+    /** Findet den Rand eines Schnitts unter dem Zeiger (nur in der Wellenform-Fläche). */
+    _cutEdgeAt(x, y) {
+      if (y <= RULER_H + FLAG_H) return null;
+      for (const cut of this.cuts) {
+        if (Math.abs(this.timeToX(cut.start) - x) <= 6) return { id: cut.id, edge: 'start' };
+        if (cut.end != null && Math.abs(this.timeToX(cut.end) - x) <= 6) return { id: cut.id, edge: 'end' };
+      }
+      return null;
+    }
+
+    _cutAt(x, y) {
+      if (y <= RULER_H + FLAG_H) return null;
+      const t = this.xToTime(x);
+      return this.cuts.find((c) => t >= c.start && t <= (c.end != null ? c.end : this.duration)) || null;
     }
 
     /** Kürzt einen Text mit "…" auf die verfügbare Breite. */
@@ -394,7 +464,16 @@
       cv.addEventListener('pointerdown', (e) => {
         const { x, y } = this._pos(e);
         const handle = this._handleAt(x, y);
-        if (handle) {
+        const cutEdge = !(handle && y <= RULER_H + FLAG_H) ? this._cutEdgeAt(x, y) : null;
+        if (cutEdge) {
+          this.draggingCut = cutEdge;
+          cv.setPointerCapture(e.pointerId);
+        } else if (e.shiftKey && !handle && y > RULER_H) {
+          // Umschalt + Ziehen: Schnitt aufziehen
+          const t = Math.max(0, Math.min(this.duration, this.xToTime(x)));
+          this.pendingCut = { start: t, end: t, anchor: t };
+          cv.setPointerCapture(e.pointerId);
+        } else if (handle) {
           this.dragging = { id: handle.id, edge: handle.edge, offset: x - handle.x };
           cv.setPointerCapture(e.pointerId);
           this.onSelectSection(handle.id);
@@ -410,6 +489,23 @@
 
       cv.addEventListener('pointermove', (e) => {
         const { x, y } = this._pos(e);
+        if (this.draggingCut) {
+          const cut = this.cuts.find((c) => c.id === this.draggingCut.id);
+          if (cut) {
+            const t = Math.max(0, Math.min(this.duration, this.xToTime(x)));
+            if (this.draggingCut.edge === 'start') cut.start = Math.min(t, (cut.end != null ? cut.end : this.duration) - 0.2);
+            else cut.end = Math.max(t, cut.start + 0.2);
+          }
+          this.draw();
+          return;
+        }
+        if (this.pendingCut) {
+          const t = Math.max(0, Math.min(this.duration, this.xToTime(x)));
+          this.pendingCut.start = Math.min(this.pendingCut.anchor, t);
+          this.pendingCut.end = Math.max(this.pendingCut.anchor, t);
+          this.draw();
+          return;
+        }
         if (this.dragging) {
           const { id, edge } = this.dragging;
           const sec = this.sections.find((ss) => ss.id === id);
@@ -433,11 +529,23 @@
         const over = this._handleAt(x, y);
         const hover = over && over.edge === 'start' ? { id: over.id, edge: 'start' } : null;
         if ((hover && hover.id) !== (this.hoverHandle && this.hoverHandle.id)) this.hoverHandle = hover;
-        cv.style.cursor = this._handleAt(x, y) ? 'ew-resize' : (y < RULER_H ? 'grab' : 'pointer');
+        cv.style.cursor = this._handleAt(x, y) || this._cutEdgeAt(x, y) ? 'ew-resize' : (y < RULER_H ? 'grab' : (e.shiftKey ? 'crosshair' : 'pointer'));
         this.draw();
       });
 
       const endDrag = (e) => {
+        if (this.draggingCut) {
+          const cut = this.cuts.find((c) => c.id === this.draggingCut.id);
+          if (cut) this.onCutMoveEnd(cut.id, this.draggingCut.edge, cut[this.draggingCut.edge]);
+          this.draggingCut = null;
+          this.draw();
+        }
+        if (this.pendingCut) {
+          const { start, end } = this.pendingCut;
+          this.pendingCut = null;
+          if (end - start >= 0.2) this.onCutAdd(start, end);
+          this.draw();
+        }
         if (this.dragging) {
           const { id, edge } = this.dragging;
           const sec = this.sections.find((ss) => ss.id === id);
@@ -454,6 +562,10 @@
       cv.addEventListener('dblclick', (e) => {
         const { x, y } = this._pos(e);
         const handle = this._handleAt(x, y);
+        if (!handle && !this._cutEdgeAt(x, y)) {
+          const cut = this._cutAt(x, y);
+          if (cut) { this.onCutRemove(cut.id); return; }
+        }
         // Doppelklick auf den Interpreten (oder den Hinweis) springt direkt in dieses Feld.
         if (handle) {
           const focus = handle.artistX != null && x >= handle.artistX ? 'artist' : 'name';

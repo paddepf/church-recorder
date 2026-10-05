@@ -42,6 +42,9 @@ die Verbindung abbricht.
 | Aufnahme pausieren / fortsetzen / Pause umschalten | Pause steuern |
 | Abschnitt starten / beenden | erster Druck setzt den Anfang eines Abschnitts (Bezeichnung frei wählbar, Variablen erlaubt), der nächste Druck das Ende |
 | Nächster Programmpunkt beginnt hier | beendet den laufenden Abschnitt und beginnt den nächsten offenen Ablaufpunkt des ChurchTools-Plans |
+| Schnitt starten / beenden | erster Druck beginnt einen Schnitt, der nächste beendet ihn; die Stelle fehlt in den MP3-Exporten |
+| Rückgängig / Wiederholen | letzte Änderung an Abschnitten oder Schnitten zurücknehmen bzw. wiederholen |
+| Vorlage für Programmpunkte laden | lädt eine Vorlage (Name, leer = Standardvorlage) und ersetzt die offenen Punkte |
 
 ## Feedbacks
 
@@ -51,11 +54,16 @@ die Verbindung abbricht.
 | Aufnahme pausiert | Taste wird orange |
 | Es gibt offene Programmpunkte | Taste wird blau |
 | Eingang übersteuert | Taste wird gelb |
+| Eingang leise oder ausgefallen | Taste wird rot: seit über 20 s kaum Pegel oder der Eingang wird neu verbunden |
+| Speicherplatz wird knapp | Taste wird orange (unter 3 Stunden Platz) |
+| Speicherplatz fast voll | Taste wird rot (unter 30 Minuten) |
+| Schnitt läuft gerade | Taste wird violett |
 
 ## Variablen
 
 `status`, `timecode`, `service_name`, `current_item`, `next_item`,
-`marker_count`, `pending_count`, `level_left`, `level_right`, `clipping`
+`marker_count`, `pending_count`, `level_left`, `level_right`, `clipping`,
+`input_status` (ok / leise / ausgefallen), `disk_free` (GB), `disk_hours`, `cut_open`
 
 Beispiel für eine Tastenbeschriftung:
 

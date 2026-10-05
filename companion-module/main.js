@@ -211,6 +211,10 @@ class GottesdienstRecorderInstance extends InstanceBase {
 			{ variableId: 'level_left', name: 'Pegel links (0-100)' },
 			{ variableId: 'level_right', name: 'Pegel rechts (0-100)' },
 			{ variableId: 'clipping', name: 'Übersteuerung (ja/nein)' },
+			{ variableId: 'input_status', name: 'Eingang (ok / leise / ausgefallen)' },
+			{ variableId: 'disk_free', name: 'Freier Speicherplatz (GB)' },
+			{ variableId: 'disk_hours', name: 'Aufnahmestunden, die noch Platz haben' },
+			{ variableId: 'cut_open', name: 'Schnitt läuft gerade (ja/nein)' },
 		]
 	}
 
@@ -226,6 +230,10 @@ class GottesdienstRecorderInstance extends InstanceBase {
 			level_left: 0,
 			level_right: 0,
 			clipping: 'nein',
+			input_status: '-',
+			disk_free: '-',
+			disk_hours: '-',
+			cut_open: 'nein',
 		})
 	}
 
@@ -247,8 +255,18 @@ class GottesdienstRecorderInstance extends InstanceBase {
 			next_item: pending.length > 0 ? pending[0].label : '-',
 			marker_count: (s.sections || []).filter((x) => x.start != null).length,
 			pending_count: pending.length,
+			input_status: { ok: 'ok', silent: 'leise', lost: 'ausgefallen' }[s.health?.input] || '-',
+			disk_free: s.health?.disk ? (s.health.disk.freeBytes / 1073741824).toFixed(1) : '-',
+			disk_hours: s.health?.disk ? this.formatHours(s.health.disk.hoursLeft) : '-',
+			cut_open: (s.cuts || []).some((c) => c.end == null) ? 'ja' : 'nein',
 		})
-		this.checkFeedbacks('recording', 'paused', 'has_pending')
+		this.checkFeedbacks('recording', 'paused', 'has_pending', 'input_problem', 'disk_warn', 'disk_low', 'cut_open')
+	}
+
+	formatHours(h) {
+		if (h >= 10) return `${Math.round(h)} h`
+		if (h >= 1) return `${h.toFixed(1)} h`
+		return `${Math.max(0, Math.round(h * 60))} min`
 	}
 
 	formatTime(t) {
@@ -314,6 +332,37 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				options: [],
 				callback: () => this.command('marker.next'),
 			},
+			cut_toggle: {
+				name: 'Schnitt starten / beenden (Stelle fehlt im MP3)',
+				options: [],
+				callback: () => this.command('cut.toggle'),
+			},
+			undo: {
+				name: 'Rückgängig',
+				options: [],
+				callback: () => this.command('undo'),
+			},
+			redo: {
+				name: 'Wiederholen',
+				options: [],
+				callback: () => this.command('redo'),
+			},
+			template_apply: {
+				name: 'Vorlage für Programmpunkte laden',
+				options: [
+					{
+						type: 'textinput',
+						id: 'name',
+						label: 'Name der Vorlage (leer = Standardvorlage)',
+						default: '',
+						useVariables: true,
+					},
+				],
+				callback: async (action, context) => {
+					const name = await context.parseVariablesInString(action.options.name || '')
+					this.command('template.apply', name ? { name } : {})
+				},
+			},
 		}
 	}
 
@@ -351,6 +400,47 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				},
 				options: [],
 				callback: () => (this.state?.pending || []).length > 0,
+			},
+			input_problem: {
+				type: 'boolean',
+				name: 'Eingang leise oder ausgefallen',
+				description: 'Wird aktiv, wenn länger kaum Pegel anliegt oder der Eingang neu verbunden werden muss',
+				defaultStyle: {
+					bgcolor: combineRgb(220, 40, 30),
+					color: combineRgb(255, 255, 255),
+				},
+				options: [],
+				callback: () => ['silent', 'lost'].includes(this.state?.health?.input),
+			},
+			disk_warn: {
+				type: 'boolean',
+				name: 'Speicherplatz wird knapp (unter 3 Stunden)',
+				defaultStyle: {
+					bgcolor: combineRgb(230, 160, 0),
+					color: combineRgb(0, 0, 0),
+				},
+				options: [],
+				callback: () => ['warn', 'low'].includes(this.state?.health?.disk?.level),
+			},
+			disk_low: {
+				type: 'boolean',
+				name: 'Speicherplatz fast voll (unter 30 Minuten)',
+				defaultStyle: {
+					bgcolor: combineRgb(220, 40, 30),
+					color: combineRgb(255, 255, 255),
+				},
+				options: [],
+				callback: () => this.state?.health?.disk?.level === 'low',
+			},
+			cut_open: {
+				type: 'boolean',
+				name: 'Schnitt läuft gerade',
+				defaultStyle: {
+					bgcolor: combineRgb(160, 30, 120),
+					color: combineRgb(255, 255, 255),
+				},
+				options: [],
+				callback: () => (this.state?.cuts || []).some((c) => c.end == null),
 			},
 			clipping: {
 				type: 'boolean',
@@ -414,6 +504,34 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				style: { ...base, text: 'Weiter\\n$(churchrecorder:next_item)' },
 				steps: [{ down: [{ actionId: 'marker_next' }], up: [] }],
 				feedbacks: [{ feedbackId: 'has_pending' }],
+			},
+			cut: {
+				type: 'button',
+				category: 'Abschnitte',
+				name: 'Schnitt starten / beenden',
+				style: { ...base, text: 'Schnitt\\nStart/Ende' },
+				steps: [{ down: [{ actionId: 'cut_toggle' }], up: [] }],
+				feedbacks: [{ feedbackId: 'cut_open' }],
+			},
+			undo: {
+				type: 'button',
+				category: 'Abschnitte',
+				name: 'Rückgängig',
+				style: { ...base, text: 'Rück-\\ngängig' },
+				steps: [{ down: [{ actionId: 'undo' }], up: [] }],
+				feedbacks: [],
+			},
+			health: {
+				type: 'button',
+				category: 'Anzeige',
+				name: 'Eingang und Speicher',
+				style: {
+					...base,
+					size: '7',
+					text: 'Eingang: $(churchrecorder:input_status)\\nSpeicher: $(churchrecorder:disk_free) GB\\n$(churchrecorder:disk_hours)',
+				},
+				steps: [{ down: [], up: [] }],
+				feedbacks: [{ feedbackId: 'input_problem' }, { feedbackId: 'disk_warn' }, { feedbackId: 'disk_low' }],
 			},
 			status: {
 				type: 'button',

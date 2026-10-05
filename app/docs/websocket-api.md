@@ -67,10 +67,21 @@ Wird direkt nach der Anmeldung und bei jeder Änderung gesendet (max. 10×/s).
       { "id": "seg_sec_x1", "label": "Predigt", "start": 1420.5, "end": 1832.4, "markerId": "sec_x1", "open": true }
     ],
     "currentSegment": { "id": "seg_sec_x1", "label": "Predigt", "start": 1420.5, "end": 1832.4, "open": true },
-    "wavPath": "C:\\Aufnahmen\\2026-09-06_0930_Sonntagsgottesdienst.wav"
+    "cuts": [ { "id": "cut_x1", "start": 1500.0, "end": 1512.5 } ],
+    "wavPath": "C:\\Aufnahmen\\2026-09-06_0930_Sonntagsgottesdienst.wav",
+    "health": {
+      "input": "ok",
+      "disk": { "freeBytes": 52000000000, "hoursLeft": 75.2, "level": "ok" }
+    }
   }
 }
 ```
+
+`cuts` sind Stellen, die beim MP3-Export ausgelassen werden (`end` ist `null`, solange ein
+Schnitt läuft). `health.input` ist `ok`, `silent` (seit über 20 s kaum Pegel) oder `lost`
+(Eingang ausgefallen, wird neu verbunden); `health.disk.level` ist `ok`, `warn` (unter
+3 Stunden Platz) oder `low` (unter 30 Minuten). `health` ändert sich unabhängig von der
+Aufnahme; der Speicherwert wird alle 30 Sekunden erneuert.
 
 `status` ist einer von `idle`, `recording`, `paused`, `stopped`.
 Alle Zeitangaben sind Sekunden seit Aufnahmebeginn.
@@ -119,6 +130,9 @@ Ereignisse: `recording.started`, `recording.stopped`, `export.finished`.
 | `record.resume` | Fortsetzen |
 | `marker.add` | Abschnitt beginnen (Anfangsmarke, optional `params.label`); läuft schon einer, wird er beendet (Endmarke) |
 | `marker.next` | Laufenden Abschnitt beenden und den nächsten offenen Ablaufpunkt beginnen lassen |
+| `cut.toggle` | Schnitt an der aktuellen Stelle beginnen bzw. beenden (nur während der Aufnahme); Antwort `change`: `started`, `ended` oder `discarded` |
+| `undo` / `redo` | Letzte Änderung an Abschnitten oder Schnitten zurücknehmen bzw. wiederholen |
+| `template.apply` | Vorlage für Programmpunkte laden: `params.name` (oder `params.id`), ohne Angabe die Standardvorlage; ersetzt die offenen Punkte |
 
 Antwort:
 

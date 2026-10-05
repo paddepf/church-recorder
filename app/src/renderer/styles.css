@@ -194,6 +194,7 @@ input[readonly] { color: var(--muted); }
   animation: warn-blink 1s ease-in-out infinite;
 }
 .audio-warning[hidden] { display: none; }
+.audio-warning[data-kind="silent"] { background: var(--amber); color: #1a1200; }
 @keyframes warn-blink { 50% { opacity: .65; } }
 @media (prefers-reduced-motion: reduce) { .audio-warning { animation: none; } }
 
@@ -354,6 +355,7 @@ canvas.wave {
 .item.clickable:hover { background: var(--raised); outline: 1px solid var(--line); }
 .item.selected { outline: 1px solid var(--plan); }
 .item .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel-head .select { width: auto; max-width: 52%; font-size: 14px; padding: 5px 9px; }
 .add-row { display: flex; gap: 8px; padding: 12px 14px 14px; border-top: 1px solid var(--line); }
 .add-row input { flex: 1; min-width: 0; font-size: 16px; padding: 10px 12px; }
 .add-row button { padding: 8px 20px; font-size: 20px; line-height: 1; }

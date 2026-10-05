@@ -71,7 +71,7 @@
     <div class="panel panel-plan">
       <div class="panel-head">
         <h2>Ablaufplan</h2>
-        <span id="plan-hint" class="hint">Klicken, ziehen oder umsortieren</span>
+        <select id="plan-template" class="select" title="Vorlage mit Programmpunkten laden" aria-label="Vorlage laden"></select>
       </div>
       <ol id="pending-list" class="pending"></ol>
       <div class="add-row">
@@ -185,8 +185,19 @@
         </fieldset>
 
         <fieldset>
-          <legend>Standard-Programmpunkte</legend>
-          <small>Werden eingetragen, wenn für einen Termin in ChurchTools kein Ablaufplan gepflegt ist oder ohne ChurchTools aufgenommen wird.</small>
+          <legend>Vorlagen für Programmpunkte</legend>
+          <small>Die Standardvorlage wird eingetragen, wenn für einen Termin in ChurchTools kein Ablaufplan gepflegt ist oder ohne ChurchTools aufgenommen wird. Andere Vorlagen lassen sich in der Kachel „Ablaufplan“ laden.</small>
+          <label>Vorlage
+            <span class="row">
+              <select id="tpl-select" class="select"></select>
+              <button id="btn-tpl-add" class="secondary">Neu</button>
+              <button id="btn-tpl-del" class="secondary">Löschen</button>
+            </span>
+          </label>
+          <label>Name der Vorlage
+            <input id="tpl-name" type="text" />
+          </label>
+          <label class="check"><input type="checkbox" id="tpl-default" /> Standardvorlage</label>
           <div id="default-agenda-list" class="agenda-editor"></div>
           <button id="btn-default-agenda-add" class="secondary">Punkt hinzufügen</button>
         </fieldset>

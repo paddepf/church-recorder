@@ -31,6 +31,24 @@ async function loadEncoder() {
 }
 
 /**
+ * Zerlegt [start, end] in die Teilstücke, die übrig bleiben, wenn die Schnitte entfallen.
+ * @param {{start:number,end:number}[]} skip
+ */
+function keepRanges(start, end, skip) {
+  let pieces = [[start, end]];
+  (skip || []).slice().sort((a, b) => a.start - b.start).forEach((cut) => {
+    const next = [];
+    pieces.forEach(([a, b]) => {
+      if (cut.end <= a || cut.start >= b) { next.push([a, b]); return; }
+      if (cut.start > a) next.push([a, cut.start]);
+      if (cut.end < b) next.push([cut.end, b]);
+    });
+    pieces = next;
+  });
+  return pieces.filter(([a, b]) => b - a > 0.001);
+}
+
+/**
  * Exportiert einen Zeitausschnitt der Masteraufnahme als MP3.
  * @param {object} opts
  * @param {string} opts.wavPath  Pfad zur Masteraufnahme
@@ -39,17 +57,22 @@ async function loadEncoder() {
  * @param {string} opts.outPath  Zieldatei
  * @param {number} [opts.bitrate=192]
  * @param {{title?:string, artist?:string, album?:string, year?:string}} [opts.tags] ID3-Angaben
+ * @param {{start:number,end:number}[]} [opts.skip] Stellen, die ausgelassen werden (Schnitte)
  * @param {(p:number)=>void} [opts.onProgress] 0..1
  */
-async function exportSegment({ wavPath, start, end, outPath, bitrate = 192, tags, onProgress }) {
+async function exportSegment({ wavPath, start, end, outPath, bitrate = 192, tags, skip, onProgress }) {
   if (!fs.existsSync(wavPath)) throw new Error('Die Masteraufnahme wurde nicht gefunden.');
   if (!(end > start)) throw new Error('Der gewählte Abschnitt ist leer.');
 
-  const Mp3Encoder = await loadEncoder();
-  const { sampleRate, channels, samples } = wav.readSlice(wavPath, start, end);
-  const encoder = new Mp3Encoder(channels >= 2 ? 2 : 1, sampleRate, bitrate);
+  const pieces = keepRanges(start, end, skip);
+  if (pieces.length === 0) throw new Error('Der gewählte Abschnitt besteht nur aus Schnitten.');
 
-  const frames = samples.length / channels;
+  const Mp3Encoder = await loadEncoder();
+  const info = wav.readInfo(wavPath);
+  const channels = info.channels;
+  const encoder = new Mp3Encoder(channels >= 2 ? 2 : 1, info.sampleRate, bitrate);
+  const totalFrames = pieces.reduce((sum, [a, b]) => sum + Math.round((b - a) * info.sampleRate), 0);
+
   const blockSize = 1152;
   const out = fs.createWriteStream(outPath);
   const id3 = buildId3v2(tags);
@@ -61,20 +84,40 @@ async function exportSegment({ wavPath, start, end, outPath, bitrate = 192, tags
 
   const left = new Int16Array(blockSize);
   const right = new Int16Array(blockSize);
+  const fadeFrames = Math.round(info.sampleRate * 0.006);    // 6 ms, damit Schnittstellen nicht knacken
+  let framesDone = 0;
+  let blocks = 0;
 
-  for (let i = 0; i < frames; i += blockSize) {
-    const n = Math.min(blockSize, frames - i);
-    for (let j = 0; j < n; j++) {
-      const base = (i + j) * channels;
-      left[j] = samples[base];
-      right[j] = channels >= 2 ? samples[base + 1] : samples[base];
+  for (let p = 0; p < pieces.length; p++) {
+    // Teilstücke werden einzeln gelesen: so bleibt der Speicherbedarf klein.
+    const { samples } = wav.readSlice(wavPath, pieces[p][0], pieces[p][1]);
+    const frames = samples.length / channels;
+    if (pieces.length > 1) {
+      for (let f = 0; f < Math.min(fadeFrames, frames); f++) {
+        const gain = f / fadeFrames;
+        for (let c = 0; c < channels; c++) {
+          if (p > 0) samples[f * channels + c] *= gain;                           // Einblenden nach einem Schnitt
+          if (p < pieces.length - 1) samples[(frames - 1 - f) * channels + c] *= gain;   // Ausblenden vor einem Schnitt
+        }
+      }
     }
-    const l = n === blockSize ? left : left.subarray(0, n);
-    const r = n === blockSize ? right : right.subarray(0, n);
-    writeChunk(channels >= 2 ? encoder.encodeBuffer(l, r) : encoder.encodeBuffer(l));
 
-    if (onProgress && (i / blockSize) % 200 === 0) onProgress(Math.min(0.99, i / frames));
-    if ((i / blockSize) % 400 === 0) await new Promise((r2) => setImmediate(r2));
+    for (let i = 0; i < frames; i += blockSize) {
+      const n = Math.min(blockSize, frames - i);
+      for (let j = 0; j < n; j++) {
+        const base = (i + j) * channels;
+        left[j] = samples[base];
+        right[j] = channels >= 2 ? samples[base + 1] : samples[base];
+      }
+      const l = n === blockSize ? left : left.subarray(0, n);
+      const r = n === blockSize ? right : right.subarray(0, n);
+      writeChunk(channels >= 2 ? encoder.encodeBuffer(l, r) : encoder.encodeBuffer(l));
+
+      blocks += 1;
+      if (onProgress && blocks % 200 === 0) onProgress(Math.min(0.99, (framesDone + i) / totalFrames));
+      if (blocks % 400 === 0) await new Promise((r2) => setImmediate(r2));
+    }
+    framesDone += frames;
   }
 
   writeChunk(encoder.flush());
@@ -85,7 +128,7 @@ async function exportSegment({ wavPath, start, end, outPath, bitrate = 192, tags
 
   if (onProgress) onProgress(1);
   const { size } = fs.statSync(outPath);
-  return { outPath, bytes: size, duration: end - start };
+  return { outPath, bytes: size, duration: totalFrames / info.sampleRate };
 }
 
-module.exports = { exportSegment };
+module.exports = { exportSegment, keepRanges };

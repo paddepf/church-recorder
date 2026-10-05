@@ -20,7 +20,9 @@ const DEFAULTS = {
   fileNamePattern: '{interpret}_{abschnitt}_{gottesdienst}_{datum}',
   exportDir: '',                // Oberordner für MP3-Exporte; leer = beim Export nachfragen
   mp3Bitrate: 192,
-  defaultAgenda: ['Einleitung', 'Kinderbeitrag', 'Predigt', 'Abschluss'],   // Programmpunkte, wenn ChurchTools keinen Ablaufplan hat
+  // Vorlagen für Programmpunkte; die Standardvorlage wird genutzt, wenn ChurchTools keinen Ablaufplan hat
+  agendaTemplates: [{ id: 'tpl_default', name: 'Gottesdienst', items: ['Einleitung', 'Kinderbeitrag', 'Predigt', 'Abschluss'] }],
+  defaultTemplateId: 'tpl_default',
   defaultArtist: '',            // Interpret in den ID3-Tags, wenn ein Abschnitt keinen eigenen hat
   keepMasterWavDays: 0,         // 0 = nie automatisch löschen
 
@@ -67,6 +69,18 @@ function load() {
   cache = { ...DEFAULTS, ...stored };
   // Wer das alte Standardmuster nie geändert hat, bekommt das neue Standardmuster.
   if (stored.fileNamePattern === LEGACY_FILE_PATTERN) cache.fileNamePattern = DEFAULTS.fileNamePattern;
+  // Frühere Einstellung "defaultAgenda" (eine Liste) wird zur ersten Vorlage.
+  if (!stored.agendaTemplates && Array.isArray(stored.defaultAgenda)) {
+    cache.agendaTemplates = [{ id: 'tpl_default', name: 'Gottesdienst', items: stored.defaultAgenda }];
+    cache.defaultTemplateId = 'tpl_default';
+  }
+  delete cache.defaultAgenda;
+  if (!Array.isArray(cache.agendaTemplates) || cache.agendaTemplates.length === 0) {
+    cache.agendaTemplates = DEFAULTS.agendaTemplates;
+  }
+  if (!cache.agendaTemplates.some((t) => t.id === cache.defaultTemplateId)) {
+    cache.defaultTemplateId = cache.agendaTemplates[0].id;
+  }
   if (!cache.recordingsDir) cache.recordingsDir = defaultRecordingsDir();
   try {
     fs.mkdirSync(cache.recordingsDir, { recursive: true });

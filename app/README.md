@@ -124,13 +124,31 @@ oder die Listenzeile, links der Name, rechts der Interpret.
 `Enter` speichert, `Esc` bricht ab, `Tab` wechselt zwischen Name und Interpret, ein Klick
 daneben speichert ebenfalls.
 
+### Rückgängig, Schnitte und Warnungen
+
+- **Rückgängig / Wiederholen:** `Strg`/`Cmd` + `Z` nimmt die letzte Änderung an Abschnitten oder Schnitten
+  zurück (Marke gesetzt, verschoben, gelöscht, umbenannt …), `Umschalt` + `Strg`/`Cmd` + `Z` bzw. `Strg` + `Y`
+  stellt sie wieder her. Bis zu 60 Schritte; mit „Beenden" beginnt der Verlauf neu. In Eingabefeldern wirkt
+  Rückgängig wie gewohnt auf den Text.
+- **Schnitte (Stellen, die im MP3 fehlen sollen):** Ein Husten oder eine Störung mitten im Abschnitt lässt sich
+  auslassen, ohne die Aufnahme zu verändern. Während der Aufnahme beginnt `X` einen Schnitt und beendet ihn
+  mit dem zweiten Druck. Nachträglich: mit `Umschalt` + Ziehen in der Wellenform aufziehen. Schnitte erscheinen
+  rot schraffiert, ihre Ränder lassen sich ziehen, ein Doppelklick entfernt sie. Beim Export fehlen die Stellen
+  (mit kurzer Ein-/Ausblendung an den Nahtstellen); die Exportliste zeigt die gekürzte Länge („✂ −0:12").
+  Beim Abschnitt „✓ geändert seit Export" erscheint auch, wenn sich die Schnitte seither geändert haben.
+- **Eingang überwacht:** Kommt über 20 Sekunden fast kein Pegel (Mischpult stumm, Kabel gezogen), erscheint ein
+  oranger Balken. Fällt der Eingang ganz aus, ein roter. Beides sehen auch Companion und Dashboards (`health`).
+
 ### Ablaufplan bearbeiten und Standardpunkte
 
 Hat ein Termin in ChurchTools **keinen Ablaufplan** (die Abfrage meldet 404) oder wird
 ohne ChurchTools aufgenommen, trägt die App die **Standard-Programmpunkte** ein
-(Vorgabe: Einleitung, Kinderbeitrag, Predigt, Abschluss). Sie lassen sich unter
-**Einstellungen → Standard-Programmpunkte** bearbeiten: Namen ändern, mit ↑/↓
-umsortieren, entfernen oder hinzufügen.
+(Vorgabe: Einleitung, Kinderbeitrag, Predigt, Abschluss). Das ist die **Standardvorlage**.
+Unter **Einstellungen → Vorlagen für Programmpunkte** lassen sich beliebig viele Vorlagen anlegen
+(z. B. „Gottesdienst", „Jugend", „Gebetsabend"): Vorlage wählen, Namen und Punkte bearbeiten (↑/↓ zum
+Umsortieren), neue Vorlage mit „Neu", und eine als Standard festlegen. Im Ablaufplan lädt das Auswahlfeld
+**„Vorlage laden …"** jederzeit eine andere Vorlage; die offenen Punkte werden dabei (nach Rückfrage)
+ersetzt, bereits gesetzte Abschnitte bleiben.
 
 In der Kachel **Ablaufplan** lässt sich die Liste jederzeit anpassen:
 - **Hinzufügen:** unten Namen eintippen, Enter oder „+".

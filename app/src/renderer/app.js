@@ -80,6 +80,15 @@
         await window.api.section.moveEdge(id, edge, time);
       },
       onSeek: (t) => setPlayhead(t, true),
+      onCutAdd: async (start, end) => {
+        const res = await window.api.cut.add(start, end);
+        if (!res.ok) toast('warn', res.error);
+      },
+      onCutMoveEnd: async (id, edge, time) => { await window.api.cut.moveEdge(id, edge, time); },
+      onCutRemove: async (id) => {
+        await window.api.cut.remove(id);
+        toast('info', 'Schnitt entfernt.', 2500);
+      },
       onRenameSection: (id, focus, r) => {
         const cv = $('wave').getBoundingClientRect();
         editSection(id, focus, { left: cv.left + r.x, top: cv.top + r.y, width: r.w, height: r.h });
@@ -227,6 +236,7 @@
     wave.update({
       duration: session.duration || 0,
       sections: (session.sections || []).map((x) => ({ ...x })),
+      cuts: (session.cuts || []).map((c) => ({ ...c })),
       recording: rec,
       selectedSegment: session.segments?.find((s) => s.id === state.selectedSegmentId) || null
     });
@@ -311,8 +321,22 @@
   const WATCHDOG_MS = 2500;      // so lange darf der Eingang schweigen, bevor neu verbunden wird
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  function showAudioWarning(on) {
-    $('audio-warning').hidden = !on;
+  function showAudioWarning(on, text, kind = 'lost') {
+    const el = $('audio-warning');
+    el.hidden = !on;
+    el.dataset.kind = kind;
+    if (on && text) el.textContent = text;
+  }
+
+  /** Warnbalken für leise/stumme Eingänge, solange keine Wiederverbindung läuft. */
+  function applyHealth(h) {
+    state.health = h;
+    if (state.recovering) return;
+    if (h && h.input === 'silent' && state.session?.status === 'recording') {
+      showAudioWarning(true, 'Seit über 20 Sekunden kaum Pegel – Mischpult oder Kabel prüfen?', 'silent');
+    } else {
+      showAudioWarning(false);
+    }
   }
 
   /**
@@ -322,8 +346,9 @@
   async function recoverCapture() {
     if (state.recovering) return;
     state.recovering = true;
+    window.api.reportInputLost(true);
     const lostSince = state.lastChunkAt;
-    showAudioWarning(true);
+    showAudioWarning(true, 'Kein Audiosignal – der Eingang wird neu verbunden …', 'lost');
     toast('error', 'Der Audioeingang liefert keine Daten mehr – er wird neu verbunden.', 8000);
     try {
       while (state.session?.status === 'recording') {
@@ -351,7 +376,8 @@
     } finally {
       state.recovering = false;
       state.lastChunkAt = Date.now();
-      showAudioWarning(false);
+      window.api.reportInputLost(false);
+      applyHealth(state.health);
     }
   }
 
@@ -658,11 +684,15 @@
         wave.update({ selectedSegment: segments.find((x) => x.id === state.selectedSegmentId) || null });
         if (state.selectedSegmentId) wave.scrollTo(seg.start);
       });
-      row.querySelector('.meta').textContent = `${fmt(seg.start)}–${fmt(seg.end)} · ${fmt(Math.max(0, seg.end - seg.start))}`;
+      const len = Math.max(0, seg.end - seg.start - (seg.cutSeconds || 0));
+      row.querySelector('.meta').textContent = `${fmt(seg.start)}–${fmt(seg.end)} · ${fmt(len)}` +
+        (seg.cutSeconds > 0.05 ? ` · ✂ −${fmt(seg.cutSeconds)}` : '');
 
       const mark = row.querySelector('.done');
       if (done) {
-        const changed = Math.abs(done.start - seg.start) > 0.05 || Math.abs(done.end - seg.end) > 0.05;
+        const sig = (list) => (list || []).map((c) => `${c.start.toFixed(1)}-${c.end.toFixed(1)}`).join(',');
+        const changed = Math.abs(done.start - seg.start) > 0.05 || Math.abs(done.end - seg.end) > 0.05
+          || sig(done.cuts) !== sig(seg.cuts);
         mark.textContent = changed ? '✓ geändert seit Export' : '✓ gesichert';
         mark.classList.toggle('stale', changed);
         mark.title = done.file;
@@ -787,6 +817,7 @@
       input.focus();
     };
     $('btn-plan-add').addEventListener('click', addPlanPoint);
+    $('plan-template').addEventListener('change', (e) => applyPlanTemplate(e.target.value));
     $('plan-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addPlanPoint(); } });
     // Auf den freien Platz unter der Liste ziehen: ans Ende sortieren.
     $('pending-list').addEventListener('dragover', (e) => {
@@ -819,7 +850,11 @@
   function openModal(id) {
     $(id).hidden = false;
     // Geräte können seit dem Start ein- oder ausgesteckt worden sein.
-    if (id === 'modal-settings') refreshDevices();
+    if (id === 'modal-settings') {
+      refreshDevices();
+      loadTemplatesDraft();
+      renderTemplateEditor();
+    }
   }
 
   /** Ja/Nein-Abfrage; Abbrechen ist vorausgewählt. */
@@ -853,6 +888,29 @@
     });
   }
 
+  async function undoEdit() {
+    const res = await window.api.edit.undo();
+    toast(res.ok ? 'info' : 'warn', res.ok ? 'Rückgängig gemacht.' : res.error, 2500);
+  }
+
+  async function redoEdit() {
+    const res = await window.api.edit.redo();
+    toast(res.ok ? 'info' : 'warn', res.ok ? 'Wiederholt.' : res.error, 2500);
+  }
+
+  /** Taste X: während der Aufnahme einen Schnitt beginnen bzw. beenden (die Stelle fehlt dann im MP3). */
+  async function toggleCut() {
+    const status = state.session?.status;
+    if (status !== 'recording' && status !== 'paused') {
+      toast('info', 'Schnitte: während der Aufnahme mit X, sonst mit Umschalt + Ziehen in der Wellenform.', 5000);
+      return;
+    }
+    const res = await window.api.cut.toggle(null);
+    if (!res.ok) return toast('warn', res.error);
+    const text = { started: 'Schnitt beginnt – X beendet ihn.', ended: 'Schnitt beendet.', discarded: 'Schnitt zu kurz – verworfen.' }[res.change];
+    toast(res.change === 'started' ? 'warn' : 'info', text, 3000);
+  }
+
   function bindShortcuts() {
     document.addEventListener('keydown', (e) => {
       const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName);
@@ -871,6 +929,22 @@
       }
       if (e.key.toLowerCase() === 'n' && !e.ctrlKey) {
         if (!$('btn-next-item').disabled) { e.preventDefault(); $('btn-next-item').click(); }
+        return;
+      }
+      // Rückgängig/Wiederholen (Windows/Linux: Strg+Z, Strg+Y bzw. Strg+Umschalt+Z; auf dem Mac über das Menü)
+      if (e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redoEdit(); else undoEdit();
+        return;
+      }
+      if (e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        redoEdit();
+        return;
+      }
+      if (e.key.toLowerCase() === 'x' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        toggleCut();
         return;
       }
       if (e.key === '?') {
@@ -906,6 +980,8 @@
       wave.update({ duration: levels.duration, peaks: state.peaks });
     });
 
+    window.api.on('health', (h) => applyHealth(h));
+
     window.api.on('toast', ({ level, message }) => toast(level, message));
 
     window.api.on('command', ({ action }) => {
@@ -918,6 +994,12 @@
       if (action === 'settings') openModal('modal-settings');
       if (action === 'toggle-record') {
         if (state.session?.status === 'recording') stopRecording(); else startRecording();
+      }
+      if (action === 'undo' || action === 'redo') {
+        // In einem Textfeld wirkt Rückgängig dort, sonst auf Abschnitte und Schnitte.
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') document.execCommand(action);
+        else if (action === 'undo') undoEdit(); else redoEdit();
       }
       if (action === 'marker' && !$('btn-marker').disabled) $('btn-marker').click();
       if (action === 'next-item' && !$('btn-next-item').disabled) $('btn-next-item').click();
@@ -1010,14 +1092,19 @@
       { keys: [mod, 'R'], text: 'Aufnahme starten / beenden', main: true },
       { keys: ['M'], text: 'Abschnitt starten / beenden', main: true },
       { keys: ['N'], text: 'Nächster Ablaufpunkt', main: true },
-      { keys: ['Leertaste'], text: 'Mithören / Abspielen ab Cursor', main: true },
-      { keys: ['F2'], text: 'Gewählten Abschnitt bearbeiten', main: true },
+      { keys: ['X'], text: 'Schnitt starten / beenden', main: true },
+      { keys: [mod, 'Z'], text: 'Rückgängig', main: true },
+      { keys: ['Leertaste'], text: 'Mithören / Abspielen', main: true },
       { keys: ['?'], text: 'Alle Kürzel anzeigen' },
+      { keys: [mod, 'Umschalt', 'Z'], text: 'Wiederholen' },
+      { keys: ['F2'], text: 'Gewählten Abschnitt bearbeiten' },
       { keys: ['Klick'], text: 'In die Wellenform: Hörcursor setzen' },
       { keys: ['Doppelklick'], text: 'Auf eine Marke: Name/Interpret direkt bearbeiten' },
       { keys: ['Ziehen'], text: 'Marke verschieben, Nachbarn weichen aus' },
+      { keys: ['Umschalt', 'Ziehen'], text: 'In der Wellenform: Schnitt aufziehen (fehlt im MP3)' },
+      { keys: ['Doppelklick'], text: 'Auf einen Schnitt: Schnitt entfernen' },
       { keys: ['Mausrad'], text: 'Wellenform scrollen' },
-      { keys: [mod === 'Cmd' ? 'Cmd' : 'Strg', 'Mausrad'], text: 'Wellenform zoomen' },
+      { keys: [mod, 'Mausrad'], text: 'Wellenform zoomen' },
       { keys: ['F12'], text: 'Entwicklerwerkzeuge (nur Dev-Modus)' }
     ];
   }
@@ -1338,7 +1425,9 @@
     const s = state.settings;
     $('set-samplerate').value = String(s.sampleRate);
     $('set-dir').value = s.recordingsDir;
-    renderDefaultAgenda(s.defaultAgenda);
+    loadTemplatesDraft();
+    renderTemplateEditor();
+    fillPlanTemplates();
     $('set-default-artist').value = s.defaultArtist || '';
     $('set-export-dir').value = s.exportDir || '';
     $('set-pattern').value = s.fileNamePattern;
@@ -1383,12 +1472,113 @@
     return row;
   }
 
+  /* ----------------------------------------------- Vorlagen für Programmpunkte */
+
+  /** Arbeitskopie der Vorlagen für den Einstellungsdialog. */
+  function loadTemplatesDraft() {
+    const list = JSON.parse(JSON.stringify(state.settings.agendaTemplates || []));
+    state.tpl = {
+      templates: list,
+      defaultId: state.settings.defaultTemplateId || (list[0] && list[0].id),
+      selectedId: state.settings.defaultTemplateId || (list[0] && list[0].id)
+    };
+  }
+
+  /** Übernimmt Name und Punkte aus den Eingabefeldern in die Arbeitskopie. */
+  function commitTemplateDraft() {
+    const t = state.tpl;
+    const cur = t && t.templates.find((x) => x.id === t.selectedId);
+    if (!cur) return;
+    cur.name = $('tpl-name').value.trim() || 'Ohne Namen';
+    cur.items = readDefaultAgenda();
+  }
+
+  function renderTemplateEditor() {
+    const t = state.tpl;
+    if (!t) return;
+    const sel = $('tpl-select');
+    sel.innerHTML = '';
+    t.templates.forEach((tpl) => {
+      const opt = document.createElement('option');
+      opt.value = tpl.id;
+      opt.textContent = tpl.name + (tpl.id === t.defaultId ? ' (Standard)' : '');
+      sel.appendChild(opt);
+    });
+    sel.value = t.selectedId;
+    const cur = t.templates.find((x) => x.id === t.selectedId);
+    $('tpl-name').value = cur ? cur.name : '';
+    $('tpl-default').checked = t.defaultId === t.selectedId;
+    $('tpl-default').disabled = t.defaultId === t.selectedId;     // es muss immer eine Standardvorlage geben
+    renderDefaultAgenda(cur ? cur.items : []);
+  }
+
+  function readTemplatesForSave() {
+    commitTemplateDraft();
+    return { agendaTemplates: state.tpl.templates, defaultTemplateId: state.tpl.defaultId };
+  }
+
+  /** Auswahlfeld in der Kachel "Ablaufplan": Vorlage laden. */
+  function fillPlanTemplates() {
+    const sel = $('plan-template');
+    sel.innerHTML = '<option value="">Vorlage laden …</option>';
+    (state.settings.agendaTemplates || []).forEach((tpl) => {
+      const opt = document.createElement('option');
+      opt.value = tpl.id;
+      opt.textContent = tpl.name;
+      sel.appendChild(opt);
+    });
+  }
+
+  async function applyPlanTemplate(id) {
+    const tpl = (state.settings.agendaTemplates || []).find((x) => x.id === id);
+    $('plan-template').value = '';
+    if (!tpl) return;
+    if ((state.session?.pending || []).length > 0) {
+      const go = await confirmDialog(
+        `Vorlage „${tpl.name}" laden?`,
+        'Die offenen Punkte im Ablaufplan werden durch die Punkte der Vorlage ersetzt. Bereits gesetzte Abschnitte bleiben erhalten.',
+        'Vorlage laden'
+      );
+      if (!go) return;
+    }
+    const res = await window.api.agenda.applyTemplate(id);
+    toast(res.ok ? 'success' : 'error', res.ok ? `Vorlage „${res.name}": ${res.count} Punkte eingetragen.` : res.error, 4000);
+  }
+
   function readDefaultAgenda() {
     return [...$('default-agenda-list').querySelectorAll('input')].map((i) => i.value.trim()).filter(Boolean);
   }
 
   function bindSettingsForm() {
     $('btn-default-agenda-add').addEventListener('click', () => addDefaultAgendaRow('').querySelector('input').focus());
+    $('tpl-select').addEventListener('change', (e) => { commitTemplateDraft(); state.tpl.selectedId = e.target.value; renderTemplateEditor(); });
+    $('btn-tpl-add').addEventListener('click', () => {
+      commitTemplateDraft();
+      const tpl = { id: 'tpl_' + Date.now().toString(36), name: 'Neue Vorlage', items: [] };
+      state.tpl.templates.push(tpl);
+      state.tpl.selectedId = tpl.id;
+      renderTemplateEditor();
+      $('tpl-name').focus();
+      $('tpl-name').select();
+    });
+    $('btn-tpl-del').addEventListener('click', () => {
+      const t = state.tpl;
+      if (t.templates.length <= 1) return toast('warn', 'Mindestens eine Vorlage muss bleiben.', 4000);
+      t.templates = t.templates.filter((x) => x.id !== t.selectedId);
+      if (t.defaultId === t.selectedId) t.defaultId = t.templates[0].id;
+      t.selectedId = t.defaultId;
+      renderTemplateEditor();
+    });
+    $('tpl-default').addEventListener('change', (e) => {
+      commitTemplateDraft();      // Änderungen an Name und Punkten nicht verlieren
+      if (e.target.checked) state.tpl.defaultId = state.tpl.selectedId;
+      renderTemplateEditor();
+    });
+    $('tpl-name').addEventListener('input', () => {
+      // Name sofort im Auswahlfeld zeigen
+      const opt = $('tpl-select').selectedOptions[0];
+      if (opt) opt.textContent = $('tpl-name').value || 'Ohne Namen';
+    });
     $('btn-choose-dir').addEventListener('click', async () => {
       const res = await window.api.settings.chooseFolder();
       if (res.ok && res.path) $('set-dir').value = res.path;
@@ -1424,7 +1614,7 @@
       sampleRate: Number($('set-samplerate').value),
       recordingsDir: $('set-dir').value,
       exportDir: $('set-export-dir').value,
-      defaultAgenda: readDefaultAgenda(),
+      ...readTemplatesForSave(),
       defaultArtist: $('set-default-artist').value.trim(),
       fileNamePattern: $('set-pattern').value.trim() || '{interpret}_{abschnitt}_{gottesdienst}_{datum}',
       mp3Bitrate: Number($('set-bitrate').value),

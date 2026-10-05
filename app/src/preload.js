@@ -64,6 +64,25 @@ contextBridge.exposeInMainWorld('api', {
     remove: (id) => invoke('section:delete', { id })
   },
 
+  edit: {
+    undo: () => invoke('edit:undo'),
+    redo: () => invoke('edit:redo')
+  },
+
+  cut: {
+    add: (start, end) => invoke('cut:add', { start, end }),
+    toggle: (time) => invoke('cut:toggle', { time }),
+    moveEdge: (id, edge, time) => invoke('cut:move', { id, edge, time }),
+    remove: (id) => invoke('cut:remove', { id })
+  },
+
+  agenda: {
+    applyTemplate: (templateId) => invoke('agenda:applyTemplate', { templateId })
+  },
+
+  /** Meldet dem Hauptprozess, ob der Audioeingang ausgefallen ist. */
+  reportInputLost: (lost) => ipcRenderer.send('health:input', { lost }),
+
   exportBatch: (items) => invoke('export:batch', { items }),
   exportTarget: () => invoke('export:target'),
 
@@ -79,7 +98,7 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   on: (channel, handler) => {
-    const allowed = ['state', 'levels', 'toast', 'command', 'menu',
+    const allowed = ['state', 'levels', 'toast', 'command', 'menu', 'health',
       'network-status', 'update-status', 'export-progress'];
     if (!allowed.includes(channel)) return () => {};
     const listener = (_event, payload) => handler(payload);

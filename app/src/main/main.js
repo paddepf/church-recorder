@@ -28,6 +28,51 @@ function toast(level, message) {
   send('toast', { level, message });
 }
 
+/* ------------------------------------------------------ Zustand für Netzwerk-Clients */
+
+const health = { inputLost: false, silent: false, disk: null };
+let silentSince = null;
+const SILENT_LEVEL = 0.001;        // etwa -60 dBFS
+const SILENT_AFTER_MS = 20000;
+
+/** Freier Platz auf dem Laufwerk der Aufnahmen (Stunden bezogen auf die aktuelle Abtastrate). */
+function diskInfo() {
+  // Der Ordner kann noch nicht existieren: vom nächsten vorhandenen Elternordner messen.
+  let dir = settings.get('recordingsDir');
+  while (dir && !fs.existsSync(dir) && path.dirname(dir) !== dir) dir = path.dirname(dir);
+  const st = fs.statfsSync(dir);
+  const freeBytes = Number(st.bavail) * Number(st.bsize);
+  const totalBytes = Number(st.blocks) * Number(st.bsize);
+  const bytesPerHour = (settings.get('sampleRate') || 48000) * 2 * 2 * 3600;   // 16 Bit, Stereo
+  return { freeBytes, totalBytes, hoursLeft: freeBytes / bytesPerHour, dir };
+}
+
+function currentHealth() {
+  const input = health.inputLost ? 'lost' : (health.silent ? 'silent' : 'ok');
+  const d = health.disk;
+  const diskLevel = !d ? 'ok' : (d.hoursLeft < 0.5 ? 'low' : (d.hoursLeft < 3 ? 'warn' : 'ok'));
+  return {
+    input,
+    disk: d ? { freeBytes: d.freeBytes, hoursLeft: d.hoursLeft, level: diskLevel } : null
+  };
+}
+
+/** Meldet geänderte Gesundheitswerte an Oberfläche und Netzwerk. */
+let lastHealthJson = '';
+function publishHealth() {
+  const h = currentHealth();
+  const json = JSON.stringify(h);
+  if (json === lastHealthJson) return;
+  lastHealthJson = json;
+  send('health', h);
+  net.publishState({ ...session.snapshot(), health: h });
+}
+
+function refreshDisk() {
+  try { health.disk = diskInfo(); } catch { health.disk = null; }
+  publishHealth();
+}
+
 function stateThrottle() {
   let pending = null;
   let timer = null;
@@ -39,7 +84,7 @@ function stateThrottle() {
       const s = pending;
       pending = null;
       send('state', s);
-      net.publishState(s);
+      net.publishState({ ...s, health: currentHealth() });
     }, 100);
   };
 }
@@ -137,8 +182,9 @@ function setupApplicationMenu() {
     {
       label: 'Bearbeiten',
       submenu: [
-        { role: 'undo', label: 'Widerrufen' },
-        { role: 'redo', label: 'Wiederholen' },
+        // Eigene Einträge: in Textfeldern wirkt das Rückgängig dort, sonst auf Abschnitte und Schnitte.
+        { label: 'Widerrufen', accelerator: 'Cmd+Z', click: () => send('menu', { action: 'undo' }) },
+        { label: 'Wiederholen', accelerator: 'Shift+Cmd+Z', click: () => send('menu', { action: 'redo' }) },
         { type: 'separator' },
         { role: 'cut', label: 'Ausschneiden' },
         { role: 'copy', label: 'Kopieren' },
@@ -243,6 +289,16 @@ session.on('state', (s) => pushState(s));
 session.on('levels', (levels) => {
   send('levels', levels);
   net.publishLevels(levels);
+
+  // Stille: lange fast kein Pegel, obwohl aufgenommen wird (z. B. Mischpult stumm).
+  const quiet = Math.max(levels.l, levels.r) < SILENT_LEVEL;
+  if (!quiet) silentSince = null;
+  else if (silentSince == null) silentSince = Date.now();
+  const silent = quiet && silentSince != null && Date.now() - silentSince > SILENT_AFTER_MS;
+  if (silent !== health.silent) {
+    health.silent = silent;
+    publishHealth();
+  }
 });
 
 // Während der Aufnahme darf der Rechner nicht in den Ruhezustand: Beim Aufwachen
@@ -259,11 +315,18 @@ function preventSleep(on) {
 
 session.on('recording-started', () => {
   preventSleep(true);
+  silentSince = null;
+  health.silent = false;
+  refreshDisk();
   net.publishEvent('recording.started', { wavPath: session.wavPath });
 });
 
 session.on('recording-stopped', (info) => {
   preventSleep(false);
+  silentSince = null;
+  health.silent = false;
+  health.inputLost = false;
+  refreshDisk();
   net.publishEvent('recording.stopped', info);
 });
 
@@ -275,7 +338,7 @@ net.on('error-notice', (message) => toast('error', message));
 net.on('command', ({ action, params, reply }) => {
   const done = (result) => {
     reply(result);
-    net.publishState(session.snapshot());
+    net.publishState({ ...session.snapshot(), health: currentHealth() });
   };
   switch (action) {
     case 'record.start':
@@ -309,6 +372,22 @@ net.on('command', ({ action, params, reply }) => {
       }
       return done(session.startNextPending());
     }
+    case 'cut.toggle': {
+      if (session.status !== 'recording' && session.status !== 'paused') {
+        return done({ ok: false, error: 'Es läuft keine Aufnahme.' });
+      }
+      return done(session.toggleCut());
+    }
+    case 'undo':
+      return done(session.undo());
+    case 'redo':
+      return done(session.redo());
+    case 'template.apply': {
+      const tpl = findTemplate(params.name || params.id);
+      if (!tpl) return done({ ok: false, error: 'Vorlage nicht gefunden.' });
+      session.setAgenda(templateItems(tpl), 'plan');
+      return done({ ok: true, template: tpl.name });
+    }
     default:
       return done({ ok: false, error: 'Unbekannter Befehl.' });
   }
@@ -332,16 +411,7 @@ ipcMain.handle('app:info', () => ok({
 
 /** Freier Platz auf dem Laufwerk der Aufnahmen und was das in Aufnahmestunden bedeutet. */
 ipcMain.handle('disk:free', () => {
-  try {
-    // Der Ordner kann noch nicht existieren: vom nächsten vorhandenen Elternordner messen.
-    let dir = settings.get('recordingsDir');
-    while (dir && !fs.existsSync(dir) && path.dirname(dir) !== dir) dir = path.dirname(dir);
-    const st = fs.statfsSync(dir);
-    const freeBytes = Number(st.bavail) * Number(st.bsize);
-    const totalBytes = Number(st.blocks) * Number(st.bsize);
-    const bytesPerHour = (settings.get('sampleRate') || 48000) * 2 * 2 * 3600;   // 16 Bit, Stereo
-    return ok({ freeBytes, totalBytes, hoursLeft: freeBytes / bytesPerHour, dir });
-  } catch (err) { return fail(err); }
+  try { return ok(diskInfo()); } catch (err) { return fail(err); }
 });
 
 ipcMain.handle('settings:get', () => ok({ settings: settings.forRenderer() }));
@@ -398,14 +468,43 @@ ipcMain.handle('ct:services', async (_e, { from, to } = {}) => {
   } catch (err) { return fail(err); }
 });
 
-/** Standard-Programmpunkte aus den Einstellungen (leere Einträge entfallen). */
-function defaultAgendaItems() {
-  const list = settings.get('defaultAgenda');
-  return (Array.isArray(list) ? list : [])
+/* --- Vorlagen für Programmpunkte --- */
+
+function templates() {
+  const list = settings.get('agendaTemplates');
+  return Array.isArray(list) ? list : [];
+}
+
+/** Vorlage nach Id oder Name; ohne Angabe die Standardvorlage. */
+function findTemplate(key) {
+  const list = templates();
+  if (key) {
+    const k = String(key).trim().toLowerCase();
+    return list.find((t) => t.id === key) || list.find((t) => String(t.name).trim().toLowerCase() === k) || null;
+  }
+  return list.find((t) => t.id === settings.get('defaultTemplateId')) || list[0] || null;
+}
+
+/** Programmpunkte einer Vorlage (leere Einträge entfallen). */
+function templateItems(tpl) {
+  return (tpl && Array.isArray(tpl.items) ? tpl.items : [])
     .map((t) => String(t || '').trim())
     .filter(Boolean)
     .map((title) => ({ id: null, title }));
 }
+
+/** Standard-Programmpunkte: die Standardvorlage aus den Einstellungen. */
+function defaultAgendaItems() {
+  return templateItems(findTemplate());
+}
+
+ipcMain.handle('agenda:applyTemplate', (_e, { templateId } = {}) => {
+  const tpl = findTemplate(templateId);
+  if (!tpl) return fail('Vorlage nicht gefunden.');
+  const items = templateItems(tpl);
+  session.setAgenda(items, 'plan');
+  return ok({ count: items.length, name: tpl.name });
+});
 
 ipcMain.handle('ct:agenda', async (_e, { eventId, name, date }) => {
   try {
@@ -465,6 +564,21 @@ ipcMain.on('audio:chunk', (_e, arrayBuffer) => {
     console.error('Audioblock konnte nicht geschrieben werden:', err);
     toast('error', 'Audio konnte nicht auf die Festplatte geschrieben werden.');
   }
+});
+
+/* --- Rückgängig, Schnitte, Eingangsstatus --- */
+
+ipcMain.handle('edit:undo', () => session.undo());
+ipcMain.handle('edit:redo', () => session.redo());
+ipcMain.handle('cut:add', (_e, { start, end }) => session.addCut(start, end));
+ipcMain.handle('cut:toggle', (_e, { time } = {}) => session.toggleCut(time));
+ipcMain.handle('cut:move', (_e, { id, edge, time }) => session.moveCutEdge(id, edge, time));
+ipcMain.handle('cut:remove', (_e, { id }) => session.removeCut(id));
+
+// Die Oberfläche meldet, wenn der Audioeingang ausfällt bzw. wieder da ist.
+ipcMain.on('health:input', (_e, { lost }) => {
+  health.inputLost = Boolean(lost);
+  publishHealth();
 });
 
 /* --- Abschnitte (je zwei Marker: Anfang und Ende) --- */
@@ -528,6 +642,7 @@ ipcMain.handle('export:batch', async (_e, { items } = {}) => {
     const failed = [];
     for (let i = 0; i < items.length; i++) {
       const { id, start, end, label } = items[i];
+      const cuts = session.cutsWithin(start, end);
       const section = session.sections.find((x) => `seg_${x.id}` === id);
       const tags = {
         title: label,
@@ -543,10 +658,11 @@ ipcMain.handle('export:batch', async (_e, { items } = {}) => {
           outPath: freeFilePath(path.join(folder, buildFileName(label, tags.artist))),
           bitrate: settings.get('mp3Bitrate') || 192,
           tags,
+          skip: cuts,
           onProgress: (p) => send('export-progress', { progress: (i + p) / items.length, index: i + 1, total: items.length })
         });
         files.push(result.outPath);
-        if (id) session.recordExport(id, { file: result.outPath, start, end });
+        if (id) session.recordExport(id, { file: result.outPath, start, end, cuts });
         net.publishEvent('export.finished', { file: result.outPath, label });
       } catch (err) {
         failed.push({ label, error: String(err?.message || err) });
@@ -659,6 +775,8 @@ if (!singleInstance) {
     setupApplicationMenu();
     createWindow();
     updater.init();
+    refreshDisk();
+    setInterval(refreshDisk, 30000);   // Speicherplatz regelmäßig prüfen und an Netzwerk-Clients melden
 
     // macOS verlangt zusätzlich zur Chromium-Freigabe eine Systemfreigabe.
     if (process.platform === 'darwin') {

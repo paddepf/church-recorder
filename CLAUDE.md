@@ -90,6 +90,29 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Liste (`section:reorder`, setzt `order` der offenen Punkte neu). Dieselbe Drag-Quelle (`text/marker-id`) dient
   weiter zum Ablegen auf der Wellenform, das Ziel unterscheidet.
 
+### Rückgängig, Schnitte, Vorlagen, Health
+- **Rückgängig:** `Session._changed()` vergleicht `JSON({sections, cuts})` mit dem letzten Stand und legt
+  Änderungen auf einen Verlauf (`_undo`/`_redo`, 60 Schritte). `{ undoable: false }` für Änderungen, die nicht
+  zurückgenommen werden sollen (Start, Stop, Laden, Ablaufplan laden: dort `_resetUndo()`). Mac: Menü
+  „Widerrufen“ (eigener Eintrag, sendet `menu` `undo`; in Textfeldern `document.execCommand`), sonst Strg+Z
+  im `keydown` (nur `ctrlKey`, damit nichts doppelt läuft).
+- **Schnitte** (`session.cuts`, `{id,start,end|null}`): Taste X (live, `toggleCut`) oder Umschalt+Ziehen
+  (`addCut`); überlappende werden verschmolzen, offene beim Stop geschlossen. `mp3.exportSegment` bekommt
+  `skip` (`keepRanges` zerlegt in Teilstücke, jedes wird einzeln gelesen und codiert, 6 ms Fades an den
+  Nähten). `exports[...].cuts` merkt die Schnitte zum Export, damit „geändert seit Export“ sie berücksichtigt.
+  Segmente tragen `cuts` und `cutSeconds`.
+- **Vorlagen:** Einstellungen `agendaTemplates` (`{id,name,items[]}`) und `defaultTemplateId`. Das frühere
+  `defaultAgenda` wird beim Laden zur Vorlage „Gottesdienst“ migriert. `agenda:applyTemplate` ersetzt die
+  offenen Punkte (Quelle `plan`); Auswahl `#plan-template` in der Ablaufplan-Kachel, Editor in den Einstellungen
+  (Arbeitskopie `state.tpl`, gespeichert über `readTemplatesForSave`).
+- **Health für Netzwerk-Clients:** Hauptprozess hält `health` (`input`: ok/silent/lost, `disk`) und hängt es an
+  jeden veröffentlichten Zustand (`net.publishState({...snapshot, health})`). Stille = 20 s unter 0,001 Pegel
+  (`levels`-Handler); `lost` meldet die Oberfläche über `health:input` (Wächter); Speicher alle 30 s
+  (`refreshDisk`). Die Oberfläche zeigt `silent` als orangen, `lost` als roten Warnbalken (`applyHealth`).
+- **Fallstrick Hilfsskripte:** Beim Bearbeiten von Dateien per Skript erst das Ergebnis berechnen und prüfen,
+  dann schreiben. `open(p, 'w').write(fn(s))` leert die Datei, bevor `fn` läuft; ein Fehler dort hinterlässt
+  eine leere Datei (so geschehen bei `settings.js`, wiederhergestellt mit `git checkout`).
+
 ### MP3-Export
 - Einstellung `exportDir` (Oberordner). Gesetzt: Export ohne Dialog nach
   `<exportDir>/<Datum>_<Gottesdienstname aus ChurchTools>/`, vorhandene Dateien

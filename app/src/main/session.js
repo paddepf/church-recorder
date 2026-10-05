@@ -10,6 +10,8 @@ const SectionLogic = require('../shared/sections');
 const PEAK_BUCKET_MS = 50;   // Auflösung der Wellenform
 const AUTOSAVE_MS = 3000;
 const MIN_SECTION = SectionLogic.MIN_SECTION;
+const MIN_CUT = 0.2;       // kürzester Schnitt in Sekunden
+const UNDO_LIMIT = 60;     // so viele Schritte lassen sich zurücknehmen
 
 let counter = 0;
 function newId(prefix) {
@@ -80,7 +82,11 @@ class Session extends EventEmitter {
     this.status = 'idle';               // idle | recording | paused | stopped
     this.service = { id: null, name: '', date: dateStamp() };
     this.sections = [];                 // {id,label,category,color,start|null,end|null,source}
-    this.exports = {};                  // Segment-ID -> {file,start,end,at}: bereits als MP3 gesichert
+    this.exports = {};                  // Segment-ID -> {file,start,end,cuts,at}: bereits als MP3 gesichert
+    this.cuts = [];                     // {id,start,end|null}: beim MP3-Export ausgelassene Stellen
+    this._undo = [];                    // frühere Bearbeitungsstände (Abschnitte + Schnitte) als JSON
+    this._redo = [];
+    this._lastEdit = this._editJson();
     this._colorSeq = 0;
     this.peaks = [];                    // 0..255 je 50 ms
     this.writer = null;
@@ -119,12 +125,16 @@ class Session extends EventEmitter {
   }
 
   _segmentOf(x) {
+    const end = x.end != null ? x.end : this.duration;
+    const cuts = this.cutsWithin(x.start, end);
     return {
       id: 'seg_' + x.id,
       label: x.label,
       category: x.category || null,
       start: x.start,
-      end: x.end != null ? x.end : this.duration,
+      end,
+      cuts,
+      cutSeconds: cuts.reduce((sum, c) => sum + (c.end - c.start), 0),
       markerId: x.id,
       open: x.end == null
     };
@@ -137,7 +147,11 @@ class Session extends EventEmitter {
   segments() {
     const out = this.placedSections().map((x) => this._segmentOf(x));
     if (this.duration > 0) {
-      out.push({ id: 'seg_full', label: 'Gesamte Aufnahme', category: null, start: 0, end: this.duration, markerId: null });
+      const cuts = this.cutsWithin(0, this.duration);
+      out.push({
+        id: 'seg_full', label: 'Gesamte Aufnahme', category: null, start: 0, end: this.duration,
+        cuts, cutSeconds: cuts.reduce((sum, c) => sum + (c.end - c.start), 0), markerId: null
+      });
     }
     return out;
   }
@@ -159,6 +173,7 @@ class Session extends EventEmitter {
       levels: this.levels,
       sections: this.sections,
       exports: this.exports,
+      cuts: this.cuts,
       pending: this.pendingSections(),
       segments: this.segments(),
       currentSegment: this.currentSegment(),
@@ -166,10 +181,137 @@ class Session extends EventEmitter {
     };
   }
 
-  _changed() {
+  /**
+   * Meldet eine Änderung. Hat sich dabei die Bearbeitung (Abschnitte oder Schnitte) geändert,
+   * wird der vorherige Stand für "Rückgängig" gemerkt.
+   */
+  _changed({ undoable = true } = {}) {
+    const now = this._editJson();
+    if (undoable && now !== this._lastEdit) {
+      this._undo.push(this._lastEdit);
+      if (this._undo.length > UNDO_LIMIT) this._undo.shift();
+      this._redo = [];
+    }
+    this._lastEdit = now;
     this._dirty = true;
     this.emit('state', this.snapshot());
   }
+
+  _editJson() {
+    return JSON.stringify({ sections: this.sections, cuts: this.cuts });
+  }
+
+  _resetUndo() {
+    this._undo = [];
+    this._redo = [];
+    this._lastEdit = this._editJson();
+  }
+
+  _restoreEdit(json) {
+    const data = JSON.parse(json);
+    this.sections = data.sections;
+    this.cuts = data.cuts || [];
+    this._changed({ undoable: false });
+  }
+
+  /** Macht die letzte Änderung an Abschnitten oder Schnitten rückgängig. */
+  undo() {
+    if (this._undo.length === 0) return { ok: false, error: 'Nichts zum Rückgängigmachen.' };
+    this._redo.push(this._editJson());
+    this._restoreEdit(this._undo.pop());
+    return { ok: true };
+  }
+
+  redo() {
+    if (this._redo.length === 0) return { ok: false, error: 'Nichts zum Wiederholen.' };
+    this._undo.push(this._editJson());
+    this._restoreEdit(this._redo.pop());
+    return { ok: true };
+  }
+
+  /* ----------------------------------------------------------------- Schnitte */
+
+  /** Schnittbereiche innerhalb von [start, end], auf diesen Zeitraum begrenzt. */
+  cutsWithin(start, end) {
+    return this.cuts
+      .map((c) => ({ start: Math.max(c.start, start), end: Math.min(c.end != null ? c.end : this.duration, end) }))
+      .filter((c) => c.end - c.start > 0.001)
+      .sort((a, b) => a.start - b.start);
+  }
+
+  /** Verschmilzt überlappende (beendete) Schnitte. */
+  _mergeCuts() {
+    const closed = this.cuts.filter((c) => c.end != null).sort((a, b) => a.start - b.start);
+    const open = this.cuts.filter((c) => c.end == null);
+    const merged = [];
+    closed.forEach((c) => {
+      const last = merged[merged.length - 1];
+      if (last && c.start <= last.end) last.end = Math.max(last.end, c.end);
+      else merged.push({ ...c });
+    });
+    this.cuts = [...merged, ...open];
+  }
+
+  /** Legt einen Schnitt an: diese Stelle fehlt in den MP3-Exporten. */
+  addCut(start, end) {
+    const max = Math.max(this.duration, 0);
+    const a = Math.max(0, Math.min(start, end));
+    const b = Math.min(max, Math.max(start, end));
+    if (b - a < MIN_CUT) return { ok: false, error: 'Der Schnitt ist zu kurz.' };
+    const cut = { id: newId('cut'), start: a, end: b };
+    this.cuts.push(cut);
+    this._mergeCuts();
+    this._changed();
+    return { ok: true, cut };
+  }
+
+  /** Taste X: beginnt einen Schnitt an der aktuellen Stelle bzw. beendet den offenen. */
+  toggleCut(time) {
+    const t = Math.max(0, time == null ? this.duration : time);
+    const open = this.cuts.find((c) => c.end == null);
+    if (!open) {
+      this.cuts.push({ id: newId('cut'), start: t, end: null });
+      this._changed();
+      return { ok: true, change: 'started' };
+    }
+    if (t - open.start < MIN_CUT) {
+      this.cuts = this.cuts.filter((c) => c !== open);
+      this._changed();
+      return { ok: true, change: 'discarded' };
+    }
+    open.end = t;
+    this._mergeCuts();
+    this._changed();
+    return { ok: true, change: 'ended' };
+  }
+
+  moveCutEdge(id, edge, time) {
+    const cut = this.cuts.find((c) => c.id === id);
+    if (!cut) return { ok: false, error: 'Schnitt nicht gefunden.' };
+    const max = Math.max(this.duration, 0);
+    const t = Math.max(0, Math.min(time, max));
+    if (edge === 'start') cut.start = Math.min(t, (cut.end != null ? cut.end : max) - MIN_CUT);
+    else if (cut.end != null) cut.end = Math.max(t, cut.start + MIN_CUT);
+    this._mergeCuts();
+    this._changed();
+    return { ok: true };
+  }
+
+  removeCut(id) {
+    const before = this.cuts.length;
+    this.cuts = this.cuts.filter((c) => c.id !== id);
+    if (this.cuts.length === before) return { ok: false, error: 'Schnitt nicht gefunden.' };
+    this._changed();
+    return { ok: true };
+  }
+
+  /** Offene Schnitte am Ende der Aufnahme schließen (zu kurze entfallen). */
+  _closeOpenCuts(time) {
+    this.cuts = this.cuts
+      .map((c) => (c.end == null ? { ...c, end: time } : c))
+      .filter((c) => c.end - c.start >= MIN_CUT);
+  }
+
 
   /* ------------------------------------------------------- Ablaufplan / Marker */
 
@@ -209,7 +351,8 @@ class Session extends EventEmitter {
         source
       }));
     this.sections = [...placedFromPlan, ...fresh, ...manual];
-    this._changed();
+    this._changed({ undoable: false });
+    this._resetUndo();
   }
 
   _closeOpen(time) {
@@ -375,8 +518,8 @@ class Session extends EventEmitter {
   }
 
   /** Merkt, dass ein Abschnitt als MP3 gesichert wurde (mit Zeitraum, um spätere Änderungen zu erkennen). */
-  recordExport(segmentId, { file, start, end }) {
-    this.exports[segmentId] = { file, start, end, at: new Date().toISOString() };
+  recordExport(segmentId, { file, start, end, cuts }) {
+    this.exports[segmentId] = { file, start, end, cuts: cuts || [], at: new Date().toISOString() };
     this._changed();
     this.save();
   }
@@ -421,6 +564,7 @@ class Session extends EventEmitter {
     // Eine frühere Aufnahme bleibt als Datei erhalten; die Abschnitte gehören aber
     // zu ihr und werden für die neue Aufnahme zurückgesetzt.
     if (this.status === 'stopped') this._resetSectionsForNewRecording();
+    this.cuts = [];
 
     const stamp = `${dateStamp()}_${new Date().toTimeString().slice(0, 5).replace(':', '')}`;
     const base = this._freeBasePath(path.join(dir, `${stamp}_${slug(this.service.name, 'Gottesdienst')}`));
@@ -437,7 +581,8 @@ class Session extends EventEmitter {
     this.levels = { l: 0, r: 0, clip: false };
 
     this._startAutosave();
-    this._changed();
+    this._changed({ undoable: false });
+    this._resetUndo();
     this.emit('recording-started', { wavPath: this.wavPath, sampleRate: this.sampleRate, channels: this.channels });
     return { ok: true, wavPath: this.wavPath };
   }
@@ -507,12 +652,14 @@ class Session extends EventEmitter {
     }
     this._restoredDuration = this.duration;
     this._closeOpen(this._restoredDuration);
+    this._closeOpenCuts(this._restoredDuration);
     if (this.writer) this.writer.close();
     this.status = 'stopped';
     this.finalized = true;
     this._stopAutosave();
     this.save();
-    this._changed();
+    this._changed({ undoable: false });
+    this._resetUndo();
     this.emit('recording-stopped', { wavPath: this.wavPath, duration: this._restoredDuration });
     return { ok: true, wavPath: this.wavPath, duration: this._restoredDuration };
   }
@@ -600,6 +747,7 @@ class Session extends EventEmitter {
       wavPath: this.wavPath,
       sections: this.sections,
       exports: this.exports,
+      cuts: this.cuts,
       peaks: this.peaks
     };
     try {
@@ -634,9 +782,11 @@ class Session extends EventEmitter {
     this._restoredDuration = duration;
     this.sections = migrateSections(data, duration);
     this.exports = data.exports || {};
+    this.cuts = (data.cuts || []).map((c) => ({ ...c, end: c.end != null ? c.end : duration })).filter((c) => c.end - c.start >= MIN_CUT);
     this._colorSeq = this.sections.reduce((m, x) => Math.max(m, (x.color ?? -1) + 1), 0);
 
-    this._changed();
+    this._changed({ undoable: false });
+    this._resetUndo();
     return this.snapshot();
   }
 }
