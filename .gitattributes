@@ -1,0 +1,6 @@
+# Einheitliche Zeilenenden zwischen macOS und Windows
+* text=auto eol=lf
+*.bat text eol=crlf
+*.png binary
+*.ico binary
+*.icns binary

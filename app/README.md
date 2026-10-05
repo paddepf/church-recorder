@@ -26,6 +26,28 @@ npm run dist        # Windows: NSIS-Installer (.exe) in release/
 npm run dist:mac    # macOS: DMG und ZIP in release/
 ```
 
+### Entwicklung abwechselnd auf Mac und Windows
+
+Das Repository ist auf beiden Systemen gleich einzurichten:
+
+1. [Git for Windows](https://git-scm.com/download/win) und Node.js 20 (LTS)
+   installieren, ein Editor wie VS Code oder die Claude-Desktop-App ist optional.
+2. Klonen und starten (im Ordner `app/`):
+   ```bash
+   git clone https://github.com/paddepf/church-recorder.git
+   cd church-recorder/app
+   npm install
+   npm run dev
+   ```
+3. Arbeitsablauf: vor dem Arbeiten `git pull`, danach committen und pushen.
+   Änderungen am Aufnahmerechner besser auf einem Branch machen und nicht kurz
+   vor dem Gottesdienst auf `main`.
+
+Pro Rechner einmalig und nicht im Repository: die Pfade zu whisper.cpp und zum
+Modell (Einstellungen → Transkription) sowie ChurchTools-Token und
+Netzwerkpasswort. Unter Windows kann es bei nativen Modulen nötig sein, die
+Visual Studio Build Tools zu installieren; aktuell hat die App keine.
+
 Gebaut wird jeweils auf dem Zielsystem – ein Mac-Build lässt sich nicht unter
 Windows erzeugen. Der mitgelieferte Workflow erledigt beides auf GitHub.
 
