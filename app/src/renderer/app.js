@@ -94,6 +94,10 @@
 
     bindUi();
     bindEvents();
+    renderShortcuts(info.platform);
+    initTranscriptToggle();
+    refreshDisk();
+    setInterval(refreshDisk, 30000);
     await refreshDevices();
     applySettingsToForm();
     await updateBadges(info);
@@ -260,6 +264,11 @@
       }
 
       $('btn-record').disabled = true;
+      refreshDisk().then((hours) => {
+        if (hours != null && hours < DISK_WARN_HOURS) {
+          toast('warn', `Wenig Speicherplatz: nur noch für ca. ${formatHours(hours)} Aufnahme.`, 12000);
+        }
+      });
       const result = await capture.start(state.settings.inputDeviceId, state.settings.sampleRate);
       state.sampleRate = result.sampleRate;
       state.lastChunkAt = Date.now();
@@ -687,6 +696,7 @@
       if (state.playing) setPlayhead(player.currentTime, false);
     });
 
+    $('btn-all-keys').addEventListener('click', () => openModal('modal-keys'));
     $('btn-export').addEventListener('click', exportSelected);
     $('export-all').addEventListener('click', () => setExportChecks(true));
     $('export-none').addEventListener('click', () => setExportChecks(false));
@@ -798,6 +808,11 @@
       }
       if (e.key.toLowerCase() === 'n' && !e.ctrlKey) {
         if (!$('btn-next-item').disabled) { e.preventDefault(); $('btn-next-item').click(); }
+        return;
+      }
+      if (e.key === '?') {
+        e.preventDefault();
+        $('modal-keys').hidden = !$('modal-keys').hidden;
         return;
       }
       if (e.key === 'F2' && state.selectedSectionId) {
@@ -930,6 +945,103 @@
     } finally {
       renderSegments();
     }
+  }
+
+  /* ------------------------------------------------- Kürzel, Speicher, Mitschrift */
+
+  /** Alle Tastenkürzel; "main" erscheint in der kleinen Karte, alles im Dialog. */
+  function shortcutList(platform) {
+    const mod = platform === 'darwin' ? 'Cmd' : 'Strg';
+    return [
+      { keys: [mod, 'R'], text: 'Aufnahme starten / beenden', main: true },
+      { keys: ['M'], text: 'Abschnitt starten / beenden', main: true },
+      { keys: ['N'], text: 'Nächster Ablaufpunkt', main: true },
+      { keys: ['Leertaste'], text: 'Mithören / Abspielen ab Cursor', main: true },
+      { keys: ['F2'], text: 'Gewählten Abschnitt umbenennen', main: true },
+      { keys: ['?'], text: 'Alle Kürzel anzeigen' },
+      { keys: ['Klick'], text: 'In die Wellenform: Hörcursor setzen' },
+      { keys: ['Doppelklick'], text: 'Auf eine Marke: umbenennen' },
+      { keys: ['Ziehen'], text: 'Marke verschieben, Nachbarn weichen aus' },
+      { keys: ['Mausrad'], text: 'Wellenform scrollen' },
+      { keys: [mod === 'Cmd' ? 'Cmd' : 'Strg', 'Mausrad'], text: 'Wellenform zoomen' },
+      { keys: ['F12'], text: 'Entwicklerwerkzeuge (nur Dev-Modus)' }
+    ];
+  }
+
+  function renderShortcuts(platform) {
+    const fill = (el, items) => {
+      el.innerHTML = '';
+      items.forEach((it) => {
+        const li = document.createElement('li');
+        const keys = document.createElement('span');
+        keys.className = 'keys';
+        it.keys.forEach((k) => {
+          const kbd = document.createElement('kbd');
+          kbd.textContent = k;
+          keys.appendChild(kbd);
+        });
+        const text = document.createElement('span');
+        text.className = 'text';
+        text.textContent = it.text;
+        li.append(keys, text);
+        el.appendChild(li);
+      });
+    };
+    const all = shortcutList(platform);
+    fill($('keys-list'), all.filter((x) => x.main));
+    fill($('keys-all'), all);
+  }
+
+  const DISK_WARN_HOURS = 3;     // darunter wird der Speicherplatz orange
+  const DISK_LOW_HOURS = 0.5;    // darunter rot, auch während der Aufnahme als Meldung
+  let diskLowToastShown = false;
+
+  function formatBytes(b) {
+    const gb = b / 1073741824;
+    return gb >= 100 ? `${Math.round(gb)} GB` : `${gb.toFixed(1).replace('.', ',')} GB`;
+  }
+
+  function formatHours(h) {
+    if (h >= 10) return `${Math.round(h)} Std.`;
+    if (h >= 1) return `${h.toFixed(1).replace('.', ',')} Std.`;
+    return `${Math.max(0, Math.round(h * 60))} Min.`;
+  }
+
+  /** Aktualisiert die Karte "Speicherplatz"; gibt die Stunden zurück, die noch Platz haben. */
+  async function refreshDisk() {
+    const res = await window.api.app.diskFree();
+    const card = $('card-disk');
+    if (!res.ok) {
+      $('disk-free').textContent = '–';
+      $('disk-hours').textContent = 'Nicht ermittelbar';
+      return null;
+    }
+    $('disk-free').textContent = `${formatBytes(res.freeBytes)} frei`;
+    $('disk-hours').textContent = `reicht für ca. ${formatHours(res.hoursLeft)} Aufnahme`;
+    const used = res.totalBytes > 0 ? 1 - res.freeBytes / res.totalBytes : 0;
+    $('disk-bar-fill').style.width = Math.round(Math.min(1, Math.max(0, used)) * 100) + '%';
+    card.dataset.level = res.hoursLeft < DISK_LOW_HOURS ? 'low' : (res.hoursLeft < DISK_WARN_HOURS ? 'warn' : 'ok');
+
+    if (res.hoursLeft < DISK_LOW_HOURS && state.session?.status === 'recording' && !diskLowToastShown) {
+      diskLowToastShown = true;
+      toast('error', `Speicherplatz wird knapp: nur noch für ca. ${formatHours(res.hoursLeft)} Aufnahme.`, 15000);
+    }
+    if (res.hoursLeft >= DISK_LOW_HOURS) diskLowToastShown = false;
+    return res.hoursLeft;
+  }
+
+  /** Mitschrift ein- und ausklappen; der Zustand wird auf diesem Rechner gemerkt. */
+  function initTranscriptToggle() {
+    const panel = $('panel-transcript');
+    const apply = (collapsed) => {
+      panel.dataset.collapsed = String(collapsed);
+      $('btn-toggle-transcript').textContent = collapsed ? 'ausklappen' : 'einklappen';
+      try { localStorage.setItem('transcriptCollapsed', collapsed ? '1' : '0'); } catch { /* nicht schlimm */ }
+    };
+    let collapsed = false;
+    try { collapsed = localStorage.getItem('transcriptCollapsed') === '1'; } catch { /* Standard */ }
+    apply(collapsed);
+    $('btn-toggle-transcript').addEventListener('click', () => apply(panel.dataset.collapsed !== 'true'));
   }
 
   /* ---------------------------------------------------------- ChurchTools-UI */
@@ -1279,6 +1391,7 @@
     state.settings = res.settings;
     applyTheme(state.settings.theme);
     applyOutputDevice();
+    refreshDisk();
     $('set-ct-token').value = '';
     applySettingsToForm();
     if (!keepOpen) {

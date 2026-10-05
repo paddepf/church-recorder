@@ -112,6 +112,11 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - Zeitangaben (Marken, Transkript, Listen, Zeitleiste der Wellenform) nutzen dieselbe
   Schrift wie der große Timer: `var(--sans)` mit `font-variant-numeric: tabular-nums`.
   Keine Monospace-Schrift verwenden (`--mono` gibt es nicht mehr).
+- Mittlere Spalte: Karten „Tastenkürzel“ und „Speicherplatz“, darunter die
+  Mitschrift (kompakt, einklappbar, Zustand in `localStorage`). Die Kürzelliste steht
+  zentral in `shortcutList()` (`app.js`) und speist Karte und Dialog (`?`): neue Kürzel
+  dort eintragen. Speicherplatz kommt über `disk:free` (`fs.statfsSync`), Stunden
+  gerechnet aus der Abtastrate (16 Bit, Stereo); Warnung < 3 h, rot < 30 min.
 
 ### Entwicklung
 - `npm run dev` startet neu bei Änderungen im Hauptprozess, **außer während einer

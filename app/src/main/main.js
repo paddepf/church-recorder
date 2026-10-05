@@ -345,6 +345,20 @@ ipcMain.handle('app:info', () => ok({
   transcription: Transcriber.check()
 }));
 
+/** Freier Platz auf dem Laufwerk der Aufnahmen und was das in Aufnahmestunden bedeutet. */
+ipcMain.handle('disk:free', () => {
+  try {
+    // Der Ordner kann noch nicht existieren: vom nächsten vorhandenen Elternordner messen.
+    let dir = settings.get('recordingsDir');
+    while (dir && !fs.existsSync(dir) && path.dirname(dir) !== dir) dir = path.dirname(dir);
+    const st = fs.statfsSync(dir);
+    const freeBytes = Number(st.bavail) * Number(st.bsize);
+    const totalBytes = Number(st.blocks) * Number(st.bsize);
+    const bytesPerHour = (settings.get('sampleRate') || 48000) * 2 * 2 * 3600;   // 16 Bit, Stereo
+    return ok({ freeBytes, totalBytes, hoursLeft: freeBytes / bytesPerHour, dir });
+  } catch (err) { return fail(err); }
+});
+
 ipcMain.handle('settings:get', () => ok({ settings: settings.forRenderer() }));
 
 ipcMain.handle('settings:set', (_e, patch) => {

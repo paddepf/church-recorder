@@ -104,6 +104,15 @@ Die WAV-Masteraufnahme bleibt erhalten. Über „Aufnahmen" kann eine frühere
 Session erneut geöffnet, die Marken nachjustiert und ein weiterer Abschnitt
 exportiert werden.
 
+### Oberfläche rund um die Wellenform
+
+In der Mitte unten stehen zwei kleine Karten: **Tastenkürzel** (die wichtigsten
+fünf, „alle (?)" zeigt die komplette Liste) und **Speicherplatz** (freier Platz auf
+dem Laufwerk der Aufnahmen und wie viele Aufnahmestunden das sind; unter 3 Stunden
+orange, unter 30 Minuten rot, dann auch mit Meldung während der Aufnahme). Die
+**Mitschrift** darunter ist kompakt und lässt sich über „einklappen" ausblenden
+(wird auf dem Rechner gemerkt).
+
 ### Tastaturkürzel
 
 | Taste | Wirkung |
@@ -111,7 +120,9 @@ exportiert werden.
 | `Strg` + `R` (macOS: `Cmd` + `R`) | Aufnahme starten bzw. beenden |
 | `M` | Abschnitt starten bzw. beenden (Anfangs-/Endmarke setzen) |
 | `N` | Laufenden Abschnitt beenden und nächsten Ablaufpunkt beginnen |
-| `Leertaste` | Abspielen/Pause (nach dem Beenden) |
+| `F2` | Gewählten Abschnitt umbenennen |
+| `?` | Alle Tastenkürzel anzeigen |
+| `Leertaste` | Abspielen/Pause; während der Aufnahme: Mithören ab dem Hörcursor |
 | Mausrad | auf der Wellenform scrollen |
 | `Strg` + Mausrad | zoomen |
 

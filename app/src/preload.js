@@ -7,6 +7,7 @@ const invoke = (channel, payload) => ipcRenderer.invoke(channel, payload);
 contextBridge.exposeInMainWorld('api', {
   app: {
     info: () => invoke('app:info'),
+    diskFree: () => invoke('disk:free'),
     openRecordingsFolder: () => invoke('folder:open'),
     reveal: (filePath) => invoke('file:reveal', { filePath })
   },

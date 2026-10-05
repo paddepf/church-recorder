@@ -80,12 +80,33 @@
       </div>
     </div>
 
-    <div class="panel panel-transcript">
-      <div class="panel-head">
-        <h2>Mitschrift</h2>
-        <span id="transcript-hint" class="hint">läuft lokal mit</span>
+    <div class="panel-stack">
+      <div class="info-row">
+        <div class="card" id="card-keys">
+          <div class="card-head">
+            <h2>Tastenkürzel</h2>
+            <button id="btn-all-keys" class="mini-link" title="Alle Kürzel anzeigen (?)">alle (?)</button>
+          </div>
+          <ul id="keys-list" class="keys-list"></ul>
+        </div>
+        <div class="card" id="card-disk">
+          <div class="card-head"><h2>Speicherplatz</h2></div>
+          <div id="disk-free" class="disk-free">–</div>
+          <div id="disk-hours" class="disk-hours"></div>
+          <div class="disk-bar"><i id="disk-bar-fill"></i></div>
+        </div>
       </div>
-      <div id="transcript" class="transcript"></div>
+
+      <div class="panel panel-transcript" id="panel-transcript">
+        <div class="panel-head">
+          <h2>Mitschrift</h2>
+          <span class="head-right">
+            <span id="transcript-hint" class="hint">läuft lokal mit</span>
+            <button id="btn-toggle-transcript" class="mini-link" title="Mitschrift ein- oder ausklappen">einklappen</button>
+          </span>
+        </div>
+        <div id="transcript" class="transcript"></div>
+      </div>
     </div>
 
     <div class="panel panel-export">
@@ -287,6 +308,19 @@
       <div class="modal-foot">
         <button id="prompt-cancel" class="secondary">Abbrechen</button>
         <button id="prompt-ok" class="primary">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alle Tastenkürzel -->
+  <div id="modal-keys" class="modal" hidden>
+    <div class="modal-card narrow">
+      <div class="modal-head">
+        <h2>Tastenkürzel</h2>
+        <button class="icon close" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <ul id="keys-all" class="keys-list keys-all"></ul>
       </div>
     </div>
   </div>
