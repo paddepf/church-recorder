@@ -170,7 +170,7 @@
         const isSelected = this.selectedSegment && this.selectedSegment.markerId === m.id;
         ctx.fillStyle = isSelected
           ? (this.colors.selection || 'rgba(108,124,224,0.22)')
-          : (i % 2 === 0 ? 'rgba(255,255,255,0.022)' : 'transparent');
+          : (i % 2 === 0 ? (this.colors.stripe || 'rgba(255,255,255,0.022)') : 'transparent');
         ctx.fillRect(x1, laneTop, x2 - x1, laneH);
       });
     }
@@ -240,7 +240,7 @@
         ctx.beginPath();
         ctx.rect(x, RULER_H + 3, tw, FLAG_H - 6);
         ctx.clip();
-        ctx.fillStyle = '#0E1318';
+        ctx.fillStyle = c.flagText || '#0E1318';
         ctx.fillText(label, x + 8, RULER_H + FLAG_H / 2);
         ctx.restore();
       });
@@ -263,7 +263,7 @@
       if (this.hoverTime == null) return;
       const ctx = this.ctx;
       const x = this.timeToX(this.hoverTime);
-      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.strokeStyle = this.colors.hover || 'rgba(255,255,255,0.18)';
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
       ctx.moveTo(Math.round(x) + 0.5, RULER_H);

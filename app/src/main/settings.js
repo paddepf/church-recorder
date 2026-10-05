@@ -41,6 +41,7 @@ const DEFAULTS = {
   autoUpdateCheck: true,
 
   // UI
+  theme: 'dark',                // 'dark' | 'light' | 'system'
   waveformZoom: 12              // Pixel pro Sekunde
 };
 

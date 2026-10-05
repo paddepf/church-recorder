@@ -56,6 +56,7 @@
     const cfg = await window.api.settings.get();
     state.settings = cfg.settings;
     state.sampleRate = state.settings.sampleRate || 48000;
+    applyTheme(state.settings.theme);
 
     wave = new window.Waveform($('wave'), {
       pxPerSec: state.settings.waveformZoom || 12,
@@ -125,8 +126,11 @@
     const s = getComputedStyle(document.documentElement);
     const v = (n) => s.getPropertyValue(n).trim();
     return {
-      bg: '#131A21',
-      ruler: '#101720',
+      bg: v('--wave-bg'),
+      ruler: v('--ruler-bg'),
+      flagText: v('--wave-flag-text'),
+      stripe: v('--wave-stripe'),
+      hover: v('--wave-hover'),
       line: v('--line'),
       wave: v('--wave'),
       muted: v('--muted'),
@@ -134,9 +138,22 @@
       plan: v('--plan'),
       manual: v('--manual'),
       tally: v('--tally'),
-      selection: 'rgba(108,124,224,0.22)'
+      selection: v('--wave-selection')
     };
   }
+
+  const themeQuery = window.matchMedia('(prefers-color-scheme: light)');
+
+  /** Setzt das Farbschema ('dark' | 'light' | 'system') und färbt die Wellenform neu ein. */
+  function applyTheme(mode) {
+    const light = mode === 'light' || (mode === 'system' && themeQuery.matches);
+    document.documentElement.dataset.theme = light ? 'light' : 'dark';
+    if (wave) {
+      wave.colors = readColors();
+      wave.draw();
+    }
+  }
+  themeQuery.addEventListener('change', () => applyTheme(state.settings?.theme));
 
   /* ------------------------------------------------------------- Zustandsbild */
 
@@ -756,6 +773,7 @@
     $('set-whisper-model').value = s.whisperModelPath;
     $('set-chunk').value = String(s.transcriptionChunkSeconds);
     $('set-autoupdate').checked = Boolean(s.autoUpdateCheck);
+    $('set-theme').value = s.theme || 'dark';
   }
 
   function bindSettingsForm() {
@@ -814,6 +832,7 @@
       whisperModelPath: $('set-whisper-model').value,
       transcriptionChunkSeconds: Number($('set-chunk').value),
       autoUpdateCheck: $('set-autoupdate').checked,
+      theme: $('set-theme').value,
       waveformZoom: wave ? wave.pxPerSec : 12
     };
     const token = $('set-ct-token').value;
@@ -822,6 +841,7 @@
     const res = await window.api.settings.set(patch);
     if (!res.ok) return toast('error', res.error);
     state.settings = res.settings;
+    applyTheme(state.settings.theme);
     $('set-ct-token').value = '';
     applySettingsToForm();
     if (!keepOpen) {
