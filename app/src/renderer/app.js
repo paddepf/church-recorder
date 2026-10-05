@@ -600,7 +600,11 @@
     bindShortcuts();
   }
 
-  function openModal(id) { $(id).hidden = false; }
+  function openModal(id) {
+    $(id).hidden = false;
+    // Geräte können seit dem Start ein- oder ausgesteckt worden sein.
+    if (id === 'modal-settings') refreshDevices();
+  }
 
   /** Ersatz für window.prompt(), das Electron nicht unterstützt. */
   function promptDialog(title, defaultValue = '') {
@@ -908,24 +912,41 @@
 
   /* --------------------------------------------------------- Einstellungen */
 
-  async function refreshDevices() {
-    const sel = $('set-device');
+  async function fillDeviceSelect(sel, kind, savedId, emptyText) {
     sel.innerHTML = '';
+    const std = document.createElement('option');
+    std.value = '';
+    std.textContent = 'Systemstandard';
+    sel.appendChild(std);
     try {
-      const devices = await window.Capture.listDevices();
-      if (devices.length === 0) {
-        sel.innerHTML = '<option value="">Kein Eingang gefunden</option>';
-        return;
-      }
+      const devices = await window.Capture.listDevices(kind);
       devices.forEach((d) => {
         const opt = document.createElement('option');
         opt.value = d.id;
         opt.textContent = d.label;
         sel.appendChild(opt);
       });
-      if (state.settings.inputDeviceId) sel.value = state.settings.inputDeviceId;
+      if (devices.length === 0) std.textContent = emptyText;
+      // Gespeichertes Gerät nicht mehr angeschlossen: bei Systemstandard bleiben.
+      sel.value = devices.some((d) => d.id === savedId) ? savedId : '';
     } catch (err) {
-      sel.innerHTML = '<option value="">Zugriff auf Audiogeräte fehlgeschlagen</option>';
+      std.textContent = 'Zugriff auf Audiogeräte fehlgeschlagen';
+    }
+  }
+
+  async function refreshDevices() {
+    await fillDeviceSelect($('set-device'), 'audioinput', state.settings.inputDeviceId, 'Systemstandard (kein Eingang gefunden)');
+    await fillDeviceSelect($('set-output'), 'audiooutput', state.settings.outputDeviceId, 'Systemstandard');
+    applyOutputDevice();
+  }
+
+  /** Wendet das gewählte Ausgabegerät auf Mithören und Abspielen an. */
+  function applyOutputDevice() {
+    const id = state.settings.outputDeviceId || '';
+    monitor.setOutput(id).catch(() => {});
+    const player = $('player');
+    if (player.setSinkId) {
+      player.setSinkId(id).catch(() => player.setSinkId('').catch(() => {}));
     }
   }
 
@@ -993,6 +1014,8 @@
     const patch = {
       inputDeviceId: $('set-device').value,
       inputDeviceLabel: $('set-device').selectedOptions[0]?.textContent || '',
+      outputDeviceId: $('set-output').value,
+      outputDeviceLabel: $('set-output').selectedOptions[0]?.textContent || '',
       sampleRate: Number($('set-samplerate').value),
       recordingsDir: $('set-dir').value,
       fileNamePattern: $('set-pattern').value.trim() || '{datum}_{gottesdienst}_{abschnitt}',
@@ -1018,6 +1041,7 @@
     if (!res.ok) return toast('error', res.error);
     state.settings = res.settings;
     applyTheme(state.settings.theme);
+    applyOutputDevice();
     $('set-ct-token').value = '';
     applySettingsToForm();
     if (!keepOpen) {

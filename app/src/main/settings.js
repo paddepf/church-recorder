@@ -9,6 +9,8 @@ const DEFAULTS = {
   // Audio
   inputDeviceId: '',
   inputDeviceLabel: '',
+  outputDeviceId: '',           // Wiedergabe/Mithören; leer = Systemstandard
+  outputDeviceLabel: '',
   sampleRate: 48000,
 
   // Ablage

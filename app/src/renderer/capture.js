@@ -54,16 +54,21 @@ registerProcessor('rec-processor', RecProcessor);
       this.running = false;
     }
 
-    static async listDevices() {
-      // Ohne einmalige Freigabe liefert der Browser keine Gerätenamen.
-      try {
-        const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
-        probe.getTracks().forEach((t) => t.stop());
-      } catch { /* Namen bleiben ggf. leer */ }
-      const devices = await navigator.mediaDevices.enumerateDevices();
+    /** @param {'audioinput'|'audiooutput'} kind */
+    static async listDevices(kind = 'audioinput') {
+      let devices = await navigator.mediaDevices.enumerateDevices();
+      // Ohne einmalige Freigabe liefert der Browser keine Gerätenamen. Die Abfrage
+      // erfolgt nur, wenn Namen fehlen, damit eine laufende Aufnahme unberührt bleibt.
+      if (devices.some((d) => d.kind === 'audioinput' && !d.label)) {
+        try {
+          const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+          probe.getTracks().forEach((t) => t.stop());
+        } catch { /* Namen bleiben ggf. leer */ }
+        devices = await navigator.mediaDevices.enumerateDevices();
+      }
       return devices
-        .filter((d) => d.kind === 'audioinput')
-        .map((d) => ({ id: d.deviceId, label: d.label || 'Audioeingang' }));
+        .filter((d) => d.kind === kind && d.deviceId !== 'default' && d.deviceId !== 'communications')
+        .map((d) => ({ id: d.deviceId, label: d.label || (kind === 'audioinput' ? 'Audioeingang' : 'Audioausgang') }));
     }
 
     async start(deviceId, sampleRate) {

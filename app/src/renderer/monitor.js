@@ -24,6 +24,7 @@
       this.onPosition = opts.onPosition || (() => {});
       this.onStateChange = opts.onStateChange || (() => {});
       this.ctx = null;
+      this.deviceId = '';
       this.playing = false;
       this.position = 0;
       this._gen = 0;
@@ -33,8 +34,19 @@
       this._ended = false;
     }
 
+    /** Setzt das Ausgabegerät ('' = Systemstandard). */
+    async setOutput(deviceId) {
+      this.deviceId = deviceId || '';
+      if (this.ctx && this.ctx.setSinkId) {
+        try { await this.ctx.setSinkId(this.deviceId); } catch { await this.ctx.setSinkId(''); }
+      }
+    }
+
     async play(from) {
-      if (!this.ctx) this.ctx = new AudioContext();
+      if (!this.ctx) {
+        this.ctx = new AudioContext();
+        if (this.deviceId) await this.setOutput(this.deviceId);
+      }
       if (this.ctx.state === 'suspended') await this.ctx.resume();
       this._halt();
       const gen = ++this._gen;
