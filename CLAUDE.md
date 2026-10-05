@@ -15,6 +15,11 @@ Befehle (im Ordner `app/`): `npm install`, `npm run dev` (Live-Reload),
 ## Regeln
 - Sprache: Oberfläche, Kommentare, Commit-Messages und Doku auf Deutsch.
 - Nach jedem angeforderten Commit direkt pushen.
+- Bei jedem Commit die Dokumentation mitpflegen: `CLAUDE.md` (Abschnitt
+  „Entwurfsentscheidungen“, wenn sich Verhalten oder Entscheidungen ändern),
+  `app/README.md` (Bedienung, Dateiübersicht), bei Schnittstellenänderungen auch
+  `app/docs/websocket-api.md` und `companion-module/README.md`. Die Doku-Änderung
+  gehört in denselben Commit wie die Code-Änderung.
 - Plattformneutral bleiben: Pfade mit `path`, keine festen Laufwerks- oder
   `/Users`-Pfade, Plattformunterschiede nur über `process.platform`.
 - whisper.cpp-Binary und Modell sind pro Rechner verschieden und stehen nur in
