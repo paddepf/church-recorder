@@ -94,7 +94,10 @@ function save(patch) {
   Object.assign(current, patch || {});
   try {
     fs.mkdirSync(path.dirname(file()), { recursive: true });
-    fs.writeFileSync(file(), JSON.stringify(current, null, 2), 'utf8');
+    // Erst in eine Hilfsdatei schreiben und dann umbenennen: ein Absturz mittendrin hinterlässt so nie
+    // eine halbe Datei (sonst wären Token, Passwörter und Aufnahmeordner beim nächsten Start weg).
+    fs.writeFileSync(file() + '.tmp', JSON.stringify(current, null, 2), 'utf8');
+    fs.renameSync(file() + '.tmp', file());
   } catch (err) {
     console.error('Einstellungen konnten nicht gespeichert werden:', err);
   }

@@ -2,7 +2,7 @@
   "id": "churchrecorder",
   "name": "churchrecorder",
   "shortname": "ChurchRecorder",
-  "description": "Steuert ChurchRecorder: Aufnahme, Marker und Ablaufplan",
+  "description": "Steuert ChurchRecorder: Aufnahme, Abschnitte, Schnitte und Ablaufplan",
   "version": "1.0.0",
   "license": "MIT",
   "repository": "",

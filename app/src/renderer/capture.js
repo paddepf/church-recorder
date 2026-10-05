@@ -82,21 +82,32 @@ registerProcessor('rec-processor', RecProcessor);
       };
       if (deviceId) audio.deviceId = { exact: deviceId };
 
+      let fallback = false;
       try {
         this.stream = await navigator.mediaDevices.getUserMedia({ audio });
       } catch (err) {
         if (deviceId) {
-          // Gerät nicht mehr vorhanden – auf Standardeingang ausweichen.
+          // Gerät nicht mehr vorhanden – auf Standardeingang ausweichen (wird dem Aufrufer gemeldet).
           delete audio.deviceId;
           this.stream = await navigator.mediaDevices.getUserMedia({ audio });
+          fallback = true;
         } else {
           throw new Error('Auf den Audioeingang kann nicht zugegriffen werden: ' + err.message);
         }
       }
 
-      this.context = new AudioContext({ sampleRate: sampleRate || 48000, latencyHint: 'playback' });
-      if (this.context.state === 'suspended') await this.context.resume();
-      this.source = this.context.createMediaStreamSource(this.stream);
+      try {
+        this.context = new AudioContext({ sampleRate: sampleRate || 48000, latencyHint: 'playback' });
+        if (this.context.state === 'suspended') await this.context.resume();
+        this.source = this.context.createMediaStreamSource(this.stream);
+      } catch (err) {
+        // Eingang nicht offen lassen, wenn der Start auf halbem Weg scheitert.
+        this.stream.getTracks().forEach((t) => t.stop());
+        this.stream = null;
+        if (this.context) this.context.close().catch(() => {});
+        this.context = null;
+        throw err;
+      }
 
       let usedWorklet = false;
       try {
@@ -133,6 +144,7 @@ registerProcessor('rec-processor', RecProcessor);
         sampleRate: this.context.sampleRate,
         channels: 2,
         mode: usedWorklet ? 'worklet' : 'fallback',
+        deviceFallback: fallback,
         deviceLabel: track ? track.label : ''
       };
     }

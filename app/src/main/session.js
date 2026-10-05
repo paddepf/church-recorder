@@ -12,7 +12,8 @@ const PEAK_BUCKET_MS = 50;   // Auflösung der Wellenform
 const AUTOSAVE_MS = 3000;
 const MIN_SECTION = SectionLogic.MIN_SECTION;
 const MIN_CUT = 0.2;       // kürzester Schnitt in Sekunden
-const UNDO_LIMIT = 60;     // so viele Schritte lassen sich zurücknehmen
+const UNDO_LIMIT = 60;
+const WAV_WARN_BYTES = 3.8e9; // Warnung vor der 4-GB-Grenze des WAV-Formats     // so viele Schritte lassen sich zurücknehmen
 
 let counter = 0;
 function newId(prefix) {
@@ -80,6 +81,7 @@ class Session extends EventEmitter {
   }
 
   reset() {
+    this.flushSave();                   // Änderungen der bisherigen Session nicht verlieren
     this.status = 'idle';               // idle | recording | paused | stopped
     this.service = { id: null, name: '', date: dateStamp() };
     this.sections = [];                 // {id,label,category,color,start|null,end|null,source}
@@ -117,7 +119,8 @@ class Session extends EventEmitter {
 
   /** Offene Ablaufplan-Punkte, deren Anfang noch nicht gesetzt ist. */
   pendingSections() {
-    return this.sections.filter((x) => x.start == null);
+    // In der Reihenfolge des Ablaufplans (Umsortieren ändert nur "order", nicht die Lage im Array).
+    return this.sections.filter((x) => x.start == null).sort((a, b) => (a.order || 0) - (b.order || 0));
   }
 
   /** Der Abschnitt, der gerade läuft (Anfang gesetzt, Ende noch offen). */
@@ -195,7 +198,26 @@ class Session extends EventEmitter {
     }
     this._lastEdit = now;
     this._dirty = true;
+    // Außerhalb der Aufnahme läuft kein Autosave: Änderungen (Abschnitte, Schnitte …) kurz gebündelt speichern.
+    if (!this._autosave && this.basePath) this._scheduleSave();
     this.emit('state', this.snapshot());
+  }
+
+  _scheduleSave() {
+    if (this._saveTimer) clearTimeout(this._saveTimer);
+    this._saveTimer = setTimeout(() => {
+      this._saveTimer = null;
+      if (this._dirty) this.save();
+    }, 800);
+  }
+
+  /** Noch ausstehende Änderungen sofort speichern (vor dem Laden einer anderen Session, beim Beenden). */
+  flushSave() {
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = null;
+    }
+    if (this._dirty && this.basePath) this.save();
   }
 
   _editJson() {
@@ -255,6 +277,7 @@ class Session extends EventEmitter {
 
   /** Legt einen Schnitt an: diese Stelle fehlt in den MP3-Exporten. */
   addCut(start, end) {
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return { ok: false, error: 'Ungültige Zeitangabe.' };
     const max = Math.max(this.duration, 0);
     const a = Math.max(0, Math.min(start, end));
     const b = Math.min(max, Math.max(start, end));
@@ -289,6 +312,7 @@ class Session extends EventEmitter {
   moveCutEdge(id, edge, time) {
     const cut = this.cuts.find((c) => c.id === id);
     if (!cut) return { ok: false, error: 'Schnitt nicht gefunden.' };
+    if (!Number.isFinite(time)) return { ok: false, error: 'Ungültige Zeitangabe.' };
     const max = Math.max(this.duration, 0);
     const t = Math.max(0, Math.min(time, max));
     if (edge === 'start') cut.start = Math.min(t, (cut.end != null ? cut.end : max) - MIN_CUT);
@@ -338,8 +362,11 @@ class Session extends EventEmitter {
     const manual = this.sections.filter((x) => x.source === 'manual');
     const placedFromPlan = this.sections.filter((x) => x.source !== 'manual' && x.start != null);
     const keepIds = new Set(placedFromPlan.map((x) => x.ctId).filter((id) => id != null));
+    // Punkte aus Vorlagen haben keine ChurchTools-Id: bereits gesetzte am Namen erkennen, sonst entstehen Doppelte.
+    const keepLabels = new Set(placedFromPlan.filter((x) => x.ctId == null).map((x) => String(x.label).trim().toLowerCase()));
     const fresh = (items || [])
-      .filter((it) => !keepIds.has(it.id))
+      .filter((it) => !(it.id != null && keepIds.has(it.id)))
+      .filter((it) => !(it.id == null && keepLabels.has(String(it.title || '').trim().toLowerCase())))
       .map((it, i) => ({
         id: newId('sec'),
         ctId: it.id ?? null,
@@ -355,8 +382,7 @@ class Session extends EventEmitter {
       }));
     this.sections = [...placedFromPlan, ...fresh, ...manual];
     const autoFilled = this._applySuggestions();
-    this._changed({ undoable: false });
-    this._resetUndo();
+    this._changed();             // lässt sich rückgängig machen (z. B. versehentlich geladene Vorlage)
     return autoFilled;
   }
 
@@ -579,22 +605,35 @@ class Session extends EventEmitter {
     if (this.status === 'recording') return { ok: false, error: 'Es läuft bereits eine Aufnahme.' };
     if (this.status === 'paused') return this.resume();
 
-    this.sampleRate = sampleRate || this.sampleRate;
-    this.channels = channels || 2;
+    const rate = sampleRate || this.sampleRate;
+    const ch = channels || 2;
 
     const dir = settings.get('recordingsDir');
     fs.mkdirSync(dir, { recursive: true });
+
+    // Erst die Datei anlegen: Scheitert das (Ordner nicht beschreibbar …), bleibt die bisher
+    // angezeigte Aufnahme samt Abschnitten unverändert.
+    const stamp = `${dateStamp()}_${new Date().toTimeString().slice(0, 5).replace(':', '')}`;
+    const base = this._freeBasePath(path.join(dir, `${stamp}_${slug(this.service.name, 'Gottesdienst')}`));
+    let writer;
+    try {
+      writer = new WavWriter(`${base}.wav`, rate, ch);
+    } catch (err) {
+      return { ok: false, error: 'Die Aufnahmedatei konnte nicht angelegt werden: ' + err.message };
+    }
+    this.flushSave();
 
     // Eine frühere Aufnahme bleibt als Datei erhalten; die Abschnitte gehören aber
     // zu ihr und werden für die neue Aufnahme zurückgesetzt.
     if (this.status === 'stopped') this._resetSectionsForNewRecording();
     this.cuts = [];
 
-    const stamp = `${dateStamp()}_${new Date().toTimeString().slice(0, 5).replace(':', '')}`;
-    const base = this._freeBasePath(path.join(dir, `${stamp}_${slug(this.service.name, 'Gottesdienst')}`));
+    this.sampleRate = rate;
+    this.channels = ch;
     this.basePath = base;
     this.wavPath = `${base}.wav`;
-    this.writer = new WavWriter(this.wavPath, this.sampleRate, this.channels);
+    this.writer = writer;
+    this._sizeWarned = false;
     this.startedAt = new Date().toISOString();
     this.status = 'recording';
     this.finalized = false;
@@ -607,6 +646,7 @@ class Session extends EventEmitter {
     this._startAutosave();
     this._changed({ undoable: false });
     this._resetUndo();
+    this.save();                 // Session-Datei sofort anlegen, damit auch ein früher Absturz wiederherstellbar ist
     this.emit('recording-started', { wavPath: this.wavPath, sampleRate: this.sampleRate, channels: this.channels });
     return { ok: true, wavPath: this.wavPath };
   }
@@ -695,6 +735,10 @@ class Session extends EventEmitter {
   pushAudio(buffer) {
     if (this.status !== 'recording' || !this.writer) return;
     this.writer.write(buffer);
+    if (!this._sizeWarned && this.writer.dataBytes > WAV_WARN_BYTES) {
+      this._sizeWarned = true;
+      this.emit('error-notice', 'Die Aufnahme nähert sich der Größengrenze einer WAV-Datei (4 GB, gut 6 Stunden). Bitte beenden und eine neue Aufnahme starten.');
+    }
 
     const ch = this.channels;
     const frames = buffer.length / (2 * ch);
@@ -742,7 +786,10 @@ class Session extends EventEmitter {
   _startAutosave() {
     this._stopAutosave();
     this._autosave = setInterval(() => {
-      if (this._dirty) this.save();
+      // Wellenform und Dauer ändern sich laufend, ohne dass etwas "dirty" wird: spätestens alle 30 s sichern,
+      // damit eine unterbrochene Aufnahme mit (fast) vollständiger Wellenform wiederhergestellt wird.
+      const stale = this.status === 'recording' && Date.now() - (this._lastSave || 0) > 30000;
+      if (this._dirty || stale) this.save();
     }, AUTOSAVE_MS);
   }
 
@@ -778,6 +825,7 @@ class Session extends EventEmitter {
       fs.writeFileSync(target + '.tmp', JSON.stringify(data), 'utf8');
       fs.renameSync(target + '.tmp', target);
       this._dirty = false;
+      this._lastSave = Date.now();
     } catch (err) {
       console.error('Session konnte nicht gespeichert werden:', err);
       this.emit('error-notice', 'Die Session-Datei konnte nicht gespeichert werden.');
@@ -811,6 +859,9 @@ class Session extends EventEmitter {
 
     this._changed({ undoable: false });
     this._resetUndo();
+    // Eine unterbrochene Aufnahme gilt nach dem Öffnen als wiederhergestellt: so in der Datei vermerken,
+    // sonst wird sie bei jedem Start erneut als "unterbrochen" gemeldet.
+    if (data.finalized === false || data.status === 'recording' || data.status === 'paused') this.save();
     return this.snapshot();
   }
 }

@@ -10,6 +10,7 @@
 
 const fs = require('fs');
 const HEADER_BYTES = 44;
+const MAX_UINT32 = 0xFFFFFFFF;
 
 function buildHeader(sampleRate, channels, dataBytes) {
   const buf = Buffer.alloc(HEADER_BYTES);
@@ -17,8 +18,13 @@ function buildHeader(sampleRate, channels, dataBytes) {
   const byteRate = (sampleRate * channels * bitsPerSample) / 8;
   const blockAlign = (channels * bitsPerSample) / 8;
 
+  // Ein WAV-Header fasst höchstens 4 GB (~6 h 13 min bei 48 kHz Stereo). Darüber hinaus wird die
+  // Größe gedeckelt statt einen Fehler zu werfen – die Daten werden weiter geschrieben und von
+  // dieser App über die tatsächliche Dateigröße gelesen.
+  const riffSize = Math.min(MAX_UINT32, Math.max(0, dataBytes + HEADER_BYTES - 8));
+  const dataSize = Math.min(MAX_UINT32, dataBytes);
   buf.write('RIFF', 0, 'ascii');
-  buf.writeUInt32LE(Math.max(0, dataBytes + HEADER_BYTES - 8), 4);
+  buf.writeUInt32LE(riffSize, 4);
   buf.write('WAVE', 8, 'ascii');
   buf.write('fmt ', 12, 'ascii');
   buf.writeUInt32LE(16, 16);            // Größe fmt-Chunk
@@ -29,7 +35,7 @@ function buildHeader(sampleRate, channels, dataBytes) {
   buf.writeUInt16LE(blockAlign, 32);
   buf.writeUInt16LE(bitsPerSample, 34);
   buf.write('data', 36, 'ascii');
-  buf.writeUInt32LE(dataBytes, 40);
+  buf.writeUInt32LE(dataSize, 40);
   return buf;
 }
 
@@ -57,7 +63,12 @@ class WavWriter {
   /** @param {Buffer} buffer Interleaved Int16LE */
   write(buffer) {
     if (this.closed || !buffer || buffer.length === 0) return;
-    fs.writeSync(this.fd, buffer, 0, buffer.length, HEADER_BYTES + this.dataBytes);
+    // writeSync darf weniger schreiben als verlangt: dann den Rest nachschieben, sonst
+    // verschieben sich alle folgenden Frames.
+    let done = 0;
+    while (done < buffer.length) {
+      done += fs.writeSync(this.fd, buffer, done, buffer.length - done, HEADER_BYTES + this.dataBytes + done);
+    }
     this.dataBytes += buffer.length;
     this._sinceHeaderUpdate += buffer.length;
     // Header etwa jede Sekunde aktualisieren, damit die Datei jederzeit gültig ist.
@@ -118,28 +129,36 @@ function readInfo(filePath) {
 }
 
 /**
+ * Liest eine Anzahl Frames ab einem Start-Frame (Int16, interleaved).
+ * @param {object} [info] Ergebnis von readInfo (spart das erneute Lesen des Headers)
+ */
+function readFrames(filePath, startFrame, frameCount, info) {
+  const meta = info || readInfo(filePath);
+  const bytesPerFrame = meta.channels * 2;
+  const first = Math.max(0, Math.min(startFrame, meta.frames));
+  const count = Math.max(0, Math.min(frameCount, meta.frames - first));
+  const samples = new Int16Array(count * meta.channels);
+  if (count > 0) {
+    const fd = fs.openSync(filePath, 'r');
+    try {
+      // Direkt in den Speicher des Int16Array lesen (WAV ist little endian wie x86/ARM).
+      fs.readSync(fd, Buffer.from(samples.buffer), 0, count * bytesPerFrame, HEADER_BYTES + first * bytesPerFrame);
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+  return { sampleRate: meta.sampleRate, channels: meta.channels, samples };
+}
+
+/**
  * Liest einen Zeitausschnitt.
  * @returns {{sampleRate:number, channels:number, samples:Int16Array}}
  */
 function readSlice(filePath, startSec, endSec) {
   const info = readInfo(filePath);
-  const bytesPerFrame = info.channels * 2;
   const startFrame = Math.max(0, Math.floor((startSec || 0) * info.sampleRate));
   const endFrame = Math.min(info.frames, Math.ceil((endSec == null ? info.duration : endSec) * info.sampleRate));
-  const frameCount = Math.max(0, endFrame - startFrame);
-
-  const fd = fs.openSync(filePath, 'r');
-  try {
-    const buf = Buffer.alloc(frameCount * bytesPerFrame);
-    if (frameCount > 0) {
-      fs.readSync(fd, buf, 0, buf.length, HEADER_BYTES + startFrame * bytesPerFrame);
-    }
-    const samples = new Int16Array(frameCount * info.channels);
-    for (let i = 0; i < samples.length; i++) samples[i] = buf.readInt16LE(i * 2);
-    return { sampleRate: info.sampleRate, channels: info.channels, samples };
-  } finally {
-    fs.closeSync(fd);
-  }
+  return readFrames(filePath, startFrame, Math.max(0, endFrame - startFrame), info);
 }
 
-module.exports = { WavWriter, readInfo, readSlice, HEADER_BYTES };
+module.exports = { WavWriter, readInfo, readSlice, readFrames, HEADER_BYTES };

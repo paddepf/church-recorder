@@ -114,7 +114,8 @@ Ereignisse: `recording.started`, `recording.stopped`, `export.finished`.
 - `pong` – Antwort auf `ping`
 - `result` – Antwort auf einen Befehl
 - `error` – mit `code` (`auth_failed`, `unauthorized`, `read_only`,
-  `unknown_action`, `auth_timeout`, `bad_json`) und `message`
+  `unknown_action`, `unknown_type`, `auth_timeout`, `bad_json`) und `message`.
+  Nach `auth_failed` trennt der Recorder die Verbindung nach kurzer Zeit.
 
 ## Nachrichten an den Recorder
 
@@ -126,9 +127,9 @@ Ereignisse: `recording.started`, `recording.stopped`, `export.finished`.
 
 | Aktion | Wirkung |
 |---|---|
-| `record.start` | Aufnahme starten |
-| `record.stop` | Aufnahme beenden und speichern |
-| `record.toggle` | Starten bzw. beenden |
+| `record.start` | Aufnahme starten – ohne Rückfrage am PC, auch wenn dort eine beendete Aufnahme angezeigt wird (sie bleibt gespeichert). In der Pause: fortsetzen. Läuft schon eine: `ok:false` |
+| `record.stop` | Aufnahme beenden und speichern (auch eine pausierte); ohne laufende Aufnahme `ok:false` |
+| `record.toggle` | Starten bzw. beenden – eine pausierte Aufnahme wird beendet |
 | `record.pause` | Pausieren |
 | `record.resume` | Fortsetzen |
 | `marker.add` | Abschnitt beginnen (Anfangsmarke, optional `params.label`); läuft schon einer, wird er beendet (Endmarke) |
@@ -142,6 +143,9 @@ Antwort:
 ```json
 { "type": "result", "id": 17, "action": "marker.add", "ok": true, "change": "started", "section": { "…": "…" } }
 ```
+
+`record.start`, `record.stop` und `record.toggle` antworten mit `accepted: true`: Der Befehl ist an die
+Audioerfassung übergeben. Ob die Aufnahme tatsächlich läuft, zeigt die nächste `state`-Nachricht.
 
 `change` ist `started` oder `ended`, je nachdem, ob eine Anfangs- oder Endmarke gesetzt wurde.
 

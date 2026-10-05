@@ -56,7 +56,7 @@
   --bar-bg: #E3E8EE;
   --wave-bg: #F7F9FB;
   --ruler-bg: #E8ECF1;
-  --wave-flag-text: #FFFFFF;
+  --wave-flag-text: #0E1318;     /* dunkle Schrift: die Fähnchen sind auch im hellen Design hell */
   --wave-selection: rgba(79,95,208,0.18);
   --wave-stripe: rgba(0,0,0,0.03);
   --wave-hover: rgba(0,0,0,0.25);
@@ -366,8 +366,8 @@ canvas.wave {
 .agenda-row input { flex: 1; min-width: 0; }
 .agenda-row button { padding: 3px 8px; }
 .item .artist { color: var(--muted); font-size: 14px; cursor: text; }
-.item .artist.empty { opacity: 0; transition: opacity 120ms; }
-.item:hover .artist.empty { opacity: .55; }
+.item .artist.empty { display: none; }          /* belegt sonst Platz und kürzt den Namen */
+.item:hover .artist.empty { display: inline; opacity: .55; }
 .item .artist:hover { color: var(--text); }
 .inline-edit {
   position: fixed;
@@ -620,8 +620,9 @@ label small { color: var(--muted); font-size: 11px; }
   button.record { padding: 12px 18px; }
   .timecode { font-size: 48px; }
   .meters { width: 190px; }
-  .panels { grid-template-columns: 1fr 1fr; }
-  .panel-export { grid-column: 1 / -1; }
+  .panels { grid-template-columns: 1fr 1fr 300px; }
+  .panel-head h2 { font-size: 15px; }
+  .panel-head { padding: 12px 12px; }
 }
 
 /* Niedrige Fenster: Kopfbereich und Wellenform enger, damit unten genug Platz für die Listen bleibt */

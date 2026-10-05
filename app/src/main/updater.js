@@ -4,7 +4,7 @@ const { EventEmitter } = require('events');
 const settings = require('./settings');
 
 /**
- * Updates über GitHub Releases (privates Repository).
+ * Updates über GitHub Releases (öffentliches Repository, kein Token zum Herunterladen nötig).
  *
  * Wichtigste Regel: Während einer laufenden oder pausierten Aufnahme wird
  * niemals installiert oder neu gestartet. Ein heruntergeladenes Update wartet,
@@ -62,8 +62,10 @@ class Updater extends EventEmitter {
     this.emit('status', { state, ...extra });
   }
 
-  check() {
+  check({ manual = false } = {}) {
     if (!this.autoUpdater) return { ok: false, error: 'Update-Funktion ist in dieser Umgebung nicht verfügbar.' };
+    // Während einer Aufnahme keine Netz- und Plattenlast durch automatische Prüfung und Download.
+    if (!manual && this.isBusy()) return { ok: false, error: 'Während einer Aufnahme wird nicht nach Updates gesucht.' };
     this.autoUpdater.checkForUpdates().catch((err) => this._set('error', { message: String(err?.message || err) }));
     return { ok: true };
   }

@@ -18,6 +18,16 @@ const updater = new Updater(() => session.status === 'recording' || session.stat
 
 const isDev = process.argv.includes('--dev');
 
+// Unbehandelte Fehler nur protokollieren und melden: Electrons Standard ist ein Fehlerdialog, der den
+// Hauptprozess blockiert – und damit das Schreiben der Aufnahme.
+process.on('uncaughtException', (err) => {
+  console.error('Unbehandelter Fehler im Hauptprozess:', err);
+  try { toast('error', `Interner Fehler: ${err.message}`); } catch { /* Fenster noch nicht da */ }
+});
+process.on('unhandledRejection', (err) => {
+  console.error('Unbehandelte Ablehnung im Hauptprozess:', err);
+});
+
 /* -------------------------------------------------------------- Hilfsfunktionen */
 
 function send(channel, payload) {
@@ -48,7 +58,7 @@ function diskInfo() {
 }
 
 function currentHealth() {
-  const input = health.inputLost ? 'lost' : (health.silent ? 'silent' : 'ok');
+  const input = health.inputLost || health.chunksStale ? 'lost' : (health.silent ? 'silent' : 'ok');
   const d = health.disk;
   const diskLevel = !d ? 'ok' : (d.hoursLeft < 0.5 ? 'low' : (d.hoursLeft < 3 ? 'warn' : 'ok'));
   return {
@@ -67,6 +77,18 @@ function publishHealth() {
   send('health', h);
   net.publishState({ ...session.snapshot(), health: h });
 }
+
+/* Wächter im Hauptprozess: kommen während der Aufnahme keine Audioblöcke mehr an (Oberfläche hängt,
+   wurde neu geladen, Erfassung steht), wird das als ausgefallener Eingang gemeldet – auch an Companion. */
+let lastChunkAt = 0;
+const CHUNK_TIMEOUT_MS = 5000;
+setInterval(() => {
+  const stale = session.status === 'recording' && Date.now() - lastChunkAt > CHUNK_TIMEOUT_MS;
+  if (stale !== Boolean(health.chunksStale)) {
+    health.chunksStale = stale;
+    publishHealth();
+  }
+}, 1000);
 
 function refreshDisk() {
   try { health.disk = diskInfo(); } catch { health.disk = null; }
@@ -97,9 +119,18 @@ function buildFileName(segmentLabel, artist) {
     .replace(/\{gottesdienst\}/g, slug(session.service.name, 'Gottesdienst'))
     .replace(/\{abschnitt\}/g, slug(segmentLabel, 'Abschnitt'))
     .replace(/\{interpret\}/g, artist ? slug(artist, '') : '')
-    .replace(/\{zeit\}/g, new Date().toTimeString().slice(0, 5).replace(':', ''));
+    .replace(/\{zeit\}/g, recordingTime());
   // Ein leerer Platzhalter (z. B. ohne Interpret) soll keine doppelten oder führenden Trennzeichen hinterlassen.
-  return slug(name).replace(/-+/g, '-').replace(/_+/g, '_').replace(/^[_-]+|[_-]+$/g, '') + '.mp3';
+  // Zu lange Namen kürzen: Viele Dateisysteme erlauben höchstens 255 Zeichen.
+  const base = slug(name).replace(/-+/g, '-').replace(/_+/g, '_').replace(/^[_-]+|[_-]+$/g, '');
+  return base.slice(0, 150).replace(/[_-]+$/g, '') + '.mp3';
+}
+
+/** Uhrzeit des Aufnahmebeginns als HHMM (für den Platzhalter {zeit}). */
+function recordingTime() {
+  const d = session.startedAt ? new Date(session.startedAt) : new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}${p(d.getMinutes())}`;
 }
 
 /**
@@ -195,11 +226,12 @@ function setupApplicationMenu() {
     {
       label: 'Fenster',
       submenu: [
-        { role: 'minimize', label: 'Minimieren' },
+        // Ohne Tastenkürzel: Cmd+M gehört "Abschnitt starten / beenden".
+        { label: 'Minimieren', click: () => win?.minimize() },
         { role: 'zoom', label: 'Zoomen' },
         { type: 'separator' },
-        { role: 'togglefullscreen', label: 'Vollbild' },
-        { role: 'reload', label: 'Neu laden' }
+        { role: 'togglefullscreen', label: 'Vollbild' }
+        // Kein "Neu laden": Das beendete die Audioerfassung einer laufenden Aufnahme (und lag auf Cmd+R).
       ]
     }
   ];
@@ -219,9 +251,13 @@ function setupLiveReload() {
     clearTimeout(timer);
     timer = setTimeout(() => {
       const inRenderer = filename.split(path.sep)[0] === 'renderer';
-      if (inRenderer) {
+      const busy = session.status === 'recording' || session.status === 'paused';
+      if (inRenderer && busy) {
+        // Die Audioerfassung läuft in der Oberfläche: nie während einer Aufnahme neu laden.
+        toast('warn', 'Oberfläche geändert – Neuladen nach der Aufnahme nötig.');
+      } else if (inRenderer) {
         if (win && !win.isDestroyed()) win.webContents.reloadIgnoringCache();
-      } else if (session.status === 'recording' || session.status === 'paused') {
+      } else if (busy) {
         toast('warn', 'Main-Prozess geändert – Neustart nach der Aufnahme nötig.');
       } else {
         app.relaunch({ args: process.argv.slice(1) });
@@ -276,7 +312,16 @@ function createWindow() {
       e.preventDefault();
       return;
     }
+    session.flushSave();
     net.stop();
+  });
+
+  // Stürzt die Oberfläche ab, fehlt die Audioerfassung: neu laden – sie verbindet sich bei laufender
+  // Aufnahme selbst wieder mit dem Eingang und schreibt in dieselbe Datei weiter.
+  win.webContents.on('render-process-gone', (_e, details) => {
+    console.error('Oberfläche beendet:', details.reason);
+    if (details.reason === 'clean-exit') return;
+    setTimeout(() => { if (win && !win.isDestroyed()) win.webContents.reload(); }, 500);
   });
 
   win.on('closed', () => { win = null; });
@@ -342,10 +387,16 @@ net.on('command', ({ action, params, reply }) => {
   };
   switch (action) {
     case 'record.start':
-      // Die Audioaufnahme selbst läuft im Renderer – dieser meldet zurück.
-      send('command', { action: 'record.start' });
+      // Die Audioaufnahme selbst läuft im Renderer. Per Fernsteuerung ohne Rückfrage am PC starten:
+      // eine angezeigte, beendete Aufnahme ist ohnehin als Datei gespeichert.
+      if (session.status === 'recording') return done({ ok: false, error: 'Es läuft bereits eine Aufnahme.' });
+      if (session.status === 'paused') return done(session.resume());
+      send('command', { action: 'record.start', remote: true });
       return done({ ok: true, accepted: true });
     case 'record.stop':
+      if (session.status !== 'recording' && session.status !== 'paused') {
+        return done({ ok: false, error: 'Es läuft keine Aufnahme.' });
+      }
       send('command', { action: 'record.stop' });
       return done({ ok: true, accepted: true });
     case 'record.pause':
@@ -353,11 +404,12 @@ net.on('command', ({ action, params, reply }) => {
     case 'record.resume':
       return done(session.resume());
     case 'record.toggle':
-      if (session.status === 'recording') {
+      // Auch eine pausierte Aufnahme wird beendet ("starten bzw. beenden").
+      if (session.status === 'recording' || session.status === 'paused') {
         send('command', { action: 'record.stop' });
         return done({ ok: true, accepted: true });
       }
-      send('command', { action: 'record.start' });
+      send('command', { action: 'record.start', remote: true });
       return done({ ok: true, accepted: true });
     case 'marker.add': {
       if (session.status !== 'recording' && session.status !== 'paused') {
@@ -424,8 +476,13 @@ ipcMain.handle('settings:set', (_e, patch) => {
         ? settings.encryptSecret(clean.churchToolsToken)
         : '';
     }
+    // Nur bei tatsächlich geänderten Werten neu starten – sonst fliegen Companion und Dashboards bei
+    // jedem Speichern kurz raus, auch mitten in der Aufnahme.
     const networkKeys = ['networkEnabled', 'networkPort', 'networkPassword', 'monitorPassword'];
-    const networkChanged = networkKeys.some((k) => k in clean);
+    const networkChanged = networkKeys.some((k) => k in clean && clean[k] !== settings.get(k));
+    if (('churchToolsUrl' in clean && clean.churchToolsUrl !== settings.get('churchToolsUrl')) || 'churchToolsToken' in clean) {
+      churchtools.resetCache();
+    }
     settings.save(clean);
     if (clean.recordingsDir) fs.mkdirSync(clean.recordingsDir, { recursive: true });
     if (networkChanged) {
@@ -439,13 +496,13 @@ ipcMain.handle('settings:set', (_e, patch) => {
   }
 });
 
-ipcMain.handle('settings:chooseFolder', async () => {
+ipcMain.handle('settings:chooseFolder', async (_e, { title } = {}) => {
+  // Nur auswählen – gespeichert wird erst mit "Einstellungen speichern" (der Dialog dient für mehrere Ordner).
   const res = await dialog.showOpenDialog(win, {
-    title: 'Ordner für Aufnahmen wählen',
+    title: title || 'Ordner wählen',
     properties: ['openDirectory', 'createDirectory']
   });
   if (res.canceled || !res.filePaths[0]) return ok({ canceled: true });
-  settings.save({ recordingsDir: res.filePaths[0] });
   return ok({ path: res.filePaths[0] });
 });
 
@@ -506,7 +563,7 @@ ipcMain.handle('agenda:applyTemplate', (_e, { templateId } = {}) => {
   return ok({ count: items.length, name: tpl.name });
 });
 
-ipcMain.handle('ct:agenda', async (_e, { eventId, name, date }) => {
+ipcMain.handle('ct:agenda', async (_e, { eventId, name, date } = {}) => {
   try {
     let plan;
     try {
@@ -549,8 +606,12 @@ ipcMain.handle('rec:start', (_e, { sampleRate, channels } = {}) => {
 ipcMain.handle('rec:continue', () => {
   try { return session.continueRecording(); } catch (err) { return fail(err); }
 });
-ipcMain.handle('rec:pause', () => session.pause());
-ipcMain.handle('rec:resume', () => session.resume());
+ipcMain.handle('rec:pause', () => {
+  try { return session.pause(); } catch (err) { return fail(err); }
+});
+ipcMain.handle('rec:resume', () => {
+  try { return session.resume(); } catch (err) { return fail(err); }
+});
 ipcMain.handle('rec:stop', () => {
   try { return session.stop(); } catch (err) { return fail(err); }
 });
@@ -567,12 +628,18 @@ ipcMain.handle('audio:read', (_e, { start, seconds } = {}) => {
   } catch (err) { return fail(err); }
 });
 
+let lastWriteErrorToast = 0;
 ipcMain.on('audio:chunk', (_e, arrayBuffer) => {
+  lastChunkAt = Date.now();
   try {
     session.pushAudio(Buffer.from(arrayBuffer));
   } catch (err) {
     console.error('Audioblock konnte nicht geschrieben werden:', err);
-    toast('error', 'Audio konnte nicht auf die Festplatte geschrieben werden.');
+    // Nicht alle 100 ms eine Meldung: höchstens alle 10 Sekunden.
+    if (Date.now() - lastWriteErrorToast > 10000) {
+      lastWriteErrorToast = Date.now();
+      toast('error', `Audio konnte nicht auf die Festplatte geschrieben werden: ${err.code || err.message}`);
+    }
   }
 });
 
@@ -594,14 +661,15 @@ ipcMain.on('health:input', (_e, { lost }) => {
 /* --- Abschnitte (je zwei Marker: Anfang und Ende) --- */
 
 ipcMain.handle('section:toggle', (_e, params) => session.toggleSection(params || {}));
-ipcMain.handle('section:start', (_e, { id, time }) => session.startPending(id, time));
+ipcMain.handle('section:start', (_e, { id, time } = {}) => session.startPending(id, time));
 ipcMain.handle('section:add', (_e, params) => session.addPending(params || {}));
-ipcMain.handle('section:reorder', (_e, { id, beforeId }) => session.reorderPending(id, beforeId));
-ipcMain.handle('section:place', (_e, { id, time }) => session.placePending(id, time));
+ipcMain.handle('section:reorder', (_e, { id, beforeId } = {}) => session.reorderPending(id, beforeId));
+ipcMain.handle('section:place', (_e, { id, time } = {}) => session.placePending(id, time));
 ipcMain.handle('section:next', (_e, { time } = {}) => session.startNextPending(time));
-ipcMain.handle('section:edge', (_e, { id, edge, time }) => ok({ section: session.moveEdge(id, edge, time) }));
-ipcMain.handle('section:update', (_e, { id, ...patch }) => ok({ section: session.updateSection(id, patch) }));
-ipcMain.handle('section:delete', (_e, { id }) => ok({ removed: session.removeSection(id) }));
+const found = (section) => (section ? ok({ section }) : fail('Abschnitt nicht gefunden.'));
+ipcMain.handle('section:edge', (_e, { id, edge, time } = {}) => found(session.moveEdge(id, edge, time)));
+ipcMain.handle('section:update', (_e, { id, ...patch } = {}) => found(session.updateSection(id, patch)));
+ipcMain.handle('section:delete', (_e, { id } = {}) => (session.removeSection(id) ? ok({ removed: true }) : fail('Abschnitt nicht gefunden.')));
 
 /* --- Export --- */
 
@@ -675,7 +743,7 @@ ipcMain.handle('export:batch', async (_e, { items } = {}) => {
         if (id) session.recordExport(id, { file: result.outPath, start, end, cuts });
         net.publishEvent('export.finished', { file: result.outPath, label });
       } catch (err) {
-        failed.push({ label, error: String(err?.message || err) });
+        failed.push({ id, label, error: String(err?.message || err) });
       }
     }
     send('export-progress', { progress: 1, index: items.length, total: items.length });
@@ -717,7 +785,8 @@ function listSessions() {
         sectionCount: Array.isArray(data.sections)
           ? data.sections.filter((x) => x.start != null).length
           : (data.markers || []).filter((m) => m.placed).length,
-        wavExists: data.wavPath ? fs.existsSync(data.wavPath) : false
+        // Wie beim Öffnen: verschobene Aufnahmen über den Namen neben der Session-Datei finden.
+        wavExists: (data.wavPath && fs.existsSync(data.wavPath)) || fs.existsSync(full.replace(/\.session\.json$/, '.wav'))
       };
     } catch {
       return null;
@@ -760,7 +829,7 @@ ipcMain.handle('net:restart', () => {
   return result.ok ? ok(net.statusInfo()) : fail(result.error);
 });
 
-ipcMain.handle('update:check', () => ok(updater.check()));
+ipcMain.handle('update:check', () => updater.check({ manual: true }));
 ipcMain.handle('update:install', () => {
   const result = updater.install();
   return result.ok ? ok() : fail(result.error);
@@ -806,7 +875,13 @@ if (!singleInstance) {
     }
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+      if (BrowserWindow.getAllWindows().length > 0) return;
+      createWindow();
+      // Beim Schließen des Fensters wurde die Netzwerkschnittstelle gestoppt (macOS: App läuft weiter).
+      if (settings.get('networkEnabled') && settings.get('networkPassword') && !net.statusInfo().running) {
+        const result = net.start();
+        if (!result.ok) console.warn('Netzwerkschnittstelle:', result.error);
+      }
     });
   });
 
@@ -821,6 +896,7 @@ if (!singleInstance) {
       e.preventDefault();
       return;
     }
+    session.flushSave();
     net.stop();
   });
 }

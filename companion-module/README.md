@@ -7,8 +7,9 @@ Aufnahmestatus auf den Tasten an.
 
 Companion lädt Module aus einem frei wählbaren Ordner für Entwicklermodule:
 
-1. In Companion unter **Settings → Developer modules path** einen Ordner
-   auswählen.
+1. Im **Startfenster von Companion** (dem kleinen Launcher-Fenster, nicht in der
+   Weboberfläche) über das Zahnrad bzw. die erweiterten Einstellungen den Ordner für
+   **Developer Modules** auswählen.
 2. Diesen Ordner hier hineinkopieren und die Abhängigkeiten installieren:
 
 ```bash
@@ -45,6 +46,17 @@ die Verbindung abbricht.
 | Schnitt starten / beenden | erster Druck beginnt einen Schnitt, der nächste beendet ihn; die Stelle fehlt in den MP3-Exporten |
 | Rückgängig / Wiederholen | letzte Änderung an Abschnitten oder Schnitten zurücknehmen bzw. wiederholen |
 | Vorlage für Programmpunkte laden | lädt eine Vorlage (Name, leer = Standardvorlage) und ersetzt die offenen Punkte |
+
+## Verbindung
+
+- Das Modul meldet sich mit dem **Steuer-Passwort** an. Wird stattdessen das Passwort
+  „nur zum Mitlesen" eingetragen, zeigt die Verbindung einen Hinweis: Status und
+  Variablen kommen an, die Tasten steuern aber nichts.
+- Bei falschem Passwort versucht das Modul es nicht endlos weiter, sondern erst wieder,
+  wenn die Einstellungen der Verbindung geändert werden.
+- Alle 10 Sekunden prüft das Modul, ob der Recorder noch antwortet. Fällt der
+  Aufnahmerechner weg, wird neu verbunden und die Tasten zeigen keinen veralteten
+  Zustand (z. B. „Aufnahme läuft") mehr an.
 
 ## Feedbacks
 

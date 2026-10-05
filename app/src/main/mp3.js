@@ -5,6 +5,7 @@ const wav = require('./wav');
 const { buildId3v2 } = require('./id3');
 
 let cachedEncoder = null;
+const READ_SECONDS = 30;   // so viele Sekunden werden beim Export jeweils aus der WAV gelesen
 
 /**
  * Lädt den MP3-Encoder. Das Paket wird nur als ES-Modul ausgeliefert,
@@ -70,65 +71,87 @@ async function exportSegment({ wavPath, start, end, outPath, bitrate = 192, tags
   const Mp3Encoder = await loadEncoder();
   const info = wav.readInfo(wavPath);
   const channels = info.channels;
-  const encoder = new Mp3Encoder(channels >= 2 ? 2 : 1, info.sampleRate, bitrate);
-  const totalFrames = pieces.reduce((sum, [a, b]) => sum + Math.round((b - a) * info.sampleRate), 0);
+  const rate = info.sampleRate;
+  const encoder = new Mp3Encoder(channels >= 2 ? 2 : 1, rate, bitrate);
+  // In Frames rechnen, damit aufeinanderfolgende Blöcke lückenlos und ohne Doppelungen aneinanderpassen.
+  const frameRanges = pieces.map(([a, b]) => [Math.round(a * rate), Math.round(b * rate)]).filter(([a, b]) => b > a);
+  const totalFrames = frameRanges.reduce((sum, [a, b]) => sum + (b - a), 0);
 
   const blockSize = 1152;
-  const out = fs.createWriteStream(outPath);
-  const id3 = buildId3v2(tags);
-  if (id3.length > 0) out.write(id3);
+  const readFrames = rate * READ_SECONDS;         // gelesen wird in Blöcken: kleiner Speicherbedarf auch bei Stunden
+  const fadeFrames = Math.round(rate * 0.006);    // 6 ms, damit Schnittstellen nicht knacken
+  const left = new Int16Array(blockSize);
+  const right = new Int16Array(blockSize);
 
+  const out = fs.createWriteStream(outPath);
+  let streamError = null;
+  out.on('error', (err) => { streamError = err; });
   const writeChunk = (chunk) => {
+    if (streamError) throw streamError;
     if (chunk && chunk.length > 0) out.write(Buffer.from(chunk));
   };
 
-  const left = new Int16Array(blockSize);
-  const right = new Int16Array(blockSize);
-  const fadeFrames = Math.round(info.sampleRate * 0.006);    // 6 ms, damit Schnittstellen nicht knacken
-  let framesDone = 0;
-  let blocks = 0;
+  try {
+    const id3 = buildId3v2(tags);
+    if (id3.length > 0) out.write(id3);
 
-  for (let p = 0; p < pieces.length; p++) {
-    // Teilstücke werden einzeln gelesen: so bleibt der Speicherbedarf klein.
-    const { samples } = wav.readSlice(wavPath, pieces[p][0], pieces[p][1]);
-    const frames = samples.length / channels;
-    if (pieces.length > 1) {
-      for (let f = 0; f < Math.min(fadeFrames, frames); f++) {
-        const gain = f / fadeFrames;
-        for (let c = 0; c < channels; c++) {
-          if (p > 0) samples[f * channels + c] *= gain;                           // Einblenden nach einem Schnitt
-          if (p < pieces.length - 1) samples[(frames - 1 - f) * channels + c] *= gain;   // Ausblenden vor einem Schnitt
+    let framesDone = 0;
+    let blocks = 0;
+    for (let p = 0; p < frameRanges.length; p++) {
+      const [pStart, pEnd] = frameRanges[p];
+      for (let f0 = pStart; f0 < pEnd; f0 += readFrames) {
+        const count = Math.min(readFrames, pEnd - f0);
+        const { samples } = wav.readFrames(wavPath, f0, count, info);
+        const frames = samples.length / channels;
+
+        if (frameRanges.length > 1) {
+          // Einblenden nach einem Schnitt, Ausblenden vor einem Schnitt
+          const fadeIn = p > 0 && f0 === pStart;
+          const fadeOut = p < frameRanges.length - 1 && f0 + count >= pEnd;
+          for (let f = 0; f < Math.min(fadeFrames, frames); f++) {
+            const gain = f / fadeFrames;
+            for (let c = 0; c < channels; c++) {
+              if (fadeIn) samples[f * channels + c] *= gain;
+              if (fadeOut) samples[(frames - 1 - f) * channels + c] *= gain;
+            }
+          }
         }
+
+        for (let i = 0; i < frames; i += blockSize) {
+          const n = Math.min(blockSize, frames - i);
+          for (let j = 0; j < n; j++) {
+            const base = (i + j) * channels;
+            left[j] = samples[base];
+            right[j] = channels >= 2 ? samples[base + 1] : samples[base];
+          }
+          const l = n === blockSize ? left : left.subarray(0, n);
+          const r = n === blockSize ? right : right.subarray(0, n);
+          writeChunk(channels >= 2 ? encoder.encodeBuffer(l, r) : encoder.encodeBuffer(l));
+
+          blocks += 1;
+          if (onProgress && blocks % 200 === 0) onProgress(Math.min(0.99, (framesDone + i) / totalFrames));
+          if (blocks % 400 === 0) await new Promise((r2) => setImmediate(r2));
+        }
+        framesDone += frames;
       }
     }
 
-    for (let i = 0; i < frames; i += blockSize) {
-      const n = Math.min(blockSize, frames - i);
-      for (let j = 0; j < n; j++) {
-        const base = (i + j) * channels;
-        left[j] = samples[base];
-        right[j] = channels >= 2 ? samples[base + 1] : samples[base];
-      }
-      const l = n === blockSize ? left : left.subarray(0, n);
-      const r = n === blockSize ? right : right.subarray(0, n);
-      writeChunk(channels >= 2 ? encoder.encodeBuffer(l, r) : encoder.encodeBuffer(l));
-
-      blocks += 1;
-      if (onProgress && blocks % 200 === 0) onProgress(Math.min(0.99, (framesDone + i) / totalFrames));
-      if (blocks % 400 === 0) await new Promise((r2) => setImmediate(r2));
-    }
-    framesDone += frames;
+    writeChunk(encoder.flush());
+    await new Promise((resolve, reject) => {
+      if (streamError) return reject(streamError);
+      out.once('error', reject);
+      out.end(resolve);
+    });
+  } catch (err) {
+    // Halbe Datei nicht liegen lassen (sonst landet der nächste Versuch unter "(2)").
+    out.destroy();
+    try { fs.unlinkSync(outPath); } catch { /* war nie angelegt */ }
+    throw err;
   }
-
-  writeChunk(encoder.flush());
-  await new Promise((resolve, reject) => {
-    out.end((err) => (err ? reject(err) : resolve()));
-    out.on('error', reject);
-  });
 
   if (onProgress) onProgress(1);
   const { size } = fs.statSync(outPath);
-  return { outPath, bytes: size, duration: totalFrames / info.sampleRate };
+  return { outPath, bytes: size, duration: totalFrames / rate };
 }
 
 module.exports = { exportSegment, keepRanges };

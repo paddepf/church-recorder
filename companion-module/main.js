@@ -6,7 +6,6 @@ class GottesdienstRecorderInstance extends InstanceBase {
 		this.config = config
 		this.state = null
 		this.msgId = 0
-		this.pending = new Map()
 
 		this.setActionDefinitions(this.buildActions())
 		this.setFeedbackDefinitions(this.buildFeedbacks())
@@ -19,6 +18,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 
 	async configUpdated(config) {
 		this.config = config
+		this.authFailed = false
 		this.disconnect()
 		this.connect()
 	}
@@ -89,7 +89,9 @@ class GottesdienstRecorderInstance extends InstanceBase {
 		}
 
 		this.ws.on('open', () => {
+			this.lastError = null
 			this.send({ type: 'auth', password: this.config.password })
+			this.startHeartbeat()
 		})
 
 		this.ws.on('message', (raw) => {
@@ -104,17 +106,61 @@ class GottesdienstRecorderInstance extends InstanceBase {
 
 		this.ws.on('close', () => {
 			this.authed = false
-			this.updateStatus(InstanceStatus.Disconnected)
+			this.stopHeartbeat()
+			this.clearState()
+			// Nach falschem Passwort nicht ständig neu versuchen: erst wieder nach Änderung der Einstellungen.
+			if (this.authFailed) return
+			// Eine konkrete Fehlermeldung (z. B. Verbindung abgelehnt) nicht mit "getrennt" überschreiben.
+			if (this.lastError) this.updateStatus(InstanceStatus.ConnectionFailure, this.lastError)
+			else this.updateStatus(InstanceStatus.Disconnected)
 			this.scheduleReconnect()
 		})
 
 		this.ws.on('error', (err) => {
 			this.log('debug', `WebSocket-Fehler: ${err.message}`)
+			this.lastError = err.message
 			this.updateStatus(InstanceStatus.ConnectionFailure, err.message)
 		})
 	}
 
+	/**
+	 * Eigener Herzschlag: Fällt der Aufnahmerechner hart weg (Strom, WLAN), bemerkt das ein offener
+	 * WebSocket sonst erst nach Minuten. Bleibt die Antwort auf ein ping aus, wird neu verbunden.
+	 */
+	startHeartbeat() {
+		this.stopHeartbeat()
+		this.awaitingPong = false
+		this.heartbeat = setInterval(() => {
+			if (this.awaitingPong) {
+				this.log('warn', 'Recorder antwortet nicht mehr – Verbindung wird neu aufgebaut.')
+				this.lastError = 'Recorder antwortet nicht'
+				try {
+					this.ws?.terminate()
+				} catch {
+					/* bereits zu */
+				}
+				return
+			}
+			this.awaitingPong = true
+			this.send({ type: 'ping', id: ++this.msgId })
+		}, 10000)
+	}
+
+	stopHeartbeat() {
+		if (this.heartbeat) clearInterval(this.heartbeat)
+		this.heartbeat = null
+		this.awaitingPong = false
+	}
+
+	/** Nach einer Trennung nichts Veraltetes anzeigen (z. B. rote "Aufnahme"-Taste). */
+	clearState() {
+		this.state = null
+		this.resetVariables()
+		this.checkFeedbacks()
+	}
+
 	disconnect() {
+		this.stopHeartbeat()
 		if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
 		this.reconnectTimer = null
 		if (this.ws) {
@@ -157,9 +203,18 @@ class GottesdienstRecorderInstance extends InstanceBase {
 			case 'auth':
 				if (msg.ok) {
 					this.authed = true
-					this.updateStatus(InstanceStatus.Ok)
+					if (msg.role === 'monitor') {
+						// Mit dem Mitlese-Passwort kommen Status und Variablen an, Befehle aber nicht.
+						this.updateStatus(InstanceStatus.BadConfig, 'Passwort ist nur zum Mitlesen – Tasten steuern nichts')
+					} else {
+						this.updateStatus(InstanceStatus.Ok)
+					}
 					this.send({ type: 'get_state', id: ++this.msgId })
 				}
+				break
+
+			case 'pong':
+				this.awaitingPong = false
 				break
 
 			case 'state':
@@ -184,9 +239,9 @@ class GottesdienstRecorderInstance extends InstanceBase {
 
 			case 'error':
 				if (msg.code === 'auth_failed') {
+					this.authFailed = true
 					this.updateStatus(InstanceStatus.AuthenticationFailure, 'Passwort ist falsch')
 					this.disconnect()
-					this.scheduleReconnect()
 				} else {
 					this.log('warn', `Recorder meldet: ${msg.message}`)
 				}
@@ -246,7 +301,8 @@ class GottesdienstRecorderInstance extends InstanceBase {
 			paused: 'pausiert',
 			stopped: 'beendet',
 		}
-		const pending = s.pending || []
+		// Offene Punkte in der Reihenfolge des Ablaufplans (die App sortiert nach "order")
+		const pending = (s.pending || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0))
 		this.setVariableValues({
 			status: labels[s.status] || s.status,
 			timecode: this.formatTime(s.duration || 0),
@@ -317,14 +373,14 @@ class GottesdienstRecorderInstance extends InstanceBase {
 					{
 						type: 'textinput',
 						id: 'label',
-						label: 'Bezeichnung (beim Start)',
-						default: 'Abschnitt',
+						label: 'Bezeichnung (beim Start, leer = automatisch nummeriert)',
+						default: '',
 						useVariables: true,
 					},
 				],
 				callback: async (action, context) => {
-					const label = await context.parseVariablesInString(action.options.label || 'Abschnitt')
-					this.command('marker.add', { label })
+					const label = (await context.parseVariablesInString(action.options.label || '')).trim()
+					this.command('marker.add', label ? { label } : {})
 				},
 			},
 			marker_next: {
@@ -416,7 +472,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				type: 'boolean',
 				name: 'Speicherplatz wird knapp (unter 3 Stunden)',
 				defaultStyle: {
-					bgcolor: combineRgb(230, 160, 0),
+					bgcolor: combineRgb(240, 120, 0),
 					color: combineRgb(0, 0, 0),
 				},
 				options: [],
@@ -446,7 +502,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				type: 'boolean',
 				name: 'Eingang übersteuert',
 				defaultStyle: {
-					bgcolor: combineRgb(230, 160, 0),
+					bgcolor: combineRgb(235, 210, 0),
 					color: combineRgb(0, 0, 0),
 				},
 				options: [],
@@ -458,6 +514,9 @@ class GottesdienstRecorderInstance extends InstanceBase {
 	/* ---------------------------------------------------------------- Presets */
 
 	buildPresets() {
+		// Boolean-Feedbacks brauchen in Presets einen eigenen Stil, sonst färbt sich die Taste nicht.
+		const feedbackDefs = this.buildFeedbacks()
+		const fb = (id) => ({ feedbackId: id, options: {}, style: { ...feedbackDefs[id].defaultStyle } })
 		const base = {
 			size: '14',
 			color: combineRgb(255, 255, 255),
@@ -471,7 +530,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				name: 'Aufnahme starten/beenden',
 				style: { ...base, text: 'REC\\n$(churchrecorder:timecode)' },
 				steps: [{ down: [{ actionId: 'record_toggle' }], up: [] }],
-				feedbacks: [{ feedbackId: 'recording' }],
+				feedbacks: [fb('recording')],
 			},
 			pause: {
 				type: 'button',
@@ -479,14 +538,14 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				name: 'Pause umschalten',
 				style: { ...base, text: 'Pause' },
 				steps: [{ down: [{ actionId: 'record_pause_toggle' }], up: [] }],
-				feedbacks: [{ feedbackId: 'paused' }],
+				feedbacks: [fb('paused')],
 			},
 			marker: {
 				type: 'button',
 				category: 'Abschnitte',
 				name: 'Abschnitt starten / beenden',
 				style: { ...base, text: 'Abschnitt\\nStart/Ende' },
-				steps: [{ down: [{ actionId: 'marker_add', options: { label: 'Abschnitt' } }], up: [] }],
+				steps: [{ down: [{ actionId: 'marker_add', options: { label: '' } }], up: [] }],
 				feedbacks: [],
 			},
 			marker_predigt: {
@@ -503,7 +562,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				name: 'Nächster Programmpunkt',
 				style: { ...base, text: 'Weiter\\n$(churchrecorder:next_item)' },
 				steps: [{ down: [{ actionId: 'marker_next' }], up: [] }],
-				feedbacks: [{ feedbackId: 'has_pending' }],
+				feedbacks: [fb('has_pending')],
 			},
 			cut: {
 				type: 'button',
@@ -511,7 +570,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				name: 'Schnitt starten / beenden',
 				style: { ...base, text: 'Schnitt\\nStart/Ende' },
 				steps: [{ down: [{ actionId: 'cut_toggle' }], up: [] }],
-				feedbacks: [{ feedbackId: 'cut_open' }],
+				feedbacks: [fb('cut_open')],
 			},
 			undo: {
 				type: 'button',
@@ -531,7 +590,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 					text: 'Eingang: $(churchrecorder:input_status)\\nSpeicher: $(churchrecorder:disk_free) GB\\n$(churchrecorder:disk_hours)',
 				},
 				steps: [{ down: [], up: [] }],
-				feedbacks: [{ feedbackId: 'input_problem' }, { feedbackId: 'disk_warn' }, { feedbackId: 'disk_low' }],
+				feedbacks: [fb('input_problem'), fb('disk_warn'), fb('disk_low')],
 			},
 			status: {
 				type: 'button',
@@ -543,7 +602,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 					text: '$(churchrecorder:status)\\n$(churchrecorder:timecode)\\n$(churchrecorder:current_item)',
 				},
 				steps: [{ down: [], up: [] }],
-				feedbacks: [{ feedbackId: 'recording' }],
+				feedbacks: [fb('recording')],
 			},
 		}
 	}

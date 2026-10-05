@@ -49,6 +49,7 @@
       this.onSelectSection = opts.onSelectSection || (() => {});
       this.onDropPending = opts.onDropPending || (() => {});
       this.onRenameSection = opts.onRenameSection || (() => {});
+      this.onFollowChange = opts.onFollowChange || (() => {});
       this.onCutAdd = opts.onCutAdd || (() => {});
       this.onCutMoveEnd = opts.onCutMoveEnd || (() => {});
       this.onCutRemove = opts.onCutRemove || (() => {});
@@ -91,6 +92,7 @@
     scrollTo(t, center = true) {
       this.scrollT = center ? t - this.viewSeconds / 2 : t;
       this.follow = false;
+      this.onFollowChange(false);
       this.clampScroll();
       this.draw();
     }
@@ -521,6 +523,7 @@
         if (this._panning) {
           this.scrollT = this._panning.startScroll - (x - this._panning.startX) / this.pxPerSec;
           this.follow = false;
+          this.onFollowChange(false);
           this.clampScroll();
           this.draw();
           return;
@@ -586,11 +589,14 @@
         e.preventDefault();
         const { x } = this._pos(e);
         if (e.ctrlKey || e.shiftKey) {
-          const factor = e.deltaY < 0 ? 1.2 : 1 / 1.2;
+          // Umschalt+Mausrad liefert auf dem Mac deltaX statt deltaY
+          const delta = e.deltaY || e.deltaX;
+          const factor = delta < 0 ? 1.2 : 1 / 1.2;
           this.setZoom(this.pxPerSec * factor, this.xToTime(x));
         } else {
           this.scrollT += (e.deltaY + e.deltaX) / this.pxPerSec;
           this.follow = false;
+          this.onFollowChange(false);
           this.clampScroll();
           this.draw();
         }

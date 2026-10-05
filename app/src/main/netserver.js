@@ -68,6 +68,9 @@ class NetServer extends EventEmitter {
 
     this.wss = new WebSocketServer({ server: this.http });
     this.wss.on('connection', (ws, req) => this._onConnection(ws, req));
+    // ws reicht Fehler des HTTP-Servers (z. B. Port belegt) als 'error' weiter. Ohne Listener würde das als
+    // unbehandelte Ausnahme den Hauptprozess treffen – die eigentliche Meldung macht der Handler unten.
+    this.wss.on('error', () => {});
 
     try {
       this.http.listen(cfg.networkPort);
@@ -198,6 +201,10 @@ class NetServer extends EventEmitter {
   _handle(ws, msg) {
     const info = this.clients.get(ws);
     if (!info) return;
+    // Gültiges JSON muss noch kein Objekt sein ("null", "42" …).
+    if (!msg || typeof msg !== 'object' || Array.isArray(msg)) {
+      return this._send(ws, { type: 'error', code: 'bad_json', message: 'Nachricht muss ein JSON-Objekt sein.' });
+    }
 
     if (msg.type === 'auth') return this._authenticate(ws, msg.password, msg.role);
     if (!info.authed) {

@@ -50,7 +50,13 @@ async function request(pathname, params) {
     err.status = res.status;
     throw err;
   }
-  const json = await res.json();
+  let json;
+  try {
+    json = await res.json();
+  } catch {
+    // z. B. eine HTML-Anmeldeseite bei falscher Adresse
+    throw new Error('ChurchTools hat keine gültige Antwort geliefert. Bitte die Adresse prüfen.');
+  }
   return json.data !== undefined ? json.data : json;
 }
 
@@ -202,4 +208,9 @@ async function eventServices(eventId, wanted) {
   return { suggestions: out, found: entries.length };
 }
 
-module.exports = { test, listServices, todaysServices, agenda, eventServices, isoDate };
+/** Zwischenspeicher leeren, z. B. nach geänderter Adresse oder geändertem Token. */
+function resetCache() {
+  servicesCache = null;
+}
+
+module.exports = { test, listServices, todaysServices, agenda, eventServices, resetCache, isoDate };

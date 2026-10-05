@@ -60,8 +60,8 @@
       <button id="btn-play" class="secondary" disabled title="Abspielen bzw. während der Aufnahme ab dem Cursor mithören (Leertaste)">Abspielen</button>
       <label class="follow"><input type="checkbox" id="chk-follow" checked /> Ansicht folgt</label>
       <div class="zoom">
-        <button id="btn-zoom-out" class="icon" title="Herauszoomen">−</button>
-        <button id="btn-zoom-in" class="icon" title="Hineinzoomen">+</button>
+        <button id="btn-zoom-out" class="icon" title="Herauszoomen" aria-label="Herauszoomen">−</button>
+        <button id="btn-zoom-in" class="icon" title="Hineinzoomen" aria-label="Hineinzoomen">+</button>
       </div>
     </div>
     <canvas id="wave" class="wave"></canvas>
@@ -76,7 +76,7 @@
       <ol id="pending-list" class="pending"></ol>
       <div class="add-row">
         <input id="plan-new" type="text" placeholder="Neuer Punkt" aria-label="Neuen Programmpunkt hinzufügen" />
-        <button id="btn-plan-add" class="secondary" title="Punkt am Ende des Ablaufplans hinzufügen">+</button>
+        <button id="btn-plan-add" class="secondary" title="Punkt am Ende des Ablaufplans hinzufügen" aria-label="Punkt hinzufügen">+</button>
       </div>
     </div>
 
@@ -109,7 +109,7 @@
     <button id="btn-all-keys" class="mini-link" title="Alle Kürzel anzeigen (?)">alle Kürzel (?)</button>
   </footer>
 
-  <div id="toasts" class="toasts"></div>
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
   <audio id="player" preload="none"></audio>
 
   <!-- Einstellungen -->
@@ -183,7 +183,7 @@
             <input id="set-ct-services" type="text" />
             <small>Namen der Dienste in der ChurchTools-Dienstplanung, durch Komma getrennt. Die dort eingetragenen Personen erscheinen beim Bearbeiten eines Abschnitts als Vorschlag zum Anklicken.</small>
           </label>
-          <label class="check"><input type="checkbox" id="set-ct-auto" /> Beim Start den heutigen Gottesdienst vorschlagen</label>
+          <label class="check"><input type="checkbox" id="set-ct-auto" /> Beim Start den heutigen Gottesdienst laden</label>
           <button id="btn-ct-test" class="secondary">Verbindung prüfen</button>
           <span id="ct-test-result" class="inline-result"></span>
         </fieldset>
@@ -280,7 +280,6 @@
     </div>
   </div>
 
-  <!-- Texteingabe (ersetzt window.prompt, das Electron nicht unterstützt) -->
   <!-- Alle Tastenkürzel -->
   <div id="modal-keys" class="modal" hidden>
     <div class="modal-card narrow">

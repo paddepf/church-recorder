@@ -75,11 +75,12 @@
 
     wave = new window.Waveform($('wave'), {
       colors: readColors(),
-      onEdgeMove: () => renderLists(),
+      onEdgeMove: () => {},       // Listen erst nach dem Loslassen aktualisieren
       onEdgeMoveEnd: async (id, edge, time) => {
         await window.api.section.moveEdge(id, edge, time);
       },
       onSeek: (t) => setPlayhead(t, true),
+      onFollowChange: (on) => { $('chk-follow').checked = on; },
       onCutAdd: async (start, end) => {
         const res = await window.api.cut.add(start, end);
         if (!res.ok) toast('warn', res.error);
@@ -118,6 +119,15 @@
     if (st.ok) {
       applyState(st.state, st.peaks);
       if (st.state.status === 'stopped') fitZoom();
+    }
+
+    // Die Oberfläche wurde mitten in einer Aufnahme neu geladen (Absturz o. Ä.): Die Aufnahme läuft im
+    // Hauptprozess weiter, nur die Erfassung fehlt – sofort wieder mit dem Eingang verbinden.
+    if (isLive()) {
+      state.lastChunkAt = 0;
+      toast('warn', 'Die Oberfläche wurde neu geladen – der Audioeingang wird wieder verbunden.', 8000);
+      recoverCapture();
+      return;
     }
 
     await checkRecovery();
@@ -258,14 +268,18 @@
 
   /* --------------------------------------------------------------- Aufnahme */
 
-  async function startRecording() {
+  /** @param {{remote?: boolean}} [opts] remote: per Fernsteuerung (Companion) – ohne Rückfrage am PC */
+  async function startRecording(opts = {}) {
     if (state.starting) return;
     if (state.session && (state.session.status === 'recording' || state.session.status === 'paused')) return;
     state.starting = true;
 
     try {
-      // Eine angezeigte, beendete Aufnahme würde sonst aus der Ansicht verschwinden.
-      if (state.session?.status === 'stopped' && state.session.wavPath) {
+      // Eine angezeigte, beendete Aufnahme würde sonst aus der Ansicht verschwinden. Per Fernsteuerung
+      // nicht nachfragen (niemand am PC); die Datei bleibt ohnehin gespeichert.
+      if (opts.remote && state.session?.status === 'stopped' && state.session.wavPath) {
+        toast('info', 'Neue Aufnahme per Fernsteuerung gestartet – die vorherige ist gespeichert und unter „Aufnahmen“ zu finden.', 8000);
+      } else if (state.session?.status === 'stopped' && state.session.wavPath) {
         const sections = (state.session.sections || []).filter((x) => x.start != null).length;
         const go = await confirmDialog(
           'Neue Aufnahme starten?',
@@ -283,9 +297,13 @@
           toast('warn', `Wenig Speicherplatz: nur noch für ca. ${formatHours(hours)} Aufnahme.`, 12000);
         }
       });
+      // Eine noch laufende Erfassung stammt nie von einer aktiven Aufnahme (deren Status wurde oben geprüft):
+      // schließen, damit capture.start() wirklich neu öffnet und eine Abtastrate liefert.
+      if (capture.running) await capture.stop();
       const result = await capture.start(state.settings.inputDeviceId, state.settings.sampleRate);
       state.sampleRate = result.sampleRate;
       state.lastChunkAt = Date.now();
+      warnDeviceFallback(result);
 
       const rec = await window.api.record.start({ sampleRate: result.sampleRate, channels: 2 });
       if (!rec.ok) {
@@ -293,6 +311,12 @@
         toast('error', rec.error || 'Die Aufnahme konnte nicht gestartet werden.');
         return;
       }
+      // Status sofort lokal setzen: Die Statusmeldung aus dem Hauptprozess kommt leicht verzögert, ein
+      // zweiter Startbefehl (Doppeldruck, Companion) würde sonst die laufende Erfassung beenden.
+      if (state.session) state.session.status = 'recording';
+      state.exportSeen.clear();
+      state.exportChecked.clear();
+      $('player').pause();
 
       state.peaks = [];
       state.bucketAcc = 0;
@@ -351,7 +375,8 @@
     showAudioWarning(true, 'Kein Audiosignal – der Eingang wird neu verbunden …', 'lost');
     toast('error', 'Der Audioeingang liefert keine Daten mehr – er wird neu verbunden.', 8000);
     try {
-      while (state.session?.status === 'recording') {
+      // Auch in der Pause weiter versuchen: Sonst bliebe der Eingang nach "Fortsetzen" stumm.
+      while (isLive()) {
         await Promise.race([capture.stop(), sleep(2000)]);
         try {
           const rate = state.session.sampleRate;
@@ -361,8 +386,9 @@
             await capture.stop();
             throw new Error(`Eingang läuft mit ${result.sampleRate} Hz statt ${rate} Hz.`);
           }
+          warnDeviceFallback(result);
           await sleep(1500);
-          if (state.session?.status !== 'recording') { await capture.stop(); return; }
+          if (!isLive()) { await capture.stop(); return; }
           if (state.chunkSeq > before) {
             const lost = Math.round((Date.now() - lostSince) / 1000);
             toast('success', `Audioeingang wieder verbunden. Etwa ${lost} s fehlen in der Aufnahme.`, 10000);
@@ -382,9 +408,22 @@
   }
 
   setInterval(() => {
-    if (state.session?.status !== 'recording' || state.starting || state.recovering || !capture.running) return;
-    if (Date.now() - state.lastChunkAt > WATCHDOG_MS) recoverCapture();
+    if (state.session?.status !== 'recording' || state.starting || state.recovering) return;
+    // Erfassung läuft nicht (z. B. nach Neuladen der Oberfläche) oder liefert keine Daten mehr.
+    if (!capture.running || Date.now() - state.lastChunkAt > WATCHDOG_MS) recoverCapture();
   }, 1000);
+
+  function isLive() {
+    const st = state.session?.status;
+    return st === 'recording' || st === 'paused';
+  }
+
+  /** Ist das gewählte Gerät nicht verfügbar, nimmt der Browser still den Standardeingang – das deutlich melden. */
+  function warnDeviceFallback(result) {
+    if (result && result.deviceFallback) {
+      toast('error', `Das gewählte Eingangsgerät ist nicht verfügbar – aufgenommen wird über „${result.deviceLabel || 'Standardeingang'}“. Bitte prüfen!`, 15000);
+    }
+  }
 
   /** Hängt eine neue Aufnahme an die beendete an (gleiche Datei, gleiche Abschnitte). */
   async function continueRecording() {
@@ -445,7 +484,10 @@
   capture.onChunk = (arrayBuffer) => {
     state.lastChunkAt = Date.now();
     state.chunkSeq += 1;
-    // In der Pause läuft die Erfassung weiter, es wird aber nichts aufgezeichnet.
+    // Immer an den Hauptprozess geben: Er entscheidet selbst, ob aufgenommen wird. (Der lokale Status hinkt
+    // nach "Fortsetzen" etwas hinterher – sonst gingen dort Sekundenbruchteile verloren.)
+    window.api.record.chunk(arrayBuffer);
+    // In der Pause wächst die Wellenform nicht.
     if (state.session?.status === 'paused') return;
     // Peaks lokal mitrechnen, damit die Wellenform ohne Zusatzverkehr wächst.
     const view = new Int16Array(arrayBuffer);
@@ -459,7 +501,6 @@
         state.bucketFrames = 0;
       }
     }
-    window.api.record.chunk(arrayBuffer);
   };
 
   capture.onError = (message) => toast('error', message);
@@ -486,8 +527,8 @@
       li.style.setProperty('--hue', window.sectionHue(x));
       li.draggable = true;
       li.innerHTML = `<span class="label"></span>
-        <button class="mini" data-rename title="Name und Interpret bearbeiten">✎</button>
-        <button class="mini" data-remove title="Punkt aus dem Ablaufplan entfernen">×</button>`;
+        <button class="mini" data-rename title="Name und Interpret bearbeiten" aria-label="Name und Interpret bearbeiten">✎</button>
+        <button class="mini" data-remove title="Punkt aus dem Ablaufplan entfernen" aria-label="Punkt aus dem Ablaufplan entfernen">×</button>`;
       // Klick auf den Punkt beginnt ihn jetzt (nur während der Aufnahme); Ziehen auf die Wellenform bleibt möglich.
       li.classList.toggle('clickable', live);
       li.title = live
@@ -522,7 +563,9 @@
         li.classList.remove('drop-before', 'drop-after');
         if (!dragged || dragged === x.id) return;
         e.preventDefault();
-        const next = before ? x.id : (li.nextElementSibling?.dataset.id || null);
+        let nextEl = li.nextElementSibling;
+        if (nextEl && nextEl.dataset.id === dragged) nextEl = nextEl.nextElementSibling;   // der gezogene Punkt selbst
+        const next = before ? x.id : (nextEl?.dataset.id || null);
         await window.api.section.reorder(dragged, next);
       });
       li.dataset.id = x.id;
@@ -544,8 +587,8 @@
       li.dataset.hue = '';
       li.style.setProperty('--hue', window.sectionHue(x));
       li.innerHTML = `<span class="time"></span><span class="label"></span>
-        <button class="mini" data-rename title="Name und Interpret bearbeiten">✎</button>
-        <button class="mini" data-remove title="Entfernen">×</button>`;
+        <button class="mini" data-rename title="Name und Interpret bearbeiten" aria-label="Name und Interpret bearbeiten">✎</button>
+        <button class="mini" data-remove title="Abschnitt entfernen (Ablaufpunkte gehen zurück in den Ablaufplan)" aria-label="Abschnitt entfernen">×</button>`;
       li.querySelector('.time').textContent = `${fmt(x.start)} – ${x.end != null ? fmt(x.end) : 'läuft'}`;
       li.querySelector('.label').textContent = x.label;
       li.dataset.id = x.id;
@@ -590,7 +633,9 @@
   function editSection(id, focus = 'name', anchor) {
     const x = (state.session?.sections || []).find((y) => y.id === id);
     if (!x || state.inlineEdit) return;
-    if (!anchor) {
+    // Die Liste kann sich inzwischen neu aufgebaut haben (Klick vor dem Doppelklick): dann ist das alte
+    // Element weg und hat keine Größe – die aktuelle Zeile suchen.
+    if (!anchor || !anchor.width) {
       const row = document.querySelector(`#marker-list .item[data-id="${id}"], #pending-list .item[data-id="${id}"]`);
       if (!row) return;
       anchor = row.getBoundingClientRect();
@@ -676,6 +721,7 @@
 
     if (segments.length === 0) {
       list.innerHTML = '<div class="empty">Abschnitt starten und beenden, um ihn zu exportieren.</div>';
+      $('export-target').textContent = '';
       $('btn-export').disabled = true;
       updateExportButton();
       return;
@@ -736,7 +782,7 @@
   }
 
   function updateExportButton() {
-    const canExport = state.session?.status === 'stopped';
+    const canExport = state.session?.status === 'stopped' && !state.exporting;
     const n = $('export-list').querySelectorAll('input:checked').length;
     $('btn-export').disabled = !canExport || n === 0;
     $('btn-export').textContent = n > 1 ? `${n} Ausgewählte als MP3 speichern` : 'Ausgewählte als MP3 speichern';
@@ -825,7 +871,10 @@
 
     $('btn-zoom-in').addEventListener('click', () => wave.setZoom(wave.pxPerSec * 1.5));
     $('btn-zoom-out').addEventListener('click', () => wave.setZoom(wave.pxPerSec / 1.5));
-    $('chk-follow').addEventListener('change', (e) => { wave.follow = e.target.checked; });
+    $('chk-follow').addEventListener('change', (e) => {
+      wave.follow = e.target.checked;
+      e.target.blur();          // Fokus zurückgeben, damit die Tastenkürzel weiter greifen
+    });
 
     const player = $('player');
     $('btn-play').addEventListener('click', togglePlayback);
@@ -845,7 +894,7 @@
       input.focus();
     };
     $('btn-plan-add').addEventListener('click', addPlanPoint);
-    $('plan-template').addEventListener('change', (e) => applyPlanTemplate(e.target.value));
+    $('plan-template').addEventListener('change', (e) => { e.target.blur(); applyPlanTemplate(e.target.value); });
     $('plan-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addPlanPoint(); } });
     // Auf den freien Platz unter der Liste ziehen: ans Ende sortieren.
     $('pending-list').addEventListener('dragover', (e) => {
@@ -879,9 +928,9 @@
     $(id).hidden = false;
     // Geräte können seit dem Start ein- oder ausgesteckt worden sein.
     if (id === 'modal-settings') {
+      // Ohne Speichern geschlossene Änderungen verwerfen: immer die gespeicherten Werte zeigen.
+      applySettingsToForm();
       refreshDevices();
-      loadTemplatesDraft();
-      renderTemplateEditor();
     }
   }
 
@@ -941,21 +990,33 @@
 
   function bindShortcuts() {
     document.addEventListener('keydown', (e) => {
-      const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName);
+      // Nur echte Texteingaben ausnehmen; Checkboxen dürfen die Kürzel nicht blockieren.
+      const t = e.target;
+      const textTypes = ['text', 'password', 'number', 'date', 'search', 'email', 'url'];
+      const typing = t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || (t.tagName === 'INPUT' && textTypes.includes(t.type));
       if (typing) return;
-      // Während eines geöffneten Dialogs keine Kürzel auslösen.
-      if (document.querySelector('.modal:not([hidden])')) return;
+      // Esc schließt einen offenen Dialog, "?" schließt die Kürzelliste wieder.
+      const openModalEl = document.querySelector('.modal:not([hidden])');
+      if (openModalEl) {
+        if (e.key === 'Escape' || (e.key === '?' && openModalEl.id === 'modal-keys')) {
+          e.preventDefault();
+          openModalEl.hidden = true;
+        }
+        return;
+      }
+      // Gehaltene Tasten nicht wiederholen: sonst starten und beenden sich Abschnitte im Wechsel.
+      if (e.repeat) return;
 
       if (e.ctrlKey && e.key.toLowerCase() === 'r') {
         e.preventDefault();
-        if (state.session?.status === 'recording') stopRecording(); else startRecording();
+        if (isLive()) stopRecording(); else startRecording();
         return;
       }
-      if (e.key.toLowerCase() === 'm' && !e.ctrlKey) {
+      if (e.key.toLowerCase() === 'm' && !e.ctrlKey && !e.metaKey) {
         if (!$('btn-marker').disabled) { e.preventDefault(); $('btn-marker').click(); }
         return;
       }
-      if (e.key.toLowerCase() === 'n' && !e.ctrlKey) {
+      if (e.key.toLowerCase() === 'n' && !e.ctrlKey && !e.metaKey) {
         if (!$('btn-next-item').disabled) { e.preventDefault(); $('btn-next-item').click(); }
         return;
       }
@@ -1012,8 +1073,8 @@
 
     window.api.on('toast', ({ level, message }) => toast(level, message));
 
-    window.api.on('command', ({ action }) => {
-      if (action === 'record.start') startRecording();
+    window.api.on('command', ({ action, remote }) => {
+      if (action === 'record.start') startRecording({ remote });
       if (action === 'record.stop') stopRecording();
     });
 
@@ -1021,7 +1082,7 @@
     window.api.on('menu', ({ action }) => {
       if (action === 'settings') openModal('modal-settings');
       if (action === 'toggle-record') {
-        if (state.session?.status === 'recording') stopRecording(); else startRecording();
+        if (isLive()) stopRecording(); else startRecording();
       }
       if (action === 'undo' || action === 'redo') {
         // In einem Textfeld wirkt Rückgängig dort, sonst auf Abschnitte und Schnitte.
@@ -1081,6 +1142,7 @@
       .map((seg) => ({ id: seg.id, start: seg.start, end: seg.end, label: seg.label }));
     if (items.length === 0) return;
 
+    state.exporting = true;            // verhindert einen zweiten, parallelen Export
     $('btn-export').disabled = true;
     $('export-result').textContent = `MP3 1 von ${items.length} wird erstellt …`;
     try {
@@ -1093,13 +1155,16 @@
       } else {
         // Gesicherte Abschnitte sind danach nicht mehr vorausgewählt.
         items.forEach((item) => {
-          if (!res.failed.some((f) => f.label === item.label)) state.exportChecked.delete(item.id);
+          if (!res.failed.some((f) => f.id === item.id)) state.exportChecked.delete(item.id);
         });
         const n = res.files.length;
-        $('export-result').innerHTML = `${n} von ${items.length} MP3-Dateien gespeichert. <a data-reveal>Im Ordner zeigen</a>`;
-        const first = res.files[0];
-        $('export-result').querySelector('[data-reveal]').addEventListener('click',
-          () => window.api.app.reveal(first || res.folder));
+        if (n > 0) {
+          $('export-result').innerHTML = `${n} von ${items.length} MP3-Dateien gespeichert. <button type="button" class="mini-link" data-reveal>Im Ordner zeigen</button>`;
+          $('export-result').querySelector('[data-reveal]').addEventListener('click',
+            () => window.api.app.reveal(res.files[0]));
+        } else {
+          $('export-result').textContent = 'Keine MP3-Datei gespeichert.';
+        }
         if (res.failed.length) {
           toast('error', `Nicht exportiert: ${res.failed.map((f) => `${f.label} (${f.error})`).join('; ')}`, 12000);
         } else {
@@ -1107,6 +1172,7 @@
         }
       }
     } finally {
+      state.exporting = false;
       renderSegments();
     }
   }
@@ -1132,7 +1198,7 @@
       { keys: ['Umschalt', 'Ziehen'], text: 'In der Wellenform: Schnitt aufziehen (fehlt im MP3)' },
       { keys: ['Doppelklick'], text: 'Auf einen Schnitt: Schnitt entfernen' },
       { keys: ['Mausrad'], text: 'Wellenform scrollen' },
-      { keys: [mod, 'Mausrad'], text: 'Wellenform zoomen' },
+      { keys: ['Strg', 'Mausrad'], text: 'Wellenform zoomen (auch Zwei-Finger-Zoom auf dem Trackpad)' },
       { keys: ['F12'], text: 'Entwicklerwerkzeuge (nur Dev-Modus)' }
     ];
   }
@@ -1621,11 +1687,11 @@
       if (opt) opt.textContent = $('tpl-name').value || 'Ohne Namen';
     });
     $('btn-choose-dir').addEventListener('click', async () => {
-      const res = await window.api.settings.chooseFolder();
+      const res = await window.api.settings.chooseFolder('Ordner für Aufnahmen wählen');
       if (res.ok && res.path) $('set-dir').value = res.path;
     });
     $('btn-choose-export-dir').addEventListener('click', async () => {
-      const res = await window.api.settings.chooseFolder();
+      const res = await window.api.settings.chooseFolder('Oberordner für MP3-Exporte wählen');
       if (res.ok && res.path) $('set-export-dir').value = res.path;
     });
     $('btn-clear-export-dir').addEventListener('click', () => { $('set-export-dir').value = ''; });

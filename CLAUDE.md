@@ -83,8 +83,8 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   zählt als Ablaufplan: Beim Entfernen eines gesetzten Abschnitts geht er zurück in den Plan, bei einer neuen
   Aufnahme werden die Plan-Punkte wieder offen (`manual` entfällt).
 - Meldet ChurchTools für `/agenda` einen 404 (`err.status`) oder liefert keine Punkte, nutzt `ct:agenda` die
-  Einstellung `defaultAgenda` (Standard: Einleitung, Kinderbeitrag, Predigt, Abschluss; Editor unter
-  Einstellungen) und meldet `usedDefaults`. Der Termin wird dabei trotzdem gesetzt. `session:service` (ohne
+  Standardvorlage aus `agendaTemplates`/`defaultTemplateId` (siehe „Vorlagen“ unten; Vorgabe: Einleitung,
+  Kinderbeitrag, Predigt, Abschluss) und meldet `usedDefaults`. Der Termin wird dabei trotzdem gesetzt. `session:service` (ohne
   ChurchTools) trägt die Standardpunkte ein, wenn noch keine Abschnitte existieren.
 - Ablaufplan-Kachel: Punkt hinzufügen (`section:add`), entfernen (`section:delete`), umsortieren per Drag in der
   Liste (`section:reorder`, setzt `order` der offenen Punkte neu). Dieselbe Drag-Quelle (`text/marker-id`) dient
@@ -106,6 +106,28 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   **Die genaue Antwortform von ChurchTools wurde nicht gegen eine echte Instanz geprüft** (nur mit nachgebauten
   Antworten); bei Abweichungen die echte Antwort ansehen und `eventServices` anpassen. Fehler beim Lesen stören
   den Termin-Import nicht (Hinweis per Toast, `suggestionError`).
+
+### Absicherung der Aufnahme (Review Oktober 2026)
+- Die Audioerfassung lebt im Renderer. Deshalb: kein „Neu laden“ im Mac-Menü (lag auf Cmd+R), Live-Reload des
+  Renderers nicht während einer Aufnahme, und bei `render-process-gone` wird neu geladen. `init()` erkennt eine
+  laufende Aufnahme und verbindet den Eingang sofort wieder (`recoverCapture`). Der Wächter im Renderer greift
+  auch, wenn `capture.running` falsch ist; zusätzlich meldet der Hauptprozess `health.input = 'lost'`, wenn 5 s
+  lang kein `audio:chunk` kommt (`chunksStale`). `recoverCapture` versucht es auch in der Pause weiter.
+- `process.on('uncaughtException')` protokolliert nur (Electrons Fehlerdialog würde den Hauptprozess blockieren).
+  Netzwerk: Nachrichten, die kein JSON-Objekt sind, werden abgewiesen; `wss.on('error')` fängt Port-Fehler.
+- Speichern: Während der Aufnahme Autosave (3 s bei Änderungen, sonst alle 30 s für Wellenform/Dauer), danach
+  gebündelt 800 ms nach jeder Änderung (`_scheduleSave`), `flushSave()` vor Laden/Neustart/Beenden. Session-Datei
+  entsteht sofort beim Start. Eine geöffnete unterbrochene Aufnahme wird als wiederhergestellt gespeichert.
+  Einstellungen werden atomar geschrieben (`.tmp` + `rename`).
+- `start()` legt zuerst die WAV-Datei an; scheitert das, bleibt die angezeigte Aufnahme unverändert.
+- WAV: Header-Größen werden bei 4 GB gedeckelt (kein Fehler mehr nach gut 6 h), ab 3,8 GB eine Warnung;
+  `writeSync` schreibt bei Teil-Schreibvorgängen den Rest nach. MP3-Export liest blockweise (30 s,
+  `wav.readFrames`), räumt bei Fehlern die halbe Datei weg.
+- Fernstart (`record.start` von Companion) startet ohne Rückfrage (`remote: true`); `record.toggle` beendet auch
+  eine pausierte Aufnahme. Startbefehle setzen den Status lokal sofort auf `recording`, damit ein Doppeldruck die
+  laufende Erfassung nicht beendet. Gehaltene Tasten (`e.repeat`) werden ignoriert.
+- Einstellungen speichern startet die Netzwerkschnittstelle nur bei geänderten Werten neu. `settings:chooseFolder`
+  wählt nur aus (speichert nichts). Der Updater sucht während einer Aufnahme nicht automatisch.
 
 ### Rückgängig, Schnitte, Vorlagen, Health
 - **Rückgängig:** `Session._changed()` vergleicht `JSON({sections, cuts})` mit dem letzten Stand und legt
@@ -205,7 +227,7 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 ### Entwicklung
 - `npm run dev` startet neu bei Änderungen im Hauptprozess, **außer während einer
   Aufnahme** (dann nur ein Hinweis). Änderungen am Renderer laden die Oberfläche
-  sofort neu. Nach Änderungen an `main`/`preload`/`shared` also App neu starten:
+  sofort neu – ebenfalls **nicht während einer Aufnahme** (die Audioerfassung läuft in der Oberfläche). Nach Änderungen an `main`/`preload`/`shared` also App neu starten:
   `pkill -f "church-recorder/app/node_modules/[e]lectron"; cd app && npm run dev`
   (die Klammer in `[e]lectron` verhindert, dass pkill sich selbst beendet).
 - Claude öffnet für den Neustart einen Terminal-Tab (`run_in_terminal`); davon sind höchstens

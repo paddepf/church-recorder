@@ -147,7 +147,8 @@ daneben speichert ebenfalls.
 
 - **Rückgängig / Wiederholen:** `Strg`/`Cmd` + `Z` nimmt die letzte Änderung an Abschnitten oder Schnitten
   zurück (Marke gesetzt, verschoben, gelöscht, umbenannt …), `Umschalt` + `Strg`/`Cmd` + `Z` bzw. `Strg` + `Y`
-  stellt sie wieder her. Bis zu 60 Schritte; mit „Beenden" beginnt der Verlauf neu. In Eingabefeldern wirkt
+  stellt sie wieder her. Bis zu 60 Schritte; auch das Laden einer Vorlage oder eines Ablaufplans lässt sich
+  zurücknehmen. Mit „Beenden", einer neuen Aufnahme oder dem Öffnen einer anderen beginnt der Verlauf neu. In Eingabefeldern wirkt
   Rückgängig wie gewohnt auf den Text.
 - **Schnitte (Stellen, die im MP3 fehlen sollen):** Ein Husten oder eine Störung mitten im Abschnitt lässt sich
   auslassen, ohne die Aufnahme zu verändern. Während der Aufnahme beginnt `X` einen Schnitt und beendet ihn
@@ -180,8 +181,8 @@ In der Kachel **Ablaufplan** lässt sich die Liste jederzeit anpassen:
 ### Oberfläche rund um die Wellenform
 
 Die Wellenform zeigt beim Start und bei jeder neuen oder fortgesetzten Aufnahme
-standardmäßig **5 Minuten** auf einmal; mit `+`/`−` oder `Strg` + Mausrad lässt sich
-zoomen. Eine beendete oder geöffnete Aufnahme wird komplett eingepasst. Lange
+standardmäßig **5 Minuten** auf einmal; mit den Knöpfen `+`/`−`, `Strg` + Mausrad oder
+`Umschalt` + Mausrad lässt sich zoomen. Eine beendete oder geöffnete Aufnahme wird komplett eingepasst. Lange
 Abschnittsnamen werden an der Marke mit „…“ gekürzt, damit sich Beschriftungen
 nicht überlappen; weiter hineinzoomen zeigt mehr vom Namen.
 
@@ -197,14 +198,19 @@ Meldung während der Aufnahme).
 
 | Taste | Wirkung |
 |---|---|
-| `Strg` + `R` (macOS: `Cmd` + `R`) | Aufnahme starten bzw. beenden |
+| `Strg` + `R` (macOS: `Cmd` + `R`) | Aufnahme starten bzw. beenden (auch eine pausierte) |
 | `M` | Abschnitt starten bzw. beenden (Anfangs-/Endmarke setzen) |
 | `N` | Laufenden Abschnitt beenden und nächsten Ablaufpunkt beginnen |
-| `F2` | Gewählten Abschnitt umbenennen |
-| `?` | Alle Tastenkürzel anzeigen |
+| `X` | Schnitt starten bzw. beenden (Stelle fehlt im MP3) |
+| `Strg`/`Cmd` + `Z` | Rückgängig; `Umschalt` + `Strg`/`Cmd` + `Z` oder `Strg` + `Y`: Wiederholen |
+| `F2` | Gewählten Abschnitt bearbeiten (Name und Interpret) |
+| `?` | Alle Tastenkürzel anzeigen (nochmal `?` oder `Esc` schließt) |
+| `Esc` | Offenen Dialog schließen |
 | `Leertaste` | Abspielen/Pause; während der Aufnahme: Mithören ab dem Hörcursor |
 | Mausrad | auf der Wellenform scrollen |
-| `Strg` + Mausrad | zoomen |
+| `Strg` + Mausrad oder `Umschalt` + Mausrad | zoomen |
+
+Gehaltene Tasten wiederholen nicht (sonst würden sich z. B. Abschnitte im Wechsel starten und beenden).
 
 ## Netzwerkschnittstelle
 
@@ -214,8 +220,7 @@ Kurz: `ws://<rechner>:8765/`, Anmeldung mit
 `{"type":"auth","password":"…"}`, danach kommen `state`- und `levels`-Nachrichten.
 Für eine reine Statusabfrage genügt `http://<rechner>:8765/health`.
 
-Das Companion-Modul liegt im Nachbarordner
-`companion-module-churchrecorder`.
+Das Companion-Modul liegt im Ordner `companion-module/` dieses Repositorys.
 
 ## Updates
 
@@ -229,11 +234,15 @@ wird spätestens beim nächsten regulären Beenden eingespielt.
 
 ### Neue Version veröffentlichen
 
-1. In `package.json` bei `build.publish` `owner` und `repo` eintragen.
-2. Version erhöhen: `npm version patch` (oder `minor` / `major`).
-3. Ein GitHub-Token mit Repo-Rechten als `GH_TOKEN` setzen und
-   `npm run publish` ausführen – oder den Tag pushen und den mitgelieferten
-   Workflow (`.github/workflows/release.yml`) bauen lassen.
+1. Im Ordner `app/` die Version erhöhen: `npm version patch --no-git-tag-version`
+   (oder `minor` / `major`). Weil das Git-Repository eine Ebene höher liegt, legt
+   `npm version` dort keinen Tag an.
+2. Änderung committen und den Tag selbst setzen – er muss zur Version in
+   `package.json` passen, denn veröffentlicht wird unter dieser Version:
+   `git tag v1.2.3` und `git push --tags`.
+3. Der Workflow `.github/workflows/release.yml` baut daraufhin die Windows- und
+   Mac-Version und veröffentlicht sie. Alternativ lokal mit einem Token als
+   `GH_TOKEN`: `npm run publish`.
 
 Da das Repository öffentlich ist, braucht niemand ein Zugriffstoken, um Updates
 herunterzuladen – `electron-updater` liest öffentliche Releases ohne Anmeldung.
@@ -249,16 +258,20 @@ Silicon. Ein paar Dinge unterscheiden sich:
   Audioeingang. Wird das abgelehnt, nimmt die App nichts auf. Nachträglich
   freigeben unter *Systemeinstellungen → Datenschutz & Sicherheit → Mikrofon*.
 - **Menüleiste.** Oben am Bildschirm liegt ein Menü mit den üblichen Kürzeln.
-  Aufnahme starten und beenden geht dort mit `Cmd` + `R`, Marker setzen mit
-  `Cmd` + `M`, der nächste Ablaufpunkt mit `Cmd` + `Alt` + `N`. Die Kürzel aus
-  dem Fenster (`M`, `N`, Leertaste) funktionieren weiterhin.
+  Aufnahme starten und beenden geht dort mit `Cmd` + `R`, Abschnitt starten/beenden
+  mit `Cmd` + `M`, der nächste Ablaufpunkt mit `Cmd` + `Alt` + `N`, Rückgängig mit
+  `Cmd` + `Z`. Die Kürzel aus dem Fenster (`M`, `N`, `X`, Leertaste) funktionieren
+  weiterhin.
 - **Beenden mit `Cmd` + `Q`** fragt nach, solange eine Aufnahme läuft.
 
 ### Signierung und Notarisierung
 
 Ohne Apple-Entwicklerzertifikat (99 $ im Jahr) lässt sich die App zwar bauen und
-benutzen – beim ersten Öffnen ist dann aber ein Rechtsklick auf die App und
-*Öffnen* nötig, um Gatekeeper zu überzeugen.
+benutzen – beim ersten Öffnen blockiert Gatekeeper sie aber. Seit macOS 15 hilft
+der frühere Rechtsklick → *Öffnen* nicht mehr: Nach dem ersten Startversuch unter
+*Systemeinstellungen → Datenschutz & Sicherheit* auf **„Dennoch öffnen"** klicken.
+Meldet macOS die App als „beschädigt", entfernt
+`xattr -dr com.apple.quarantine /Applications/ChurchRecorder.app` die Sperre.
 
 **Wichtig:** Die automatische Update-Funktion arbeitet auf macOS ausschließlich
 mit signierten Apps. Ohne Zertifikat muss jede neue Version von Hand installiert
