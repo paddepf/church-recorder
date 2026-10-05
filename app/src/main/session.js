@@ -201,6 +201,7 @@ class Session extends EventEmitter {
         label: it.title || `Punkt ${i + 1}`,
         category: it.category || null,
         plannedDuration: it.duration || null,
+        artist: null,
         order: i,
         color: this._nextColor(),
         start: null,
@@ -219,7 +220,7 @@ class Session extends EventEmitter {
   }
 
   /** Beginnt einen neuen, selbst benannten Abschnitt. */
-  startSection({ label, category, time, source = 'manual' } = {}) {
+  startSection({ label, category, artist, time, source = 'manual' } = {}) {
     if (this.openSection()) return { ok: false, error: 'Es läuft bereits ein Abschnitt – zuerst beenden.' };
     const t = time == null ? this.duration : Math.max(0, time);
     const section = {
@@ -228,6 +229,7 @@ class Session extends EventEmitter {
       label: label || `Abschnitt ${this.placedSections().length + 1}`,
       category: category || null,
       plannedDuration: null,
+      artist: artist || null,
       order: this.sections.length,
       color: this._nextColor(),
       start: t,
@@ -348,6 +350,7 @@ class Session extends EventEmitter {
     if (!x) return null;
     if (patch.label != null) x.label = patch.label;
     if (patch.category !== undefined) x.category = patch.category;
+    if (patch.artist !== undefined) x.artist = patch.artist ? String(patch.artist).trim() || null : null;
     this._changed();
     return x;
   }

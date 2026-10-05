@@ -93,7 +93,15 @@ Windows erzeugen. Der mitgelieferte Workflow erledigt beides auf GitHub.
    verschoben wurden) und sind nicht mehr vorausgewählt. „Gesamte Aufnahme" steht
    ebenfalls zur Wahl. Ist ein Export-Oberordner eingestellt, wird ohne Rückfrage
    in dessen Unterordner `Datum_Gottesdienstname` gespeichert (bei gleichem Namen
-   mit „ (2)" usw.); ohne Oberordner wird ein Zielordner abgefragt.
+   mit „ (2)" usw.); ohne Oberordner wird ein Zielordner abgefragt. Die MP3s
+   erhalten ID3-Tags: **Titel** = Abschnittsname, **Album** = Datum des
+   Gottesdienstes (z. B. `2026-10-05`), **Jahr**, **Interpret** = der beim
+   Abschnitt eingetragene Name, sonst der „Standard-Interpret" aus den Einstellungen.
+   Den Interpreten trägst du über ✎ (oder Doppelklick, F2) ein – auch schon bei
+   den offenen Punkten im Ablaufplan, bevor sie aufgenommen werden. In der
+   Wellenform steht der Interpret hell hinter dem Namen am Anfangs-Fähnchen; fehlt
+   er, erscheint beim Darüberfahren „+ Interpret". Ein Doppelklick darauf öffnet
+   den Dialog direkt im Interpret-Feld, ein Doppelklick auf den Namen im Namensfeld.
 
 Die WAV-Masteraufnahme bleibt erhalten. Über „Aufnahmen" kann eine frühere
 Session erneut geöffnet, die Marken nachjustiert und ein weiterer Abschnitt
@@ -205,6 +213,7 @@ src/main/        Hauptprozess
   session.js     Zustand, Abschnitte, Aufnahme/Fortsetzen, Autosave
   wav.js         WAV schreiben/lesen (Masteraufnahme)
   mp3.js         MP3-Export eines Abschnitts
+  id3.js         ID3-Tags (Titel, Interpret, Album, Jahr)
   churchtools.js ChurchTools-API
   netserver.js   WebSocket-Schnittstelle
   updater.js     Updates über GitHub Releases

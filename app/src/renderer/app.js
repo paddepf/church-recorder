@@ -81,7 +81,7 @@
         await window.api.section.moveEdge(id, edge, time);
       },
       onSeek: (t) => setPlayhead(t, true),
-      onRenameSection: (id) => renameSection(id),
+      onRenameSection: (id, focus) => renameSection(id, focus),
       onSelectSection: (id) => {
         state.selectedSectionId = id;
         renderLists();
@@ -447,8 +447,11 @@
       li.style.setProperty('--hue', window.sectionHue(x));
       li.draggable = true;
       li.innerHTML = `<span class="label"></span>
+        <button class="mini" data-rename title="Name und Interpret bearbeiten">✎</button>
         <button class="mini" data-place title="Diesen Abschnitt jetzt beginnen">starten</button>`;
       li.querySelector('.label').textContent = x.label;
+      if (x.artist) li.querySelector('.label').appendChild(artistTag(x.artist));
+      li.querySelector('[data-rename]').addEventListener('click', () => renameSection(x.id));
       li.addEventListener('dragstart', (e) => {
         e.dataTransfer.setData('text/marker-id', x.id);
         e.dataTransfer.effectAllowed = 'move';
@@ -472,10 +475,11 @@
       li.dataset.hue = '';
       li.style.setProperty('--hue', window.sectionHue(x));
       li.innerHTML = `<span class="time"></span><span class="label"></span>
-        <button class="mini" data-rename title="Umbenennen">✎</button>
+        <button class="mini" data-rename title="Name und Interpret bearbeiten">✎</button>
         <button class="mini" data-remove title="Entfernen">×</button>`;
       li.querySelector('.time').textContent = `${fmt(x.start)} – ${x.end != null ? fmt(x.end) : 'läuft'}`;
       li.querySelector('.label').textContent = x.label;
+      if (x.artist) li.querySelector('.label').appendChild(artistTag(x.artist));
       li.addEventListener('click', () => {
         state.selectedSectionId = x.id;
         wave.scrollTo(x.start);
@@ -494,11 +498,22 @@
     });
   }
 
-  async function renameSection(id) {
+  function artistTag(artist) {
+    const el = document.createElement('span');
+    el.className = 'artist';
+    el.textContent = ' · ' + artist;
+    return el;
+  }
+
+  /** Name und Interpret ändern – auch bei noch offenen Ablaufpunkten. */
+  async function renameSection(id, focus = 'name') {
     const x = (state.session?.sections || []).find((y) => y.id === id);
     if (!x) return;
-    const name = await promptDialog('Neuer Name für den Abschnitt:', x.label);
-    if (name && name.trim()) await window.api.section.update(id, { label: name.trim() });
+    const result = await sectionDialog(x, focus);
+    if (!result) return;
+    const patch = { artist: result.artist };
+    if (result.label) patch.label = result.label;
+    await window.api.section.update(id, patch);
   }
 
   /** Abschnitte zum Export; beendete Abschnitte sind anklickbar, bereits gesicherte tragen einen Vermerk. */
@@ -692,30 +707,33 @@
     if (id === 'modal-settings') refreshDevices();
   }
 
-  /** Ersatz für window.prompt(), das Electron nicht unterstützt. */
-  function promptDialog(title, defaultValue = '') {
-    const modal = $('modal-prompt');
-    const input = $('prompt-input');
-    $('prompt-title').textContent = title;
-    input.value = defaultValue;
+  /** Dialog zum Bearbeiten von Name und Interpret eines Abschnitts; liefert null bei Abbruch. */
+  function sectionDialog(section, focus = 'name') {
+    const modal = $('modal-section');
+    const name = $('section-name');
+    const artist = $('section-artist');
+    name.value = section.label || '';
+    artist.value = section.artist || '';
+    const fallback = state.settings?.defaultArtist;
+    $('section-artist-hint').textContent = fallback
+      ? `Leer = Standard-Interpret („${fallback}")`
+      : 'Leer = kein Interpret (oder der Standard aus den Einstellungen)';
     modal.hidden = false;
-    input.focus();
-    input.select();
+    const first = focus === 'artist' ? artist : name;
+    first.focus();
+    first.select();
 
     return new Promise((resolve) => {
-      let done = false;
       const finish = (value) => {
-        if (done) return;
-        done = true;
         modal.hidden = true;
         modal.removeEventListener('click', onBackdrop);
-        $('prompt-close').removeEventListener('click', onCancel);
-        $('prompt-cancel').removeEventListener('click', onCancel);
-        $('prompt-ok').removeEventListener('click', onOk);
-        input.removeEventListener('keydown', onKey);
+        modal.removeEventListener('keydown', onKey);
+        $('section-close').removeEventListener('click', onCancel);
+        $('section-cancel').removeEventListener('click', onCancel);
+        $('section-ok').removeEventListener('click', onOk);
         resolve(value);
       };
-      const onOk = () => finish(input.value);
+      const onOk = () => finish({ label: name.value.trim(), artist: artist.value.trim() });
       const onCancel = () => finish(null);
       const onBackdrop = (e) => { if (e.target === modal) onCancel(); };
       const onKey = (e) => {
@@ -723,10 +741,10 @@
         if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
       };
       modal.addEventListener('click', onBackdrop);
-      $('prompt-close').addEventListener('click', onCancel);
-      $('prompt-cancel').addEventListener('click', onCancel);
-      $('prompt-ok').addEventListener('click', onOk);
-      input.addEventListener('keydown', onKey);
+      modal.addEventListener('keydown', onKey);
+      $('section-close').addEventListener('click', onCancel);
+      $('section-cancel').addEventListener('click', onCancel);
+      $('section-ok').addEventListener('click', onOk);
     });
   }
 
@@ -1242,6 +1260,7 @@
     const s = state.settings;
     $('set-samplerate').value = String(s.sampleRate);
     $('set-dir').value = s.recordingsDir;
+    $('set-default-artist').value = s.defaultArtist || '';
     $('set-export-dir').value = s.exportDir || '';
     $('set-pattern').value = s.fileNamePattern;
     $('set-bitrate').value = String(s.mp3Bitrate);
@@ -1294,6 +1313,7 @@
       sampleRate: Number($('set-samplerate').value),
       recordingsDir: $('set-dir').value,
       exportDir: $('set-export-dir').value,
+      defaultArtist: $('set-default-artist').value.trim(),
       fileNamePattern: $('set-pattern').value.trim() || '{datum}_{gottesdienst}_{abschnitt}',
       mp3Bitrate: Number($('set-bitrate').value),
       churchToolsUrl: $('set-ct-url').value.trim(),

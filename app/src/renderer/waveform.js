@@ -29,6 +29,7 @@
       this.duration = 0;
       this.sections = [];
       this._hit = [];             // Trefferflächen der Griffe, beim Zeichnen gefüllt
+      this.hoverHandle = null;    // Start-Fähnchen unter dem Zeiger
       this.pxPerSec = opts.pxPerSec || 12;
       this.scrollT = 0;
       this.playhead = 0;          // Hörposition (null = keine)
@@ -217,7 +218,7 @@
       ctx.font = '12px system-ui, "Segoe UI", sans-serif';
       ctx.textBaseline = 'middle';
 
-      const flag = (section, edge, t, text, rightSide) => {
+      const flag = (section, edge, t, text, rightSide, artist, hint) => {
         const x = this.timeToX(t);
         if (x < -240 || x > this.width + 240) return;
         const color = `hsl(${hueOf(section)}, 55%, 62%)`;
@@ -232,7 +233,13 @@
         ctx.lineWidth = 1;
 
         // Fähnchen: Anfang steht rechts der Linie, Ende links davon.
-        const tw = Math.min(220, ctx.measureText(text).width + 16);
+        // Beim Start-Fähnchen steht hinter dem Namen der Interpret (hell); fehlt er,
+        // erscheint beim Darüberfahren ein Hinweis zum Eintragen.
+        const nameW = ctx.measureText(text).width;
+        const extra = artist || hint || '';
+        const extraText = extra ? '  ·  ' + extra : '';
+        const extraW = extraText ? ctx.measureText(extraText).width : 0;
+        const tw = Math.min(360, nameW + extraW + 16);
         const fx = rightSide ? x : x - tw;
         ctx.fillStyle = color;
         ctx.beginPath();
@@ -244,13 +251,22 @@
         ctx.clip();
         ctx.fillStyle = c.flagText || '#0E1318';
         ctx.fillText(text, fx + 8, RULER_H + FLAG_H / 2);
+        if (extraText) {
+          ctx.globalAlpha = artist ? 0.72 : 0.5;
+          ctx.fillText(extraText, fx + 8 + nameW, RULER_H + FLAG_H / 2);
+        }
         ctx.restore();
 
-        this._hit.push({ id: section.id, edge, flag: [fx, fx + tw], x });
+        // Ohne Interpret bleibt Platz für den Hinweis in der Trefferfläche, damit er beim
+        // Darüberfahren nicht flackert und der Doppelklick darauf das Interpret-Feld öffnet.
+        const hintW = rightSide && !artist ? ctx.measureText('  ·  + Interpret').width : 0;
+        const hitRight = fx + Math.max(tw, nameW + hintW + 16);
+        this._hit.push({ id: section.id, edge, flag: [fx, hitRight], x, artistX: rightSide ? fx + 8 + nameW : null });
       };
 
       placed.forEach((x) => {
-        flag(x, 'start', x.start, x.label || 'Abschnitt', true);
+        const hovered = this.hoverHandle && this.hoverHandle.id === x.id && this.hoverHandle.edge === 'start';
+        flag(x, 'start', x.start, x.label || 'Abschnitt', true, x.artist || '', !x.artist && hovered ? '+ Interpret' : '');
         if (x.end != null) flag(x, 'end', x.end, 'Ende', false);
       });
     }
@@ -352,6 +368,9 @@
           return;
         }
         this.hoverTime = this.xToTime(x);
+        const over = this._handleAt(x, y);
+        const hover = over && over.edge === 'start' ? { id: over.id, edge: 'start' } : null;
+        if ((hover && hover.id) !== (this.hoverHandle && this.hoverHandle.id)) this.hoverHandle = hover;
         cv.style.cursor = this._handleAt(x, y) ? 'ew-resize' : (y < RULER_H ? 'grab' : 'pointer');
         this.draw();
       });
@@ -373,11 +392,13 @@
       cv.addEventListener('dblclick', (e) => {
         const { x, y } = this._pos(e);
         const handle = this._handleAt(x, y);
-        if (handle) this.onRenameSection(handle.id);
+        // Doppelklick auf den Interpreten (oder den Hinweis) springt direkt in dieses Feld.
+        if (handle) this.onRenameSection(handle.id, handle.artistX != null && x >= handle.artistX ? 'artist' : 'name');
       });
 
       cv.addEventListener('pointerleave', () => {
         this.hoverTime = null;
+        this.hoverHandle = null;
         this.draw();
       });
 

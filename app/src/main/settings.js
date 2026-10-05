@@ -18,6 +18,7 @@ const DEFAULTS = {
   fileNamePattern: '{datum}_{gottesdienst}_{abschnitt}',
   exportDir: '',                // Oberordner für MP3-Exporte; leer = beim Export nachfragen
   mp3Bitrate: 192,
+  defaultArtist: '',            // Interpret in den ID3-Tags, wenn ein Abschnitt keinen eigenen hat
   keepMasterWavDays: 0,         // 0 = nie automatisch löschen
 
   // ChurchTools

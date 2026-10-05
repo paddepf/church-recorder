@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const wav = require('./wav');
+const { buildId3v2 } = require('./id3');
 
 let cachedEncoder = null;
 
@@ -37,9 +38,10 @@ async function loadEncoder() {
  * @param {number} opts.end      Endzeit in Sekunden
  * @param {string} opts.outPath  Zieldatei
  * @param {number} [opts.bitrate=192]
+ * @param {{title?:string, artist?:string, album?:string, year?:string}} [opts.tags] ID3-Angaben
  * @param {(p:number)=>void} [opts.onProgress] 0..1
  */
-async function exportSegment({ wavPath, start, end, outPath, bitrate = 192, onProgress }) {
+async function exportSegment({ wavPath, start, end, outPath, bitrate = 192, tags, onProgress }) {
   if (!fs.existsSync(wavPath)) throw new Error('Die Masteraufnahme wurde nicht gefunden.');
   if (!(end > start)) throw new Error('Der gewählte Abschnitt ist leer.');
 
@@ -50,6 +52,8 @@ async function exportSegment({ wavPath, start, end, outPath, bitrate = 192, onPr
   const frames = samples.length / channels;
   const blockSize = 1152;
   const out = fs.createWriteStream(outPath);
+  const id3 = buildId3v2(tags);
+  if (id3.length > 0) out.write(id3);
 
   const writeChunk = (chunk) => {
     if (chunk && chunk.length > 0) out.write(Buffer.from(chunk));

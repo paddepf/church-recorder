@@ -152,6 +152,10 @@
             <input id="set-pattern" type="text" placeholder="{datum}_{gottesdienst}_{abschnitt}" />
             <small>Platzhalter: {datum}, {zeit}, {gottesdienst}, {abschnitt}</small>
           </label>
+          <label>Standard-Interpret für MP3-Tags
+            <input id="set-default-artist" type="text" />
+            <small>Wird verwendet, wenn ein Abschnitt keinen eigenen Interpreten hat. Titel ist der Abschnittsname, Album das Datum.</small>
+          </label>
           <label>MP3-Qualität
             <select id="set-bitrate" class="select">
               <option value="128">128 kbit/s</option>
@@ -251,18 +255,24 @@
   </div>
 
   <!-- Texteingabe (ersetzt window.prompt, das Electron nicht unterstützt) -->
-  <div id="modal-prompt" class="modal" hidden>
+  <div id="modal-section" class="modal" hidden>
     <div class="modal-card narrow">
       <div class="modal-head">
-        <h2 id="prompt-title">Eingabe</h2>
-        <button id="prompt-close" class="icon close">×</button>
+        <h2>Abschnitt bearbeiten</h2>
+        <button id="section-close" class="icon close">×</button>
       </div>
       <div class="modal-body">
-        <input id="prompt-input" type="text" />
+        <label>Name (Titel der MP3)
+          <input id="section-name" type="text" />
+        </label>
+        <label>Interpret (ID3-Tag, optional)
+          <input id="section-artist" type="text" />
+          <small id="section-artist-hint"></small>
+        </label>
       </div>
       <div class="modal-foot">
-        <button id="prompt-cancel" class="secondary">Abbrechen</button>
-        <button id="prompt-ok" class="primary">OK</button>
+        <button id="section-cancel" class="secondary">Abbrechen</button>
+        <button id="section-ok" class="primary">Übernehmen</button>
       </div>
     </div>
   </div>

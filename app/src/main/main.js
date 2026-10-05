@@ -504,6 +504,13 @@ ipcMain.handle('export:batch', async (_e, { items } = {}) => {
     const failed = [];
     for (let i = 0; i < items.length; i++) {
       const { id, start, end, label } = items[i];
+      const section = session.sections.find((x) => `seg_${x.id}` === id);
+      const tags = {
+        title: label,
+        artist: section?.artist || settings.get('defaultArtist') || '',
+        album: session.service.date || '',
+        year: String(session.service.date || '').slice(0, 4)
+      };
       try {
         const result = await mp3.exportSegment({
           wavPath: session.wavPath,
@@ -511,6 +518,7 @@ ipcMain.handle('export:batch', async (_e, { items } = {}) => {
           end,
           outPath: freeFilePath(path.join(folder, buildFileName(label))),
           bitrate: settings.get('mp3Bitrate') || 192,
+          tags,
           onProgress: (p) => send('export-progress', { progress: (i + p) / items.length, index: i + 1, total: items.length })
         });
         files.push(result.outPath);

@@ -83,6 +83,13 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   werden nie überschrieben (` (2)`). Leer: Zielordner wird beim Export abgefragt,
   die Dateien liegen dann direkt darin. Ordnername nutzt `slug()` und
   `session.service` (Datum lokal, Name aus ChurchTools).
+- ID3-Tags (`id3.js`, eigener ID3v2.3-Schreiber, UTF-16): Titel = Abschnittsname, Album =
+  `session.service.date`, Jahr, Interpret = `section.artist` bzw. Einstellung
+  `defaultArtist`. `artist` ist ein Feld des Abschnitts (auch bei offenen Ablaufpunkten),
+  bearbeitet über den Dialog `modal-section` (Name + Interpret; ersetzt den alten
+  Prompt-Dialog). „Gesamte Aufnahme“ nimmt nur den Standard-Interpret. Das Start-Fähnchen
+  der Wellenform zeigt den Interpreten hinter dem Namen (`hoverHandle` blendet „+ Interpret“
+  ein); Doppelklick darauf fokussiert das Interpret-Feld (`onRenameSection(id, 'artist')`).
 - Der Export-Bereich ist eine Auswahlliste mit Häkchen (kein Dropdown): alle echten,
   beendeten Abschnitte plus „Gesamte Aufnahme“; ein Knopf „Ausgewählte als MP3
   speichern“ (`export:batch`, nacheinander, ein Fehler stoppt die übrigen nicht,
