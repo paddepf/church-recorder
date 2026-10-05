@@ -182,6 +182,18 @@ input[readonly] { color: var(--muted); }
 
 .transport-controls { display: flex; gap: 8px; }
 
+.audio-warning {
+  padding: 8px 16px;
+  background: var(--tally);
+  color: #fff;
+  font-weight: 600;
+  text-align: center;
+  animation: warn-blink 1s ease-in-out infinite;
+}
+.audio-warning[hidden] { display: none; }
+@keyframes warn-blink { 50% { opacity: .65; } }
+@media (prefers-reduced-motion: reduce) { .audio-warning { animation: none; } }
+
 button.record {
   display: flex;
   align-items: center;

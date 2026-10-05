@@ -18,7 +18,10 @@
     bucketAcc: 0,
     bucketFrames: 0,
     sampleRate: 48000,
-    cursorT: null            // Hörcursor während der Aufnahme
+    cursorT: null,           // Hörcursor während der Aufnahme
+    lastChunkAt: 0,          // Zeitpunkt des letzten Audioblocks vom Eingang
+    chunkSeq: 0,
+    recovering: false
   };
 
   const capture = new window.Capture();
@@ -257,6 +260,7 @@
       $('btn-record').disabled = true;
       const result = await capture.start(state.settings.inputDeviceId, state.settings.sampleRate);
       state.sampleRate = result.sampleRate;
+      state.lastChunkAt = Date.now();
 
       const rec = await window.api.record.start({ sampleRate: result.sampleRate, channels: 2 });
       if (!rec.ok) {
@@ -286,6 +290,60 @@
     }
   }
 
+  /* ------------------------------------------------- Wächter für den Eingang */
+
+  const WATCHDOG_MS = 2500;      // so lange darf der Eingang schweigen, bevor neu verbunden wird
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  function showAudioWarning(on) {
+    $('audio-warning').hidden = !on;
+  }
+
+  /**
+   * Der Audioeingang liefert nichts mehr (z. B. nach Ruhezustand oder wenn das Gerät
+   * kurz weg war): Eingang neu öffnen und in dieselbe Datei weiterschreiben.
+   */
+  async function recoverCapture() {
+    if (state.recovering) return;
+    state.recovering = true;
+    const lostSince = state.lastChunkAt;
+    showAudioWarning(true);
+    toast('error', 'Der Audioeingang liefert keine Daten mehr – er wird neu verbunden.', 8000);
+    try {
+      while (state.session?.status === 'recording') {
+        await Promise.race([capture.stop(), sleep(2000)]);
+        try {
+          const rate = state.session.sampleRate;
+          const before = state.chunkSeq;
+          const result = await capture.start(state.settings.inputDeviceId, rate);
+          if (result.sampleRate !== rate) {
+            await capture.stop();
+            throw new Error(`Eingang läuft mit ${result.sampleRate} Hz statt ${rate} Hz.`);
+          }
+          await sleep(1500);
+          if (state.session?.status !== 'recording') { await capture.stop(); return; }
+          if (state.chunkSeq > before) {
+            const lost = Math.round((Date.now() - lostSince) / 1000);
+            toast('success', `Audioeingang wieder verbunden. Etwa ${lost} s fehlen in der Aufnahme.`, 10000);
+            return;
+          }
+        } catch (err) {
+          console.warn('Eingang neu verbinden fehlgeschlagen:', err);
+        }
+        await sleep(2000);
+      }
+    } finally {
+      state.recovering = false;
+      state.lastChunkAt = Date.now();
+      showAudioWarning(false);
+    }
+  }
+
+  setInterval(() => {
+    if (state.session?.status !== 'recording' || state.starting || state.recovering || !capture.running) return;
+    if (Date.now() - state.lastChunkAt > WATCHDOG_MS) recoverCapture();
+  }, 1000);
+
   /** Hängt eine neue Aufnahme an die beendete an (gleiche Datei, gleiche Abschnitte). */
   async function continueRecording() {
     if (state.starting || state.session?.status !== 'stopped') return;
@@ -299,6 +357,7 @@
         return toast('error', `Der Eingang läuft mit ${result.sampleRate} Hz, die Aufnahme hat ${rate} Hz – Fortsetzen nicht möglich.`);
       }
       state.sampleRate = result.sampleRate;
+      state.lastChunkAt = Date.now();
       const res = await window.api.record.continue();
       if (!res.ok) {
         await capture.stop();
@@ -341,6 +400,8 @@
   }
 
   capture.onChunk = (arrayBuffer) => {
+    state.lastChunkAt = Date.now();
+    state.chunkSeq += 1;
     // In der Pause läuft die Erfassung weiter, es wird aber nichts aufgezeichnet.
     if (state.session?.status === 'paused') return;
     // Peaks lokal mitrechnen, damit die Wellenform ohne Zusatzverkehr wächst.

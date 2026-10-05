@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, systemPreferences } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, systemPreferences, powerSaveBlocker } = require('electron');
 
 const settings = require('./settings');
 const { Session, slug, dateStamp } = require('./session');
@@ -249,7 +249,20 @@ session.on('audio', ({ buffer, startTime }) => {
   transcriber.push(buffer, startTime);
 });
 
+// Während der Aufnahme darf der Rechner nicht in den Ruhezustand: Beim Aufwachen
+// liefert der Audioeingang sonst keine Daten mehr.
+let sleepBlockerId = null;
+function preventSleep(on) {
+  if (on && sleepBlockerId == null) {
+    sleepBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+  } else if (!on && sleepBlockerId != null) {
+    powerSaveBlocker.stop(sleepBlockerId);
+    sleepBlockerId = null;
+  }
+}
+
 session.on('recording-started', ({ sampleRate, channels }) => {
+  preventSleep(true);
   const result = transcriber.start(sampleRate, channels);
   if (!result.ok && result.reason !== 'disabled') {
     toast('warn', `Transkription nicht gestartet: ${result.message}`);
@@ -258,6 +271,7 @@ session.on('recording-started', ({ sampleRate, channels }) => {
 });
 
 session.on('recording-stopped', (info) => {
+  preventSleep(false);
   transcriber.stop();
   net.publishEvent('recording.stopped', info);
 });
