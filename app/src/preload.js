@@ -50,6 +50,8 @@ contextBridge.exposeInMainWorld('api', {
     toggle: (params) => invoke('section:toggle', params),
     /** Offenen Ablaufpunkt beginnen (time = null: jetzt). */
     start: (id, time) => invoke('section:start', { id, time }),
+    /** Ablaufpunkt auf die Zeitachse legen (Drag & Drop): füllt eine Lücke oder beginnt an der Stelle. */
+    place: (id, time) => invoke('section:place', { id, time }),
     /** Laufenden Abschnitt beenden und nächsten Ablaufpunkt beginnen. */
     next: (time) => invoke('section:next', { time }),
     moveEdge: (id, edge, time) => invoke('section:edge', { id, edge, time }),

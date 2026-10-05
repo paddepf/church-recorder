@@ -438,6 +438,7 @@ ipcMain.on('audio:chunk', (_e, arrayBuffer) => {
 
 ipcMain.handle('section:toggle', (_e, params) => session.toggleSection(params || {}));
 ipcMain.handle('section:start', (_e, { id, time }) => session.startPending(id, time));
+ipcMain.handle('section:place', (_e, { id, time }) => session.placePending(id, time));
 ipcMain.handle('section:next', (_e, { time } = {}) => session.startNextPending(time));
 ipcMain.handle('section:edge', (_e, { id, edge, time }) => ok({ section: session.moveEdge(id, edge, time) }));
 ipcMain.handle('section:update', (_e, { id, ...patch }) => ok({ section: session.updateSection(id, patch) }));

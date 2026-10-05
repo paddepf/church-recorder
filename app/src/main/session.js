@@ -5,10 +5,11 @@ const path = require('path');
 const { EventEmitter } = require('events');
 const { WavWriter, readInfo, readSlice } = require('./wav');
 const settings = require('./settings');
+const SectionLogic = require('../shared/sections');
 
 const PEAK_BUCKET_MS = 50;   // Auflösung der Wellenform
 const AUTOSAVE_MS = 3000;
-const MIN_SECTION = 0.1;   // kürzester Abschnitt in Sekunden
+const MIN_SECTION = SectionLogic.MIN_SECTION;
 
 let counter = 0;
 function newId(prefix) {
@@ -261,17 +262,58 @@ class Session extends EventEmitter {
     const x = this.sections.find((y) => y.id === id && y.start == null);
     if (!x) return { ok: false, error: 'Ablaufpunkt nicht gefunden.' };
     const t = Math.max(0, time == null ? this.duration : time);
-    const open = this.openSection();
-    if (open) {
-      if (t <= open.start) return { ok: false, error: 'Der laufende Abschnitt beginnt später als diese Stelle.' };
-      open.end = t;
-    }
-    x.start = t;
     const live = this.status === 'recording' || this.status === 'paused';
-    if (!live) {
+    const open = this.openSection();
+    const placed = this.placedSections().filter((o) => o !== x);
+
+    // Prüfen, bevor etwas verändert wird: ein umschließender Abschnitt wird an dieser
+    // Stelle beendet, darf dadurch aber nicht verschwinden.
+    const cut = placed.filter((o) => o.end != null && o.start < t && o.end > t);
+    if (cut.some((o) => t - o.start < MIN_SECTION)) {
+      return { ok: false, error: 'Zu nah am Anfang eines bestehenden Abschnitts.' };
+    }
+    const next = placed.filter((o) => o.start >= t).sort((a, b) => a.start - b.start)[0];
+    if (next && next.start - t < MIN_SECTION) {
+      return { ok: false, error: 'Dort beginnt bereits ein anderer Abschnitt.' };
+    }
+
+    if (open && t > open.start) open.end = t;   // liegt die Stelle davor, bleibt der laufende unberührt
+    cut.forEach((o) => { o.end = t; });
+    x.start = t;
+    if (next) {
+      // Bis zum nächsten Abschnitt, höchstens die geplante Dauer.
+      x.end = x.plannedDuration ? Math.min(t + x.plannedDuration, next.start) : next.start;
+      x.end = Math.max(x.end, t + MIN_SECTION);
+    } else if (!live) {
       const planned = x.plannedDuration ? t + x.plannedDuration : this.duration;
       x.end = Math.min(Math.max(planned, t + MIN_SECTION), Math.max(this.duration, t + MIN_SECTION));
     }
+    this._changed();
+    return { ok: true, section: x };
+  }
+
+  /**
+   * Legt einen Ablaufpunkt per Drag & Drop an einer beliebigen Stelle ab.
+   * - In einer Lücke zwischen zwei Abschnitten (oder vor dem ersten) füllt er genau diese Lücke.
+   * - Hinter dem letzten Abschnitt beginnt er an der Ablagestelle.
+   * - Mitten in einem bestehenden Abschnitt beginnt er dort und kürzt diesen.
+   */
+  placePending(id, time) {
+    const x = this.sections.find((y) => y.id === id && y.start == null);
+    if (!x) return { ok: false, error: 'Ablaufpunkt nicht gefunden.' };
+    const t = Math.max(0, time == null ? this.duration : time);
+    const placed = this.placedSections();
+    const endOf = (o) => SectionLogic.endOf(o, this.duration);
+
+    const inside = placed.some((o) => o.start <= t && endOf(o) > t);
+    const next = placed.find((o) => o.start > t);
+    if (inside || !next) return this.startPending(id, t);
+
+    const prevEnds = placed.filter((o) => endOf(o) <= t).map(endOf);
+    const gapStart = prevEnds.length ? Math.max(...prevEnds) : 0;
+    if (next.start - gapStart < MIN_SECTION) return { ok: false, error: 'Die Lücke ist zu klein.' };
+    x.start = gapStart;
+    x.end = next.start;
     this._changed();
     return { ok: true, section: x };
   }
@@ -286,19 +328,12 @@ class Session extends EventEmitter {
     return this.startPending(pending[0].id, time);
   }
 
-  /** Verschiebt Anfang oder Ende eines Abschnitts. */
+  /** Verschiebt Anfang oder Ende eines Abschnitts; Nachbarn weichen aus, nichts überlappt. */
   moveEdge(id, edge, time) {
-    const x = this.sections.find((y) => y.id === id && y.start != null);
-    if (!x) return null;
-    const max = Math.max(this.duration, 0);
-    if (edge === 'start') {
-      const limit = x.end != null ? x.end - MIN_SECTION : max;
-      x.start = Math.max(0, Math.min(time, limit));
-    } else if (x.end != null) {
-      x.end = Math.min(max, Math.max(time, x.start + MIN_SECTION));
-    }
+    const result = SectionLogic.moveEdge(this.sections, id, edge, time, this.duration);
+    if (!result) return null;
     this._changed();
-    return x;
+    return result.section;
   }
 
   updateSection(id, patch) {

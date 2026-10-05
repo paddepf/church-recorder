@@ -82,7 +82,7 @@
         renderLists();
       },
       onDropPending: async (id, time) => {
-        const res = await window.api.section.start(id, time);
+        const res = await window.api.section.place(id, time);
         if (!res.ok) toast('error', res.error);
       }
     });
@@ -847,6 +847,32 @@
     else loadServiceOverview();
   });
 
+  /** Ergänzt Beginn als Date sowie lokales Datum und Uhrzeit (ChurchTools liefert UTC). */
+  function withLocalTime(list) {
+    return list.map((s) => {
+      const when = s.start ? new Date(s.start) : null;
+      const valid = when && !isNaN(when);
+      return {
+        ...s,
+        when: valid ? when : null,
+        date: valid ? localIsoDate(when) : s.date,
+        time: valid ? when.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : ''
+      };
+    });
+  }
+
+  /** Der Termin, der gerade läuft oder als Nächster ansteht; sonst der zuletzt begonnene. */
+  function pickCurrentOrNext(list) {
+    const now = Date.now();
+    const SERVICE_FALLBACK_MS = 2 * 3600 * 1000;      // Dauer, falls ChurchTools kein Ende liefert
+    const sorted = list.filter((s) => s.when).sort((a, b) => a.when - b.when);
+    const endOf = (s) => {
+      const e = s.end ? new Date(s.end).getTime() : NaN;
+      return isNaN(e) ? s.when.getTime() + SERVICE_FALLBACK_MS : e;
+    };
+    return sorted.find((s) => endOf(s) > now) || sorted[sorted.length - 1] || list[0] || null;
+  }
+
   function ctConfigured() {
     return Boolean(state.settings.churchToolsUrl && state.settings.churchToolsTokenSet);
   }
@@ -857,7 +883,7 @@
     el.className = 'list-item' + (current ? ' current' : '');
     el.innerHTML = '<span class="name"></span><span class="meta"></span>';
     el.querySelector('.name').textContent = s.name + (current ? ' ✓' : '');
-    el.querySelector('.meta').textContent = `${germanDate(s.date)} · ${(s.start || '').slice(11, 16)}`.replace(/ · $/, '');
+    el.querySelector('.meta').textContent = [germanDate(s.date), s.time].filter(Boolean).join(' · ');
     el.addEventListener('click', () => chooseService(s, false));
     return el;
   }
@@ -881,8 +907,9 @@
       toast('warn', res.error);
       return;
     }
-    const upcoming = res.services.filter((s) => s.date >= today).slice(0, OVERVIEW_COUNT);
-    const past = res.services.filter((s) => s.date < today).slice(-OVERVIEW_COUNT).reverse();
+    const services = withLocalTime(res.services);
+    const upcoming = services.filter((s) => s.date >= today).slice(0, OVERVIEW_COUNT);
+    const past = services.filter((s) => s.date < today).slice(-OVERVIEW_COUNT).reverse();
 
     list.innerHTML = '';
     const group = (title, items, emptyText) => {
@@ -913,10 +940,15 @@
       toast('warn', res.error);
       return;
     }
+    const services = withLocalTime(res.services);
     if (silent) {
-      if (res.services.length === 1) chooseService(res.services[0], true);
-      else if (res.services.length > 1) toast('info', `${res.services.length} Termine heute – bitte oben auswählen.`);
-      else toast('info', 'Heute ist kein Termin in ChurchTools – über den Namen oben lassen sich frühere oder kommende wählen.', 9000);
+      if (services.length === 1) {
+        chooseService(services[0], true);
+      } else if (services.length > 1) {
+        const next = pickCurrentOrNext(services);
+        toast('info', `${services.length} Termine heute – gewählt: ${next.name} (${next.time}). Über den Namen oben lässt sich ein anderer wählen.`, 9000);
+        chooseService(next, true);
+      } else toast('info', 'Heute ist kein Termin in ChurchTools – über den Namen oben lassen sich frühere oder kommende wählen.', 9000);
       return;
     }
     list.innerHTML = '';
@@ -924,7 +956,7 @@
       list.innerHTML = '<div class="empty">Keine Termine an diesem Tag.</div>';
       return;
     }
-    res.services.forEach((s) => list.appendChild(serviceItem(s)));
+    services.forEach((s) => list.appendChild(serviceItem(s)));
   }
 
   async function chooseService(service, silent) {

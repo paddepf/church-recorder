@@ -8,7 +8,6 @@
   const BUCKET_SEC = 0.05;   // Auflösung der Peak-Daten (muss zu session.js passen)
   const RULER_H = 22;
   const FLAG_H = 26;
-  const MIN_SECTION = 0.1;
   // Dezente, gut unterscheidbare Farbtöne für die Abschnitte (Reihenfolge der Anlage).
   const HUES = [212, 28, 150, 300, 48, 182, 346, 262];
   const hueOf = (section) => HUES[(section.color || 0) % HUES.length];
@@ -337,11 +336,10 @@
           const { id, edge } = this.dragging;
           const sec = this.sections.find((ss) => ss.id === id);
           if (sec) {
-            let t = Math.max(0, Math.min(this.duration, this.xToTime(x - this.dragging.offset)));
-            if (edge === 'start' && sec.end != null) t = Math.min(t, sec.end - MIN_SECTION);
-            if (edge === 'end') t = Math.max(t, sec.start + MIN_SECTION);
-            sec[edge] = t;
-            this.onEdgeMove(id, edge, t);
+            // Gleiche Regel wie im Hauptprozess: Nachbarn weichen aus, nichts überlappt.
+            const raw = Math.max(0, Math.min(this.duration, this.xToTime(x - this.dragging.offset)));
+            const r = window.SectionLogic.moveEdge(this.sections, id, edge, raw, this.duration);
+            if (r) this.onEdgeMove(id, edge, r.time);
           }
           this.draw();
           return;
