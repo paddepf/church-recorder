@@ -121,6 +121,9 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - Zeitangaben (Marken, Listen, Zeitleiste der Wellenform) nutzen dieselbe
   Schrift wie der große Timer: `var(--sans)` mit `font-variant-numeric: tabular-nums`.
   Keine Monospace-Schrift verwenden (`--mono` gibt es nicht mehr).
+- Wellenform-Beschriftung: Der Name am Start-Fähnchen wird mit „…“ auf den Platz bis zum Ende-Fähnchen
+  gekürzt (`_fitText`, `_drawHandles`); reicht der Platz nicht, schrumpft das Ende-Fähnchen zur Lasche. Der
+  Interpret erscheint nur bei genug Platz.
 - Wellenform: Standardansicht 5 Minuten (`DEFAULT_VISIBLE_SECONDS`, `setDefaultZoom()` beim Start und
   bei neuer/fortgesetzter Aufnahme), beendete Aufnahmen werden eingepasst (`fitZoom`). Der Zoom wird nicht
   mehr in den Einstellungen gespeichert.
@@ -131,8 +134,10 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Stunden aus der Abtastrate, 16 Bit Stereo); orange < 3 h, rot < 30 min.
 - Layout-Vorschau ohne Electron: statischer Server auf `app/src` und eine Seite mit
   Mock-`window.api` (CSP verbietet Inline-Skripte, Mock als eigene Datei laden). Die
-  Bildschirmfotos der Browser-Vorschau sind unzuverlässig skaliert; Größen lieber über
-  `getBoundingClientRect()` messen. Vorschau-Dateien danach wieder löschen.
+  Bildschirmfotos funktionieren im frisch geöffneten Tab ohne `resize_window`; mit gesetzter
+  Fenstergröße waren sie unzuverlässig skaliert (dann Größen über `getBoundingClientRect()`
+  messen). Für die Wellenform allein genügt eine Testseite mit `waveform.js` und Beispieldaten.
+  Vorschau-Dateien (`_*.html/js`, `.claude/launch.json`) danach wieder löschen.
 
 ### Entwicklung
 - `npm run dev` startet neu bei Änderungen im Hauptprozess, **außer während einer

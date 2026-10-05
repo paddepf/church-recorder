@@ -209,6 +209,23 @@
       }
     }
 
+    /** Kürzt einen Text mit "…" auf die verfügbare Breite. */
+    _fitText(text, maxW) {
+      const ctx = this.ctx;
+      if (maxW <= 0 || !text) return '';
+      if (ctx.measureText(text).width <= maxW) return text;
+      const ell = '…';
+      const ellW = ctx.measureText(ell).width;
+      if (maxW < ellW) return '';
+      let lo = 0;
+      let hi = text.length;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        if (ctx.measureText(text.slice(0, mid)).width + ellW <= maxW) lo = mid; else hi = mid - 1;
+      }
+      return lo > 0 ? text.slice(0, lo).trimEnd() + ell : ell;
+    }
+
     /** Zeichnet je Abschnitt eine Anfangs- und eine Endmarke in dessen Farbe. */
     _drawHandles(laneTop, h) {
       const ctx = this.ctx;
@@ -218,9 +235,15 @@
       ctx.font = '12px system-ui, "Segoe UI", sans-serif';
       ctx.textBaseline = 'middle';
 
-      const flag = (section, edge, t, text, rightSide, artist, hint) => {
-        const x = this.timeToX(t);
-        if (x < -240 || x > this.width + 240) return;
+      const PAD = 8;            // Innenabstand im Fähnchen
+      const TAB = 10;           // Breite eines Fähnchens ohne Text
+      const MAX_START = 360;
+      const endLabel = 'Ende';
+      const endFull = ctx.measureText(endLabel).width + PAD * 2;
+      const hintText = '  ·  + Interpret';
+
+      /** Linie und Fähnchen; parts = [{ text, alpha }] sind bereits auf die Breite gekürzt. */
+      const drawFlag = (section, edge, x, w, rightSide, parts) => {
         const color = `hsl(${hueOf(section)}, 55%, 62%)`;
         const active = this.dragging && this.dragging.id === section.id && this.dragging.edge === edge;
 
@@ -233,41 +256,80 @@
         ctx.lineWidth = 1;
 
         // Fähnchen: Anfang steht rechts der Linie, Ende links davon.
-        // Beim Start-Fähnchen steht hinter dem Namen der Interpret (hell); fehlt er,
-        // erscheint beim Darüberfahren ein Hinweis zum Eintragen.
-        const nameW = ctx.measureText(text).width;
-        const extra = artist || hint || '';
-        const extraText = extra ? '  ·  ' + extra : '';
-        const extraW = extraText ? ctx.measureText(extraText).width : 0;
-        const tw = Math.min(360, nameW + extraW + 16);
-        const fx = rightSide ? x : x - tw;
+        const fx = rightSide ? x : x - w;
         ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.roundRect(fx, RULER_H + 3, tw, FLAG_H - 6, 3);
+        ctx.roundRect(fx, RULER_H + 3, w, FLAG_H - 6, 3);
         ctx.fill();
+
         ctx.save();
         ctx.beginPath();
-        ctx.rect(fx, RULER_H + 3, tw, FLAG_H - 6);
+        ctx.rect(fx, RULER_H + 3, w, FLAG_H - 6);
         ctx.clip();
         ctx.fillStyle = c.flagText || '#0E1318';
-        ctx.fillText(text, fx + 8, RULER_H + FLAG_H / 2);
-        if (extraText) {
-          ctx.globalAlpha = artist ? 0.72 : 0.5;
-          ctx.fillText(extraText, fx + 8 + nameW, RULER_H + FLAG_H / 2);
-        }
+        let tx = fx + PAD;
+        parts.forEach((part) => {
+          if (!part.text) return;
+          ctx.globalAlpha = part.alpha;
+          ctx.fillText(part.text, tx, RULER_H + FLAG_H / 2);
+          tx += ctx.measureText(part.text).width;
+        });
         ctx.restore();
-
-        // Ohne Interpret bleibt Platz für den Hinweis in der Trefferfläche, damit er beim
-        // Darüberfahren nicht flackert und der Doppelklick darauf das Interpret-Feld öffnet.
-        const hintW = rightSide && !artist ? ctx.measureText('  ·  + Interpret').width : 0;
-        const hitRight = fx + Math.max(tw, nameW + hintW + 16);
-        this._hit.push({ id: section.id, edge, flag: [fx, hitRight], x, artistX: rightSide ? fx + 8 + nameW : null });
+        return fx;
       };
 
-      placed.forEach((x) => {
-        const hovered = this.hoverHandle && this.hoverHandle.id === x.id && this.hoverHandle.edge === 'start';
-        flag(x, 'start', x.start, x.label || 'Abschnitt', true, x.artist || '', !x.artist && hovered ? '+ Interpret' : '');
-        if (x.end != null) flag(x, 'end', x.end, 'Ende', false);
+      placed.forEach((sec) => {
+        const sx = this.timeToX(sec.start);
+        const ex = sec.end != null ? this.timeToX(sec.end) : null;
+        if ((ex ?? sx) < -400 || sx > this.width + 400) return;
+
+        const hovered = this.hoverHandle && this.hoverHandle.id === sec.id && this.hoverHandle.edge === 'start';
+        const name = sec.label || 'Abschnitt';
+        const extra = sec.artist ? '  ·  ' + sec.artist : (hovered ? hintText : '');
+        const nameW = ctx.measureText(name).width;
+        const wantStart = Math.min(MAX_START, nameW + (extra ? ctx.measureText(extra).width : 0) + PAD * 2);
+
+        // Breiten verteilen: Passen beide Fähnchen nicht in den Abschnitt, wird zuerst das
+        // Anfangs-Fähnchen gekürzt, dann das Ende-Fähnchen auf eine Lasche ohne Text.
+        let startW = wantStart;
+        let endW = endFull;
+        if (ex != null) {
+          const room = Math.max(0, ex - sx - 2);
+          if (wantStart + endW > room) {
+            startW = room - endW;
+            if (startW < 40) {
+              endW = Math.min(TAB, room);
+              startW = Math.max(0, room - endW);
+            }
+          }
+        }
+        const startMax = startW;
+
+        // Anfangs-Fähnchen: Name, dahinter (heller) der Interpret
+        const inner = startW - PAD * 2;
+        const nameFit = startW >= 24 ? this._fitText(name, inner) : '';
+        const nameFitW = nameFit ? ctx.measureText(nameFit).width : 0;
+        // Der Interpret erscheint nur, wenn genug Platz bleibt (sonst stünde dort nur "Ge…").
+        const extraRoom = inner - nameFitW;
+        const extraFit = nameFit && extra && extraRoom >= 60 ? this._fitText(extra, extraRoom) : '';
+        const startDrawW = Math.max(TAB, Math.min(startW, nameFitW + (extraFit ? ctx.measureText(extraFit).width : 0) + PAD * 2));
+        const fx = drawFlag(sec, 'start', sx, startW >= TAB ? startDrawW : TAB, true, [
+          { text: nameFit, alpha: 1 },
+          { text: extraFit, alpha: sec.artist ? 0.72 : 0.5 }
+        ]);
+
+        // Trefferfläche: ohne Interpret bleibt Platz für den Hinweis, damit er beim Darüberfahren
+        // nicht flackert und der Doppelklick darauf das Interpret-Feld öffnet.
+        const hintW = sec.artist ? 0 : ctx.measureText(hintText).width;
+        const hitW = Math.min(Math.max(startDrawW, nameFitW + hintW + PAD * 2), Math.max(startMax, TAB));
+        this._hit.push({ id: sec.id, edge: 'start', flag: [fx, fx + hitW], x: sx, artistX: fx + PAD + nameFitW });
+
+        // Ende-Fähnchen
+        if (ex != null) {
+          const label = endW >= endFull ? endLabel : '';
+          const efx = drawFlag(sec, 'end', ex, endW, false, [{ text: label, alpha: 1 }]);
+          this._hit.push({ id: sec.id, edge: 'end', flag: [efx, efx + endW], x: ex, artistX: null });
+        }
       });
     }
 
