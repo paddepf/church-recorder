@@ -21,6 +21,7 @@ Befehle (im Ordner `app/`): `npm install`, `npm run dev` (Live-Reload),
   den lokalen Einstellungen, nie im Repo.
 - Während einer Aufnahme darf nie etwas die Audioaufnahme blockieren oder
   die App neu starten (siehe Updater).
-- Der Windows-PC in der Kirche ist zugleich Produktivrechner: Änderungen dort
-  auf einem Branch machen, nicht kurz vor dem Gottesdienst auf `main`.
+- Auch der Windows-PC arbeitet direkt auf `main` (aktuell nur Testphase). Sobald
+  die Software produktiv genutzt wird, auf Branches umstellen, weil der
+  Kirchen-PC dann zugleich Produktivrechner ist.
 - Vor dem Arbeiten `git pull`, damit beide Rechner synchron bleiben.

@@ -40,8 +40,8 @@ Das Repository ist auf beiden Systemen gleich einzurichten:
    npm run dev
    ```
 3. Arbeitsablauf: vor dem Arbeiten `git pull`, danach committen und pushen.
-   Änderungen am Aufnahmerechner besser auf einem Branch machen und nicht kurz
-   vor dem Gottesdienst auf `main`.
+   Aktuell wird auf beiden Rechnern direkt auf `main` gearbeitet (Testphase);
+   bei produktiver Nutzung sollten Änderungen am Aufnahmerechner auf Branches.
 
 Pro Rechner einmalig und nicht im Repository: die Pfade zu whisper.cpp und zum
 Modell (Einstellungen → Transkription) sowie ChurchTools-Token und
