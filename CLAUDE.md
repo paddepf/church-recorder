@@ -121,6 +121,9 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - Zeitangaben (Marken, Listen, Zeitleiste der Wellenform) nutzen dieselbe
   Schrift wie der große Timer: `var(--sans)` mit `font-variant-numeric: tabular-nums`.
   Keine Monospace-Schrift verwenden (`--mono` gibt es nicht mehr).
+- Wellenform: Standardansicht 5 Minuten (`DEFAULT_VISIBLE_SECONDS`, `setDefaultZoom()` beim Start und
+  bei neuer/fortgesetzter Aufnahme), beendete Aufnahmen werden eingepasst (`fitZoom`). Der Zoom wird nicht
+  mehr in den Einstellungen gespeichert.
 - Layout unter der Wellenform: drei Bereiche (Ablaufplan | Abschnitte | Export), ganz
   unten die Tastenleiste (`.keybar`). Die Kürzelliste steht zentral in `shortcutList()`
   (`app.js`) und speist Leiste und Dialog (`?`): neue Kürzel dort eintragen.

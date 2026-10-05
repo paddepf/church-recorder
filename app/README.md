@@ -113,6 +113,10 @@ exportiert werden.
 
 ### Oberfläche rund um die Wellenform
 
+Die Wellenform zeigt beim Start und bei jeder neuen oder fortgesetzten Aufnahme
+standardmäßig **5 Minuten** auf einmal; mit `+`/`−` oder `Strg` + Mausrad lässt sich
+zoomen. Eine beendete oder geöffnete Aufnahme wird komplett eingepasst.
+
 Unter der Wellenform stehen drei Bereiche: **Ablaufplan** (offene Punkte),
 **Abschnitte** (gesetzte Abschnitte mit Zeitraum, Doppelklick zum Umbenennen) und
 **Abschnitte exportieren**. Ganz unten zeigt eine Leiste die wichtigsten

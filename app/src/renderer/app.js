@@ -74,7 +74,6 @@
     applyTheme(state.settings.theme);
 
     wave = new window.Waveform($('wave'), {
-      pxPerSec: state.settings.waveformZoom || 12,
       colors: readColors(),
       onEdgeMove: () => renderLists(),
       onEdgeMoveEnd: async (id, edge, time) => {
@@ -92,6 +91,7 @@
       }
     });
 
+    setDefaultZoom();
     bindUi();
     bindEvents();
     renderShortcuts(info.platform);
@@ -126,6 +126,14 @@
         ? `Läuft auf Port ${net.port}.`
         : (net.passwordSet ? 'Nicht aktiv.' : 'Kein Passwort gesetzt – die Schnittstelle bleibt aus.');
     }
+  }
+
+  /** Standardansicht der Wellenform: 5 Minuten sichtbar. */
+  const DEFAULT_VISIBLE_SECONDS = 300;
+
+  function setDefaultZoom() {
+    wave.scrollT = 0;
+    wave.setZoom(wave.width / DEFAULT_VISIBLE_SECONDS, 0);
   }
 
   /** Zeigt die gesamte Aufnahme auf einen Blick. */
@@ -277,6 +285,7 @@
       state.bucketAcc = 0;
       state.bucketFrames = 0;
       wave.peaks = state.peaks;
+      setDefaultZoom();
       wave.follow = true;
       $('chk-follow').checked = true;
       monitor.pause();
@@ -375,6 +384,7 @@
       }
       state.bucketAcc = 0;
       state.bucketFrames = 0;
+      setDefaultZoom();
       wave.follow = true;
       $('chk-follow').checked = true;
       monitor.pause();
@@ -1329,8 +1339,7 @@
       networkPassword: $('set-net-pass').value,
       monitorPassword: $('set-monitor-pass').value,
       autoUpdateCheck: $('set-autoupdate').checked,
-      theme: $('set-theme').value,
-      waveformZoom: wave ? wave.pxPerSec : 12
+      theme: $('set-theme').value
     };
     const token = $('set-ct-token').value;
     if (token) patch.churchToolsToken = token;
