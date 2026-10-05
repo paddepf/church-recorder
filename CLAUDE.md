@@ -25,3 +25,71 @@ Befehle (im Ordner `app/`): `npm install`, `npm run dev` (Live-Reload),
   die Software produktiv genutzt wird, auf Branches umstellen, weil der
   Kirchen-PC dann zugleich Produktivrechner ist.
 - Vor dem Arbeiten `git pull`, damit beide Rechner synchron bleiben.
+
+## Entwurfsentscheidungen (nicht aus dem Code ablesbar)
+
+Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
+
+### Abschnitte statt Einzelmarker
+- Ein Abschnitt hat Anfang **und** Ende (`sections` in `session.js`, je
+  `start`/`end`; `start == null` = offener Ablaufpunkt, `end == null` = läuft
+  gerade). Es läuft höchstens einer. Jeder Abschnitt hat eine feste `color`
+  (Index, wird beim Anlegen vergeben; Farbtöne in `waveform.js`).
+- **M** (`section.toggle`) beginnt bzw. beendet einen Abschnitt, **N**
+  beendet den laufenden und beginnt den nächsten Ablaufpunkt. Marken werden
+  sofort gesetzt, benannt wird danach (✎, Doppelklick, F2).
+- **Abschnitte überlappen nie.** Die Regel steht in `src/shared/sections.js`
+  und wird vom Hauptprozess *und* der Wellenform genutzt (UMD-Datei, damit
+  beide dasselbe Ergebnis beim Ziehen bekommen): Stößt eine Marke an einen
+  Nachbarn, wandert dessen angrenzende Marke mit, kürzer als 0,1 s wird keiner.
+- Drag & Drop eines Ablaufpunkts (`placePending`): in einer Lücke füllt er
+  sie genau, hinter dem letzten beginnt er an der Ablagestelle, mitten in einem
+  Abschnitt kürzt er diesen. „starten“ und N (`startPending`) setzen dagegen
+  immer an der Live-Stelle.
+- Alte Sessions mit `markers` (Version 1) werden in `loadFromFile` zu Abschnitten
+  migriert (`migrateSections`). Session-Datei ist jetzt `version: 2`.
+- Der Export kennt zusätzlich immer „Gesamte Aufnahme“ (`seg_full`). Der
+  Snapshot heißt `sections` (nicht mehr `markers`).
+- Schnittstellen-Namen bleiben aus Kompatibilität stehen: Companion-Aktion
+  `marker_add` und WebSocket-Befehle `marker.add`/`marker.next` bedeuten jetzt
+  Start/Ende-Umschalter bzw. „nächster Punkt“; Antwort enthält `change`
+  (`started`/`ended`). Nicht `action` überschreiben (kollidiert mit der Antwort).
+
+### Aufnahme, Fortsetzen, Schutz
+- „Neue Aufnahme starten“ fragt nach, wenn eine beendete Aufnahme angezeigt wird,
+  und setzt deren Abschnitte zurück (Ablaufpunkte werden wieder offen). Dateinamen
+  werden nie überschrieben (`_freeBasePath` hängt `_2`, `_3` an).
+- „Fortsetzen“ nach dem Beenden hängt an dieselbe WAV an
+  (`WavWriter` mit `append`) und braucht dieselbe Abtastrate.
+- Pause: Der Eingang läuft weiter, die Oberfläche verwirft die Blöcke (sonst
+  wächst die Wellenform weiter) und gleicht danach die Peaks mit dem Hauptprozess ab.
+- **Schlafsperre** (`powerSaveBlocker`) während Aufnahme/Pause. **Wächter** im
+  Renderer: kommen 2,5 s keine Audioblöcke, wird der Eingang neu geöffnet und in
+  dieselbe Datei weitergeschrieben (roter Balken, Lücke wird gemeldet). Anlass: Der
+  Mac schlief ein, der Eingang blieb nach dem Aufwachen stumm, die Aufnahme stand
+  still, die App zeigte weiter „läuft“.
+
+### Mithören
+- Klick in die Wellenform setzt während der Aufnahme einen Hörcursor, Leertaste =
+  Play/Pause (`monitor.js`). Gelesen wird blockweise aus der wachsenden WAV
+  (`audio:read`, `Session.readAudio`), die Aufnahme bleibt unberührt. Marker
+  werden weiterhin an der Live-Position gesetzt, nicht am Cursor.
+- Ausgabegerät ist in den Einstellungen wählbar (`outputDeviceId`, `setSinkId`);
+  über Lautsprecher landet das Mithören sonst im Mikrofon.
+
+### ChurchTools
+- Beim Start wird heute geprüft: ein Termin wird geladen, bei mehreren der
+  laufende bzw. nächste (Ende oder +2 h). Der Termin-Dialog zeigt die letzten und
+  kommenden 5 Termine. ChurchTools liefert **UTC**; Zeit und Datum werden in
+  Ortszeit umgerechnet (`withLocalTime`).
+
+### Entwicklung
+- `npm run dev` startet neu bei Änderungen im Hauptprozess, **außer während einer
+  Aufnahme** (dann nur ein Hinweis). Änderungen am Renderer laden die Oberfläche
+  sofort neu. Nach Änderungen an `main`/`preload`/`shared` also App neu starten:
+  `pkill -f "church-recorder/app/node_modules/[e]lectron"; cd app && npm run dev`
+  (die Klammer in `[e]lectron` verhindert, dass pkill sich selbst beendet).
+- DevTools öffnen nicht automatisch: F12 bzw. Strg/Cmd+Umschalt+I oder
+  `npm run dev:tools`.
+- Skripte zum Testen der Session-Logik ohne Electron: `settings`-Modul per
+  `Module._load` ersetzen und am Ende `process.exit(0)` aufrufen (Autosave-Timer).

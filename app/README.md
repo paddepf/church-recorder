@@ -234,7 +234,7 @@ in `build/entitlements.mac.plist`.
 ```
 src/main/        Hauptprozess
   main.js        Fenster, IPC, Verdrahtung
-  session.js     Zustand, Marker, Abschnitte, Autosave
+  session.js     Zustand, Abschnitte, Aufnahme/Fortsetzen, Autosave
   wav.js         WAV schreiben/lesen (Masteraufnahme)
   mp3.js         MP3-Export eines Abschnitts
   churchtools.js ChurchTools-API
@@ -242,10 +242,13 @@ src/main/        Hauptprozess
   transcribe.js  lokale Mitschrift über whisper.cpp
   updater.js     Updates über GitHub Releases
   settings.js    Einstellungen, Token-Verschlüsselung
+src/shared/      Von Hauptprozess und Oberfläche gemeinsam genutzt
+  sections.js    Regeln für Abschnitte (Verschieben ohne Überlappung)
 src/preload.js   Brücke zur Oberfläche
 src/renderer/    Oberfläche
   capture.js     Audioerfassung (AudioWorklet)
-  waveform.js    Wellenform und Marker
+  monitor.js     Mithören der laufenden Aufnahme
+  waveform.js    Wellenform und Abschnittsmarken
   app.js         Bedienlogik
 ```
 
