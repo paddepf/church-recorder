@@ -19,8 +19,8 @@
       </button>
     </div>
     <div class="top-actions">
+      <span id="disk-badge" class="badge" data-level="ok" title="Freier Speicherplatz auf dem Laufwerk der Aufnahmen">Speicher</span>
       <span id="net-badge" class="badge" title="Netzwerkschnittstelle">Netzwerk</span>
-      <span id="trans-badge" class="badge" title="Transkription">Transkript</span>
       <button id="btn-update" class="ghost" hidden>Update bereit</button>
       <button id="btn-library" class="ghost" title="Frühere Aufnahmen">Aufnahmen</button>
       <button id="btn-settings" class="ghost" title="Einstellungen">Einstellungen</button>
@@ -74,39 +74,14 @@
         <span id="plan-hint" class="hint">Punkte auf die Wellenform ziehen</span>
       </div>
       <ol id="pending-list" class="pending"></ol>
-      <div class="panel-sub">
-        <h3>Abschnitte</h3>
-        <ol id="marker-list" class="markers"></ol>
-      </div>
     </div>
 
-    <div class="panel-stack">
-      <div class="info-row">
-        <div class="card" id="card-keys">
-          <div class="card-head">
-            <h2>Tastenkürzel</h2>
-            <button id="btn-all-keys" class="mini-link" title="Alle Kürzel anzeigen (?)">alle (?)</button>
-          </div>
-          <ul id="keys-list" class="keys-list"></ul>
-        </div>
-        <div class="card" id="card-disk">
-          <div class="card-head"><h2>Speicherplatz</h2></div>
-          <div id="disk-free" class="disk-free">–</div>
-          <div id="disk-hours" class="disk-hours"></div>
-          <div class="disk-bar"><i id="disk-bar-fill"></i></div>
-        </div>
+    <div class="panel panel-sections">
+      <div class="panel-head">
+        <h2>Abschnitte</h2>
+        <span class="hint">Doppelklick zum Umbenennen</span>
       </div>
-
-      <div class="panel panel-transcript" id="panel-transcript">
-        <div class="panel-head">
-          <h2>Mitschrift</h2>
-          <span class="head-right">
-            <span id="transcript-hint" class="hint">läuft lokal mit</span>
-            <button id="btn-toggle-transcript" class="mini-link" title="Mitschrift ein- oder ausklappen">einklappen</button>
-          </span>
-        </div>
-        <div id="transcript" class="transcript"></div>
-      </div>
+      <ol id="marker-list" class="markers"></ol>
     </div>
 
     <div class="panel panel-export">
@@ -124,6 +99,11 @@
       <div id="export-result" class="export-result"></div>
     </div>
   </section>
+
+  <footer class="keybar">
+    <ul id="keys-list" class="keybar-list"></ul>
+    <button id="btn-all-keys" class="mini-link" title="Alle Kürzel anzeigen (?)">alle Kürzel (?)</button>
+  </footer>
 
   <div id="toasts" class="toasts"></div>
   <audio id="player" preload="none"></audio>
@@ -209,31 +189,6 @@
             <input id="set-monitor-pass" type="text" />
           </label>
           <div id="net-info" class="inline-result"></div>
-        </fieldset>
-
-        <fieldset>
-          <legend>Transkription (lokal)</legend>
-          <label class="check"><input type="checkbox" id="set-trans-on" /> Mitschrift während der Aufnahme erstellen</label>
-          <label>Whisper-Programm
-            <span class="row">
-              <input id="set-whisper-bin" type="text" readonly placeholder="whisper-cli.exe" />
-              <button id="btn-choose-bin" class="secondary">Wählen</button>
-            </span>
-          </label>
-          <label>Modelldatei
-            <span class="row">
-              <input id="set-whisper-model" type="text" readonly placeholder="ggml-small.bin" />
-              <button id="btn-choose-model" class="secondary">Wählen</button>
-            </span>
-          </label>
-          <label>Blocklänge
-            <select id="set-chunk" class="select">
-              <option value="8">8 Sekunden</option>
-              <option value="12">12 Sekunden</option>
-              <option value="20">20 Sekunden</option>
-              <option value="30">30 Sekunden</option>
-            </select>
-          </label>
         </fieldset>
 
         <fieldset>

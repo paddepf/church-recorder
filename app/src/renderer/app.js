@@ -95,7 +95,6 @@
     bindUi();
     bindEvents();
     renderShortcuts(info.platform);
-    initTranscriptToggle();
     refreshDisk();
     setInterval(refreshDisk, 30000);
     await refreshDevices();
@@ -105,7 +104,7 @@
 
     const st = await window.api.session.state();
     if (st.ok) {
-      applyState(st.state, st.peaks, st.transcript);
+      applyState(st.state, st.peaks);
       if (st.state.status === 'stopped') fitZoom();
     }
 
@@ -127,11 +126,6 @@
         ? `Läuft auf Port ${net.port}.`
         : (net.passwordSet ? 'Nicht aktiv.' : 'Kein Passwort gesetzt – die Schnittstelle bleibt aus.');
     }
-    const t = info.transcription || {};
-    const badge = $('trans-badge');
-    badge.dataset.on = t.ok ? 'true' : (t.reason === 'disabled' ? 'false' : 'warn');
-    badge.textContent = t.ok ? 'Transkript bereit' : 'Transkript aus';
-    badge.title = t.message || (t.reason === 'disabled' ? 'In den Einstellungen deaktiviert.' : '');
   }
 
   /** Zeigt die gesamte Aufnahme auf einen Blick. */
@@ -177,7 +171,7 @@
 
   /* ------------------------------------------------------------- Zustandsbild */
 
-  function applyState(session, peaks, transcript) {
+  function applyState(session, peaks) {
     const wasRecording = state.session?.status === 'recording';
     state.session = session;
     if (wasRecording && session.status === 'paused' && !peaks) resyncPeaks();
@@ -228,7 +222,6 @@
 
     renderLists();
     renderSegments();
-    if (transcript) renderTranscript(transcript);
   }
 
   /** Gleicht die lokal mitgerechnete Wellenform mit der tatsächlich geschriebenen Datei ab. */
@@ -590,28 +583,6 @@
       : 'Der Zielordner wird beim Speichern abgefragt.';
   }
 
-  function renderTranscript(list) {
-    const el = $('transcript');
-    el.innerHTML = '';
-    (list || []).forEach((seg) => appendTranscript(seg, false));
-    el.scrollTop = el.scrollHeight;
-  }
-
-  function appendTranscript(seg, scroll = true) {
-    const el = $('transcript');
-    const line = document.createElement('div');
-    line.className = 'tline';
-    line.innerHTML = '<span class="ts"></span><span class="txt"></span>';
-    line.querySelector('.ts').textContent = fmt(seg.start);
-    line.querySelector('.txt').textContent = seg.text;
-    line.addEventListener('click', () => {
-      wave.scrollTo(seg.start);
-      setPlayhead(seg.start, true);
-    });
-    el.appendChild(line);
-    if (scroll) el.scrollTop = el.scrollHeight;
-  }
-
   /* -------------------------------------------------------------- Playhead */
 
   function setPlayhead(t, seekPlayer) {
@@ -843,8 +814,6 @@
       wave.update({ duration: levels.duration, peaks: state.peaks });
     });
 
-    window.api.on('transcript', (seg) => appendTranscript(seg));
-
     window.api.on('toast', ({ level, message }) => toast(level, message));
 
     window.api.on('command', ({ action }) => {
@@ -868,13 +837,6 @@
       $('net-info').textContent = info.running
         ? `Läuft auf Port ${info.port}. Verbundene Clients: ${info.clients}.`
         : (info.passwordSet ? 'Nicht aktiv.' : 'Kein Passwort gesetzt – die Schnittstelle bleibt aus.');
-    });
-
-    window.api.on('transcription-status', (s) => {
-      const badge = $('trans-badge');
-      badge.dataset.on = s.active ? 'true' : (s.message ? 'warn' : 'false');
-      badge.textContent = s.active ? 'Transkript läuft' : 'Transkript aus';
-      badge.title = s.message || '';
     });
 
     window.api.on('update-status', (s) => {
@@ -947,7 +909,7 @@
     }
   }
 
-  /* ------------------------------------------------- Kürzel, Speicher, Mitschrift */
+  /* ------------------------------------------------------- Kürzel und Speicher */
 
   /** Alle Tastenkürzel; "main" erscheint in der kleinen Karte, alles im Dialog. */
   function shortcutList(platform) {
@@ -1007,20 +969,18 @@
     return `${Math.max(0, Math.round(h * 60))} Min.`;
   }
 
-  /** Aktualisiert die Karte "Speicherplatz"; gibt die Stunden zurück, die noch Platz haben. */
+  /** Aktualisiert die Speicheranzeige in der Kopfleiste; gibt die Stunden zurück, die noch Platz haben. */
   async function refreshDisk() {
     const res = await window.api.app.diskFree();
-    const card = $('card-disk');
+    const badge = $('disk-badge');
     if (!res.ok) {
-      $('disk-free').textContent = '–';
-      $('disk-hours').textContent = 'Nicht ermittelbar';
+      badge.textContent = 'Speicher unbekannt';
+      badge.dataset.level = 'ok';
       return null;
     }
-    $('disk-free').textContent = `${formatBytes(res.freeBytes)} frei`;
-    $('disk-hours').textContent = `reicht für ca. ${formatHours(res.hoursLeft)} Aufnahme`;
-    const used = res.totalBytes > 0 ? 1 - res.freeBytes / res.totalBytes : 0;
-    $('disk-bar-fill').style.width = Math.round(Math.min(1, Math.max(0, used)) * 100) + '%';
-    card.dataset.level = res.hoursLeft < DISK_LOW_HOURS ? 'low' : (res.hoursLeft < DISK_WARN_HOURS ? 'warn' : 'ok');
+    badge.textContent = `${formatBytes(res.freeBytes)} frei · ca. ${formatHours(res.hoursLeft)}`;
+    badge.title = `Freier Speicherplatz auf ${res.dir}: reicht für ca. ${formatHours(res.hoursLeft)} Aufnahme`;
+    badge.dataset.level = res.hoursLeft < DISK_LOW_HOURS ? 'low' : (res.hoursLeft < DISK_WARN_HOURS ? 'warn' : 'ok');
 
     if (res.hoursLeft < DISK_LOW_HOURS && state.session?.status === 'recording' && !diskLowToastShown) {
       diskLowToastShown = true;
@@ -1028,20 +988,6 @@
     }
     if (res.hoursLeft >= DISK_LOW_HOURS) diskLowToastShown = false;
     return res.hoursLeft;
-  }
-
-  /** Mitschrift ein- und ausklappen; der Zustand wird auf diesem Rechner gemerkt. */
-  function initTranscriptToggle() {
-    const panel = $('panel-transcript');
-    const apply = (collapsed) => {
-      panel.dataset.collapsed = String(collapsed);
-      $('btn-toggle-transcript').textContent = collapsed ? 'ausklappen' : 'einklappen';
-      try { localStorage.setItem('transcriptCollapsed', collapsed ? '1' : '0'); } catch { /* nicht schlimm */ }
-    };
-    let collapsed = false;
-    try { collapsed = localStorage.getItem('transcriptCollapsed') === '1'; } catch { /* Standard */ }
-    apply(collapsed);
-    $('btn-toggle-transcript').addEventListener('click', () => apply(panel.dataset.collapsed !== 'true'));
   }
 
   /* ---------------------------------------------------------- ChurchTools-UI */
@@ -1240,7 +1186,7 @@
     if (full.ok) {
       state.peaks = full.peaks || [];
       wave.peaks = state.peaks;
-      applyState(full.state, full.peaks, full.transcript);
+      applyState(full.state, full.peaks);
       fitZoom();
     }
   }
@@ -1308,10 +1254,6 @@
     $('set-net-port').value = s.networkPort;
     $('set-net-pass').value = s.networkPassword;
     $('set-monitor-pass').value = s.monitorPassword;
-    $('set-trans-on').checked = Boolean(s.transcriptionEnabled);
-    $('set-whisper-bin').value = s.whisperBinaryPath;
-    $('set-whisper-model').value = s.whisperModelPath;
-    $('set-chunk').value = String(s.transcriptionChunkSeconds);
     $('set-autoupdate').checked = Boolean(s.autoUpdateCheck);
     $('set-theme').value = s.theme || 'dark';
   }
@@ -1326,21 +1268,6 @@
       if (res.ok && res.path) $('set-export-dir').value = res.path;
     });
     $('btn-clear-export-dir').addEventListener('click', () => { $('set-export-dir').value = ''; });
-    $('btn-choose-bin').addEventListener('click', async () => {
-      const res = await window.api.settings.chooseFile({
-        title: 'Whisper-Programm wählen',
-        filters: [{ name: 'Programm', extensions: ['exe', ''] }]
-      });
-      if (res.ok && res.path) $('set-whisper-bin').value = res.path;
-    });
-    $('btn-choose-model').addEventListener('click', async () => {
-      const res = await window.api.settings.chooseFile({
-        title: 'Whisper-Modell wählen',
-        filters: [{ name: 'Modell', extensions: ['bin'] }]
-      });
-      if (res.ok && res.path) $('set-whisper-model').value = res.path;
-    });
-
     $('btn-ct-test').addEventListener('click', async () => {
       $('ct-test-result').textContent = 'Wird geprüft …';
       await saveSettings(true);
@@ -1375,10 +1302,6 @@
       networkPort: Number($('set-net-port').value) || 8765,
       networkPassword: $('set-net-pass').value,
       monitorPassword: $('set-monitor-pass').value,
-      transcriptionEnabled: $('set-trans-on').checked,
-      whisperBinaryPath: $('set-whisper-bin').value,
-      whisperModelPath: $('set-whisper-model').value,
-      transcriptionChunkSeconds: Number($('set-chunk').value),
       autoUpdateCheck: $('set-autoupdate').checked,
       theme: $('set-theme').value,
       waveformZoom: wave ? wave.pxPerSec : 12

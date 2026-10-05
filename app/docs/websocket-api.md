@@ -67,8 +67,7 @@ Wird direkt nach der Anmeldung und bei jeder Änderung gesendet (max. 10×/s).
       { "id": "seg_sec_x1", "label": "Predigt", "start": 1420.5, "end": 1832.4, "markerId": "sec_x1", "open": true }
     ],
     "currentSegment": { "id": "seg_sec_x1", "label": "Predigt", "start": 1420.5, "end": 1832.4, "open": true },
-    "wavPath": "C:\\Aufnahmen\\2026-09-06_0930_Sonntagsgottesdienst.wav",
-    "transcriptCount": 42
+    "wavPath": "C:\\Aufnahmen\\2026-09-06_0930_Sonntagsgottesdienst.wav"
   }
 }
 ```

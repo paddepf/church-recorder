@@ -75,8 +75,8 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   on: (channel, handler) => {
-    const allowed = ['state', 'levels', 'transcript', 'toast', 'command', 'menu',
-      'network-status', 'transcription-status', 'update-status', 'export-progress'];
+    const allowed = ['state', 'levels', 'toast', 'command', 'menu',
+      'network-status', 'update-status', 'export-progress'];
     if (!allowed.includes(channel)) return () => {};
     const listener = (_event, payload) => handler(payload);
     ipcRenderer.on(channel, listener);

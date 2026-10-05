@@ -27,8 +27,6 @@ Befehle (im Ordner `app/`): `npm install`, `npm run dev` (Live-Reload),
   `status` `recording`/`paused` bzw. die WAV wächst) und dann nachfragen.
 - Plattformneutral bleiben: Pfade mit `path`, keine festen Laufwerks- oder
   `/Users`-Pfade, Plattformunterschiede nur über `process.platform`.
-- whisper.cpp-Binary und Modell sind pro Rechner verschieden und stehen nur in
-  den lokalen Einstellungen, nie im Repo.
 - Während einer Aufnahme darf nie etwas die Audioaufnahme blockieren oder
   die App neu starten (siehe Updater).
 - Auch der Windows-PC arbeitet direkt auf `main` (aktuell nur Testphase). Sobald
@@ -109,14 +107,18 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Ortszeit umgerechnet (`withLocalTime`).
 
 ### Oberfläche
-- Zeitangaben (Marken, Transkript, Listen, Zeitleiste der Wellenform) nutzen dieselbe
+- Zeitangaben (Marken, Listen, Zeitleiste der Wellenform) nutzen dieselbe
   Schrift wie der große Timer: `var(--sans)` mit `font-variant-numeric: tabular-nums`.
   Keine Monospace-Schrift verwenden (`--mono` gibt es nicht mehr).
-- Mittlere Spalte: Karten „Tastenkürzel“ und „Speicherplatz“, darunter die
-  Mitschrift (kompakt, einklappbar, Zustand in `localStorage`). Die Kürzelliste steht
-  zentral in `shortcutList()` (`app.js`) und speist Karte und Dialog (`?`): neue Kürzel
-  dort eintragen. Speicherplatz kommt über `disk:free` (`fs.statfsSync`), Stunden
-  gerechnet aus der Abtastrate (16 Bit, Stereo); Warnung < 3 h, rot < 30 min.
+- Layout unter der Wellenform: drei Bereiche (Ablaufplan | Abschnitte | Export), ganz
+  unten die Tastenleiste (`.keybar`). Die Kürzelliste steht zentral in `shortcutList()`
+  (`app.js`) und speist Leiste und Dialog (`?`): neue Kürzel dort eintragen.
+  Speicherplatz zeigt `#disk-badge` in der Kopfleiste (`disk:free`, `fs.statfsSync`;
+  Stunden aus der Abtastrate, 16 Bit Stereo); orange < 3 h, rot < 30 min.
+- Layout-Vorschau ohne Electron: statischer Server auf `app/src` und eine Seite mit
+  Mock-`window.api` (CSP verbietet Inline-Skripte, Mock als eigene Datei laden). Die
+  Bildschirmfotos der Browser-Vorschau sind unzuverlässig skaliert; Größen lieber über
+  `getBoundingClientRect()` messen. Vorschau-Dateien danach wieder löschen.
 
 ### Entwicklung
 - `npm run dev` startet neu bei Änderungen im Hauptprozess, **außer während einer
@@ -128,3 +130,9 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   `npm run dev:tools`.
 - Skripte zum Testen der Session-Logik ohne Electron: `settings`-Modul per
   `Module._load` ersetzen und am Ende `process.exit(0)` aufrufen (Autosave-Timer).
+
+### Entfernt: Mitschrift
+Die lokale Transkription (whisper.cpp, Mitschrift-Panel, Einstellungen) wurde
+bewusst wieder ausgebaut, weil sie keinen Mehrwert brachte. Nicht neu einbauen,
+ohne vorher nachzufragen. Alte Sessions mit `transcript` im JSON werden ohne
+Fehler geladen; das Feld wird ignoriert und beim Speichern nicht mehr geschrieben.

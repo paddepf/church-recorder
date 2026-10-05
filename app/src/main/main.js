@@ -7,7 +7,6 @@ const { app, BrowserWindow, ipcMain, dialog, shell, Menu, systemPreferences, pow
 const settings = require('./settings');
 const { Session, slug, dateStamp } = require('./session');
 const { NetServer } = require('./netserver');
-const { Transcriber } = require('./transcribe');
 const { Updater } = require('./updater');
 const churchtools = require('./churchtools');
 const mp3 = require('./mp3');
@@ -15,7 +14,6 @@ const mp3 = require('./mp3');
 let win = null;
 const session = new Session();
 const net = new NetServer();
-const transcriber = new Transcriber();
 const updater = new Updater(() => session.status === 'recording' || session.status === 'paused');
 
 const isDev = process.argv.includes('--dev');
@@ -245,10 +243,6 @@ session.on('levels', (levels) => {
   net.publishLevels(levels);
 });
 
-session.on('audio', ({ buffer, startTime }) => {
-  transcriber.push(buffer, startTime);
-});
-
 // Während der Aufnahme darf der Rechner nicht in den Ruhezustand: Beim Aufwachen
 // liefert der Audioeingang sonst keine Daten mehr.
 let sleepBlockerId = null;
@@ -261,27 +255,17 @@ function preventSleep(on) {
   }
 }
 
-session.on('recording-started', ({ sampleRate, channels }) => {
+session.on('recording-started', () => {
   preventSleep(true);
-  const result = transcriber.start(sampleRate, channels);
-  if (!result.ok && result.reason !== 'disabled') {
-    toast('warn', `Transkription nicht gestartet: ${result.message}`);
-  }
   net.publishEvent('recording.started', { wavPath: session.wavPath });
 });
 
 session.on('recording-stopped', (info) => {
   preventSleep(false);
-  transcriber.stop();
   net.publishEvent('recording.stopped', info);
 });
 
-session.on('transcript', (segment) => send('transcript', segment));
 session.on('error-notice', (message) => toast('error', message));
-
-transcriber.on('segment', (seg) => session.addTranscript(seg));
-transcriber.on('status', (s) => send('transcription-status', s));
-transcriber.on('failure', (message) => toast('warn', 'Transkription gestoppt: ' + message));
 
 net.on('status', (info) => send('network-status', info));
 net.on('error-notice', (message) => toast('error', message));
@@ -341,8 +325,7 @@ ipcMain.handle('app:info', () => ok({
   platform: process.platform,
   recordingsDir: settings.get('recordingsDir'),
   update: updater.status(),
-  network: net.statusInfo(),
-  transcription: Transcriber.check()
+  network: net.statusInfo()
 }));
 
 /** Freier Platz auf dem Laufwerk der Aufnahmen und was das in Aufnahmestunden bedeutet. */
@@ -609,7 +592,7 @@ ipcMain.handle('session:new', () => {
   return ok({ state: session.snapshot() });
 });
 
-ipcMain.handle('session:state', () => ok({ state: session.snapshot(), transcript: session.transcript, peaks: session.peaks }));
+ipcMain.handle('session:state', () => ok({ state: session.snapshot(), peaks: session.peaks }));
 
 /* --- Netzwerk & Updates --- */
 

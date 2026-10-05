@@ -67,7 +67,7 @@ function migrateSections(data, duration) {
 
 /**
  * Eine Session ist eine Aufnahme: eine durchgehende WAV-Masterdatei plus
- * Marker, Transkript und Metadaten. Marker sind reine Metadaten – die
+ * Abschnitte und Metadaten. Abschnitte sind reine Metadaten – die
  * Audiodatei wird davon nie verändert.
  */
 class Session extends EventEmitter {
@@ -82,7 +82,6 @@ class Session extends EventEmitter {
     this.sections = [];                 // {id,label,category,color,start|null,end|null,source}
     this.exports = {};                  // Segment-ID -> {file,start,end,at}: bereits als MP3 gesichert
     this._colorSeq = 0;
-    this.transcript = [];               // {start,end,text}
     this.peaks = [];                    // 0..255 je 50 ms
     this.writer = null;
     this.basePath = null;               // ohne Endung
@@ -163,8 +162,7 @@ class Session extends EventEmitter {
       pending: this.pendingSections(),
       segments: this.segments(),
       currentSegment: this.currentSegment(),
-      wavPath: this.wavPath,
-      transcriptCount: this.transcript.length
+      wavPath: this.wavPath
     };
   }
 
@@ -393,7 +391,6 @@ class Session extends EventEmitter {
     this.status = 'recording';
     this.finalized = false;
     this.peaks = [];
-    this.transcript = [];
     this._restoredDuration = 0;
     this._bucketAcc = 0;
     this._bucketFrames = 0;
@@ -486,7 +483,6 @@ class Session extends EventEmitter {
    */
   pushAudio(buffer) {
     if (this.status !== 'recording' || !this.writer) return;
-    const startFrame = this.writer.frames;
     this.writer.write(buffer);
 
     const ch = this.channels;
@@ -514,13 +510,6 @@ class Session extends EventEmitter {
     if (peakL >= 0.999 || peakR >= 0.999) this._clipUntil = now + 2000;
     this.levels = { l: peakL, r: peakR, clip: now < this._clipUntil };
 
-    this.emit('audio', {
-      buffer,
-      startFrame,
-      sampleRate: this.sampleRate,
-      channels: this.channels,
-      startTime: startFrame / this.sampleRate
-    });
     this.emit('levels', { ...this.levels, duration: this.duration });
   }
 
@@ -535,13 +524,6 @@ class Session extends EventEmitter {
     const end = Math.min(start + Math.min(Math.max(seconds || 1, 0.1), 10), this.duration);
     if (end <= start) return { sampleRate: this.sampleRate, channels: this.channels, samples: new Int16Array(0) };
     return readSlice(this.wavPath, start, end);
-  }
-
-  addTranscript(segment) {
-    this.transcript.push(segment);
-    if (this.transcript.length > 5000) this.transcript.shift();
-    this._dirty = true;
-    this.emit('transcript', segment);
   }
 
   /* -------------------------------------------------------- Speichern / Laden */
@@ -578,7 +560,6 @@ class Session extends EventEmitter {
       wavPath: this.wavPath,
       sections: this.sections,
       exports: this.exports,
-      transcript: this.transcript,
       peaks: this.peaks
     };
     try {
@@ -598,7 +579,6 @@ class Session extends EventEmitter {
     this.basePath = sessionPath.replace(/\.session\.json$/, '');
     this.wavPath = data.wavPath && fs.existsSync(data.wavPath) ? data.wavPath : `${this.basePath}.wav`;
     this.service = data.service || this.service;
-    this.transcript = data.transcript || [];
     this.peaks = data.peaks || [];
     this.sampleRate = data.sampleRate || this.sampleRate;
     this.channels = data.channels || 2;

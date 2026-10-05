@@ -32,14 +32,6 @@ const DEFAULTS = {
   networkPassword: '',          // Vollzugriff (Companion)
   monitorPassword: '',          // optional: nur lesen (Dashboard). Leer = deaktiviert.
 
-  // Transkription
-  transcriptionEnabled: true,
-  whisperBinaryPath: '',        // z. B. C:\\whisper\\whisper-cli.exe
-  whisperModelPath: '',         // z. B. C:\\whisper\\ggml-small-de.bin
-  whisperLanguage: 'de',
-  transcriptionChunkSeconds: 12,
-  transcriptionThreads: 4,
-
   // Updates
   autoUpdateCheck: true,
 

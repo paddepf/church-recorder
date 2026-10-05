@@ -1,7 +1,7 @@
 {
   "name": "church-recorder",
   "version": "1.0.0",
-  "description": "Aufnahmesoftware für Gottesdienste mit ChurchTools-Ablaufplan, Markern, lokaler Transkription und Netzwerksteuerung",
+  "description": "Aufnahmesoftware für Gottesdienste mit ChurchTools-Ablaufplan, Abschnitten und Netzwerksteuerung",
   "main": "src/main/main.js",
   "author": "",
   "license": "UNLICENSED",

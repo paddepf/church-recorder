@@ -142,20 +142,4 @@ function readSlice(filePath, startSec, endSec) {
   }
 }
 
-/** Schreibt eine komplette Mono-WAV-Datei (für die Transkription). */
-function writeMonoFile(filePath, sampleRate, float32) {
-  const data = Buffer.alloc(float32.length * 2);
-  for (let i = 0; i < float32.length; i++) {
-    let v = Math.max(-1, Math.min(1, float32[i]));
-    data.writeInt16LE(Math.round(v * 32767), i * 2);
-  }
-  const fd = fs.openSync(filePath, 'w');
-  try {
-    fs.writeSync(fd, buildHeader(sampleRate, 1, data.length), 0, HEADER_BYTES, 0);
-    fs.writeSync(fd, data, 0, data.length, HEADER_BYTES);
-  } finally {
-    fs.closeSync(fd);
-  }
-}
-
-module.exports = { WavWriter, readInfo, readSlice, writeMonoFile, HEADER_BYTES };
+module.exports = { WavWriter, readInfo, readSlice, HEADER_BYTES };
