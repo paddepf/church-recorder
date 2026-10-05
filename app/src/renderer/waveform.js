@@ -193,7 +193,7 @@
       const step = candidates.find((s) => s * this.pxPerSec >= 70) || 3600;
       const first = Math.floor(this.scrollT / step) * step;
 
-      ctx.font = '11px ui-monospace, "Cascadia Mono", Consolas, monospace';
+      ctx.font = '11px system-ui, "Segoe UI", Roboto, sans-serif';
       ctx.textBaseline = 'middle';
       for (let t = first; t <= this.scrollT + this.viewSeconds; t += step) {
         const x = this.timeToX(t);

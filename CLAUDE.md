@@ -108,6 +108,11 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   kommenden 5 Termine. ChurchTools liefert **UTC**; Zeit und Datum werden in
   Ortszeit umgerechnet (`withLocalTime`).
 
+### Oberfläche
+- Zeitangaben (Marken, Transkript, Listen, Zeitleiste der Wellenform) nutzen dieselbe
+  Schrift wie der große Timer: `var(--sans)` mit `font-variant-numeric: tabular-nums`.
+  Keine Monospace-Schrift verwenden (`--mono` gibt es nicht mehr).
+
 ### Entwicklung
 - `npm run dev` startet neu bei Änderungen im Hauptprozess, **außer während einer
   Aufnahme** (dann nur ein Hinweis). Änderungen am Renderer laden die Oberfläche
