@@ -45,14 +45,16 @@ function stateThrottle() {
 }
 const pushState = stateThrottle();
 
-function buildFileName(segmentLabel) {
-  const pattern = settings.get('fileNamePattern') || '{datum}_{gottesdienst}_{abschnitt}';
+function buildFileName(segmentLabel, artist) {
+  const pattern = settings.get('fileNamePattern') || '{interpret}_{abschnitt}_{gottesdienst}_{datum}';
   const name = pattern
     .replace(/\{datum\}/g, session.service.date || dateStamp())
     .replace(/\{gottesdienst\}/g, slug(session.service.name, 'Gottesdienst'))
     .replace(/\{abschnitt\}/g, slug(segmentLabel, 'Abschnitt'))
+    .replace(/\{interpret\}/g, artist ? slug(artist, '') : '')
     .replace(/\{zeit\}/g, new Date().toTimeString().slice(0, 5).replace(':', ''));
-  return slug(name).replace(/-+/g, '-') + '.mp3';
+  // Ein leerer Platzhalter (z. B. ohne Interpret) soll keine doppelten oder führenden Trennzeichen hinterlassen.
+  return slug(name).replace(/-+/g, '-').replace(/_+/g, '_').replace(/^[_-]+|[_-]+$/g, '') + '.mp3';
 }
 
 /**
@@ -516,7 +518,7 @@ ipcMain.handle('export:batch', async (_e, { items } = {}) => {
           wavPath: session.wavPath,
           start,
           end,
-          outPath: freeFilePath(path.join(folder, buildFileName(label))),
+          outPath: freeFilePath(path.join(folder, buildFileName(label, tags.artist))),
           bitrate: settings.get('mp3Bitrate') || 192,
           tags,
           onProgress: (p) => send('export-progress', { progress: (i + p) / items.length, index: i + 1, total: items.length })

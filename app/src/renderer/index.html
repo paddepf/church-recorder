@@ -71,7 +71,7 @@
     <div class="panel panel-plan">
       <div class="panel-head">
         <h2>Ablaufplan</h2>
-        <span id="plan-hint" class="hint">Punkte auf die Wellenform ziehen</span>
+        <span id="plan-hint" class="hint">Anklicken oder auf die Wellenform ziehen</span>
       </div>
       <ol id="pending-list" class="pending"></ol>
     </div>
@@ -149,8 +149,8 @@
             <small>Darin entsteht je Gottesdienst ein Unterordner „Datum_Gottesdienstname“, die MP3-Dateien werden ohne Rückfrage dort abgelegt.</small>
           </label>
           <label>Dateiname
-            <input id="set-pattern" type="text" placeholder="{datum}_{gottesdienst}_{abschnitt}" />
-            <small>Platzhalter: {datum}, {zeit}, {gottesdienst}, {abschnitt}</small>
+            <input id="set-pattern" type="text" placeholder="{interpret}_{abschnitt}_{gottesdienst}_{datum}" />
+            <small>Platzhalter: {interpret}, {abschnitt}, {gottesdienst}, {datum}, {zeit}</small>
           </label>
           <label>Standard-Interpret für MP3-Tags
             <input id="set-default-artist" type="text" />

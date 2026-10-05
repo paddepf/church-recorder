@@ -342,6 +342,8 @@ canvas.wave {
 .item:hover { background: var(--raised); }
 .item[data-hue] { border-left-color: hsl(var(--hue), 55%, 62%); }
 .item[draggable="true"] { cursor: grab; }
+.item.clickable { cursor: pointer; }
+.item.clickable:hover { background: var(--raised); outline: 1px solid var(--line); }
 .item.selected { outline: 1px solid var(--plan); }
 .item .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item .artist { color: var(--muted); font-size: 12px; }

@@ -52,7 +52,7 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Nachbarn, wandert dessen angrenzende Marke mit, kürzer als 0,1 s wird keiner.
 - Drag & Drop eines Ablaufpunkts (`placePending`): in einer Lücke füllt er
   sie genau, hinter dem letzten beginnt er an der Ablagestelle, mitten in einem
-  Abschnitt kürzt er diesen. „starten“ und N (`startPending`) setzen dagegen
+  Abschnitt kürzt er diesen. Ein Klick auf den Punkt im Ablaufplan (nur während der Aufnahme) und N (`startPending`) setzen dagegen
   immer an der Live-Stelle.
 - Alte Sessions mit `markers` (Version 1) werden in `loadFromFile` zu Abschnitten
   migriert (`migrateSections`). Session-Datei ist jetzt `version: 2`.
@@ -83,6 +83,10 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   werden nie überschrieben (` (2)`). Leer: Zielordner wird beim Export abgefragt,
   die Dateien liegen dann direkt darin. Ordnername nutzt `slug()` und
   `session.service` (Datum lokal, Name aus ChurchTools).
+- Dateiname: Muster `fileNamePattern`, Standard `{interpret}_{abschnitt}_{gottesdienst}_{datum}`
+  (`buildFileName` in `main.js`). Ein leerer `{interpret}` hinterlässt keine doppelten
+  Trennzeichen. Das alte Standardmuster `{datum}_{gottesdienst}_{abschnitt}` wird beim Laden der
+  Einstellungen auf das neue umgestellt, selbst geänderte Muster bleiben unberührt.
 - ID3-Tags (`id3.js`, eigener ID3v2.3-Schreiber, UTF-16): Titel = Abschnittsname, Album =
   `session.service.date`, Jahr, Interpret = `section.artist` bzw. Einstellung
   `defaultArtist`. `artist` ist ein Feld des Abschnitts (auch bei offenen Ablaufpunkten),
@@ -133,6 +137,9 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   sofort neu. Nach Änderungen an `main`/`preload`/`shared` also App neu starten:
   `pkill -f "church-recorder/app/node_modules/[e]lectron"; cd app && npm run dev`
   (die Klammer in `[e]lectron` verhindert, dass pkill sich selbst beendet).
+- Claude öffnet für den Neustart einen Terminal-Tab (`run_in_terminal`); davon sind höchstens
+  6 pro Sitzung erlaubt. Vor jedem Neustart den vorherigen Tab mit `stop_terminal_tab`
+  (`close: true`) schließen.
 - DevTools öffnen nicht automatisch: F12 bzw. Strg/Cmd+Umschalt+I oder
   `npm run dev:tools`.
 - Skripte zum Testen der Session-Logik ohne Electron: `settings`-Modul per

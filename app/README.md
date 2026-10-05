@@ -59,7 +59,11 @@ Windows erzeugen. Der mitgelieferte Workflow erledigt beides auf GitHub.
 2. **Einstellungen → Ablage:** Ordner für die Aufnahmen festlegen. Rechne mit
    etwa 700 MB pro Stunde für die WAV-Masteraufnahme. Zusätzlich lässt sich ein
    Oberordner für die MP3-Exporte angeben (z. B. „Aufnahmen 2026"); darin
-   entsteht je Gottesdienst ein Unterordner `Datum_Gottesdienstname`.
+   entsteht je Gottesdienst ein Unterordner `Datum_Gottesdienstname`. Der **Dateiname**
+   der MP3s ist ein Muster mit den Platzhaltern `{interpret}`, `{abschnitt}`,
+   `{gottesdienst}`, `{datum}` und `{zeit}`; Standard ist
+   `{interpret}_{abschnitt}_{gottesdienst}_{datum}`. Fehlt der Interpret, entfällt er
+   samt Trennzeichen (z. B. `Predigt_Sonntagsgottesdienst_2026-10-05.mp3`).
 3. **Einstellungen → ChurchTools:** Adresse und Personal Access Token eintragen,
    dann „Verbindung prüfen". Der Token wird über die Schlüsselverwaltung des
    Betriebssystems verschlüsselt abgelegt.
@@ -77,7 +81,7 @@ Windows erzeugen. Der mitgelieferte Workflow erledigt beides auf GitHub.
 3. Jeder Abschnitt besteht aus zwei Marken: Anfang und Ende. „Abschnitt starten"
    (Taste **M**) setzt die Anfangsmarke, derselbe Knopf („Abschnitt beenden",
    wieder **M**) die Endmarke. Beginnt ein Programmpunkt des Ablaufplans, auf
-   „Nächster Ablaufpunkt" drücken (Taste **N**) oder in der Liste auf „starten":
+   „Nächster Ablaufpunkt" drücken (Taste **N**) oder den Punkt in der Liste anklicken:
    Ein laufender Abschnitt endet dabei an derselben Stelle. Die Marke wird sofort
    gesetzt, benannt wird danach (✎, Doppelklick oder **F2**). Jeder Abschnitt hat
    eine eigene dezente Farbe in Wellenform und Liste.

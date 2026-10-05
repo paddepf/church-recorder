@@ -5,6 +5,8 @@ const path = require('path');
 const os = require('os');
 const { app, safeStorage } = require('electron');
 
+const LEGACY_FILE_PATTERN = '{datum}_{gottesdienst}_{abschnitt}';
+
 const DEFAULTS = {
   // Audio
   inputDeviceId: '',
@@ -15,7 +17,7 @@ const DEFAULTS = {
 
   // Ablage
   recordingsDir: '',            // wird beim ersten Start gesetzt
-  fileNamePattern: '{datum}_{gottesdienst}_{abschnitt}',
+  fileNamePattern: '{interpret}_{abschnitt}_{gottesdienst}_{datum}',
   exportDir: '',                // Oberordner für MP3-Exporte; leer = beim Export nachfragen
   mp3Bitrate: 192,
   defaultArtist: '',            // Interpret in den ID3-Tags, wenn ein Abschnitt keinen eigenen hat
@@ -63,6 +65,8 @@ function load() {
     stored = {};
   }
   cache = { ...DEFAULTS, ...stored };
+  // Wer das alte Standardmuster nie geändert hat, bekommt das neue Standardmuster.
+  if (stored.fileNamePattern === LEGACY_FILE_PATTERN) cache.fileNamePattern = DEFAULTS.fileNamePattern;
   if (!cache.recordingsDir) cache.recordingsDir = defaultRecordingsDir();
   try {
     fs.mkdirSync(cache.recordingsDir, { recursive: true });

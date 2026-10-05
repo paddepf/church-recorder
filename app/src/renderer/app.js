@@ -447,18 +447,24 @@
       li.style.setProperty('--hue', window.sectionHue(x));
       li.draggable = true;
       li.innerHTML = `<span class="label"></span>
-        <button class="mini" data-rename title="Name und Interpret bearbeiten">✎</button>
-        <button class="mini" data-place title="Diesen Abschnitt jetzt beginnen">starten</button>`;
+        <button class="mini" data-rename title="Name und Interpret bearbeiten">✎</button>`;
+      // Klick auf den Punkt beginnt ihn jetzt (nur während der Aufnahme); Ziehen auf die Wellenform bleibt möglich.
+      li.classList.toggle('clickable', live);
+      li.title = live
+        ? 'Klicken: jetzt beginnen · auf die Wellenform ziehen: an die Stelle legen'
+        : 'Auf die Wellenform ziehen, um den Punkt an eine Stelle zu legen';
       li.querySelector('.label').textContent = x.label;
       if (x.artist) li.querySelector('.label').appendChild(artistTag(x.artist));
-      li.querySelector('[data-rename]').addEventListener('click', () => renameSection(x.id));
+      li.querySelector('[data-rename]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        renameSection(x.id);
+      });
       li.addEventListener('dragstart', (e) => {
         e.dataTransfer.setData('text/marker-id', x.id);
         e.dataTransfer.effectAllowed = 'move';
       });
-      const btn = li.querySelector('[data-place]');
-      btn.disabled = !live;
-      btn.addEventListener('click', async () => {
+      li.addEventListener('click', async () => {
+        if (!live) return;
         const res = await window.api.section.start(x.id, null);
         if (!res.ok) toast('error', res.error);
       });
@@ -1314,7 +1320,7 @@
       recordingsDir: $('set-dir').value,
       exportDir: $('set-export-dir').value,
       defaultArtist: $('set-default-artist').value.trim(),
-      fileNamePattern: $('set-pattern').value.trim() || '{datum}_{gottesdienst}_{abschnitt}',
+      fileNamePattern: $('set-pattern').value.trim() || '{interpret}_{abschnitt}_{gottesdienst}_{datum}',
       mp3Bitrate: Number($('set-bitrate').value),
       churchToolsUrl: $('set-ct-url').value.trim(),
       autoLoadTodaysService: $('set-ct-auto').checked,
