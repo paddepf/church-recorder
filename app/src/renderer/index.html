@@ -179,6 +179,10 @@
             <input id="set-ct-token" type="password" placeholder="Token eingeben oder leer lassen" />
             <small id="ct-token-state"></small>
           </label>
+          <label>Dienste für Interpret-Vorschläge
+            <input id="set-ct-services" type="text" />
+            <small>Namen der Dienste in der ChurchTools-Dienstplanung, durch Komma getrennt. Die dort eingetragenen Personen erscheinen beim Bearbeiten eines Abschnitts als Vorschlag zum Anklicken.</small>
+          </label>
           <label class="check"><input type="checkbox" id="set-ct-auto" /> Beim Start den heutigen Gottesdienst vorschlagen</label>
           <button id="btn-ct-test" class="secondary">Verbindung prüfen</button>
           <span id="ct-test-result" class="inline-result"></span>
@@ -308,6 +312,7 @@
   </div>
 
   <script src="../shared/sections.js"></script>
+  <script src="../shared/roles.js"></script>
   <script src="capture.js"></script>
   <script src="monitor.js"></script>
   <script src="waveform.js"></script>

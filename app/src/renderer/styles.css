@@ -391,6 +391,19 @@ canvas.wave {
   border-radius: 4px;
   font-size: 15px;
 }
+.inline-edit { flex-wrap: wrap; }
+.inline-edit .ie-suggest { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 3px; }
+.chip {
+  font-size: 13px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--muted);
+  cursor: pointer;
+}
+.chip:hover { color: var(--text); border-color: var(--plan); }
+.chip.match { color: var(--text); border-color: var(--manual); }
 .inline-edit .ie-name { flex: 2; }
 .inline-edit .ie-artist { flex: 1; }
 .item .time { font-family: var(--sans); font-variant-numeric: tabular-nums; font-size: 14px; color: var(--muted); }

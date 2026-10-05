@@ -6,6 +6,7 @@ const { EventEmitter } = require('events');
 const { WavWriter, readInfo, readSlice } = require('./wav');
 const settings = require('./settings');
 const SectionLogic = require('../shared/sections');
+const RoleLogic = require('../shared/roles');
 
 const PEAK_BUCKET_MS = 50;   // Auflösung der Wellenform
 const AUTOSAVE_MS = 3000;
@@ -319,7 +320,9 @@ class Session extends EventEmitter {
     this.service = {
       id: service?.id ?? null,
       name: service?.name || 'Gottesdienst',
-      date: service?.date || dateStamp()
+      date: service?.date || dateStamp(),
+      // Personen aus der ChurchTools-Dienstplanung (z. B. Leitung, Predigt) als Interpret-Vorschläge
+      suggestions: Array.isArray(service?.suggestions) ? service.suggestions : []
     };
     this._changed();
   }
@@ -343,7 +346,7 @@ class Session extends EventEmitter {
         label: it.title || `Punkt ${i + 1}`,
         category: it.category || null,
         plannedDuration: it.duration || null,
-        artist: null,
+        artist: it.responsible || null,       // zuständige Person aus dem Ablaufplan
         order: i,
         color: this._nextColor(),
         start: null,
@@ -351,8 +354,29 @@ class Session extends EventEmitter {
         source
       }));
     this.sections = [...placedFromPlan, ...fresh, ...manual];
+    const autoFilled = this._applySuggestions();
     this._changed({ undoable: false });
     this._resetUndo();
+    return autoFilled;
+  }
+
+  /**
+   * Trägt für Punkte ohne Interpret die Personen aus der Dienstplanung ein, deren Dienst zum Namen
+   * passt (z. B. Dienst "Predigt 2" beim Punkt "Predigt"). Gibt zurück, bei wie vielen Punkten das geschah.
+   */
+  _applySuggestions() {
+    const suggestions = this.service.suggestions || [];
+    if (suggestions.length === 0) return 0;
+    let count = 0;
+    this.sections.forEach((x) => {
+      if (x.artist) return;
+      const names = RoleLogic.namesForLabel(x.label, suggestions);
+      if (names.length) {
+        x.artist = names.join(', ');
+        count += 1;
+      }
+    });
+    return count;
   }
 
   _closeOpen(time) {

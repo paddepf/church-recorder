@@ -110,6 +110,25 @@ Die WAV-Masteraufnahme bleibt erhalten. Über „Aufnahmen" kann eine frühere
 Session erneut geöffnet, die Marken nachjustiert und ein weiterer Abschnitt
 exportiert werden.
 
+### Interpret aus ChurchTools
+
+- **Ablaufplan:** Ist bei einem Ablaufpunkt in ChurchTools eine zuständige Person eingetragen, wird sie
+  automatisch als Interpret übernommen (jederzeit änderbar).
+- **Dienstplanung:** Auch ohne Ablaufplan sind meist Dienste wie „Leitung" und „Predigt" besetzt. Beim Wählen
+  eines Termins liest die App diese Personen aus der Dienstplanung. Beim Bearbeiten eines Abschnitts erscheinen
+  sie als **Vorschläge zum Anklicken** (Name · Dienst) unter den Eingabefeldern; ein Klick übernimmt den Namen
+  und speichert.
+- **Automatisch eintragen:** Passt ein Dienst zum Namen eines Ablaufpunkts, wird die Person direkt als Interpret
+  eingetragen – zum Beispiel der Dienst „Predigt 2" beim Punkt „Predigt". Verglichen werden ganze Wörter
+  („Leitung" passt nicht zu „Einleitung"), Zahlen zählen nicht („Predigt 2" passt nicht zu „Lied 2").
+  Sind mehrere Dienste passend (z. B. „Predigt" und „Predigt 2"), stehen alle Namen mit Komma dort. Eine
+  zuständige Person aus dem Ablaufplan hat Vorrang, und jeder Eintrag lässt sich ändern. Die übrigen Personen
+  bleiben als Vorschläge zum Anklicken; passende stehen zuerst und haben einen grünen Rand. Welche Dienste gelesen werden, steht unter **Einstellungen → ChurchTools →
+  Dienste für Interpret-Vorschläge** (Standard: `Leitung, Predigt`, durch Komma getrennt; der Dienstname muss
+  das Wort enthalten, „Leitung" findet also auch „Gebetsleitung").
+- Beim Wählen des Termins meldet die App kurz, welche Personen gefunden wurden – oder dass niemand
+  eingetragen ist bzw. die Dienstplanung nicht gelesen werden konnte.
+
 ### Name und Interpret direkt bearbeiten
 
 Ohne Dialog, direkt am Element: ein kleines Eingabefeld legt sich über das Fähnchen
@@ -277,6 +296,7 @@ src/main/        Hauptprozess
   settings.js    Einstellungen, Token-Verschlüsselung
 src/shared/      Von Hauptprozess und Oberfläche gemeinsam genutzt
   sections.js    Regeln für Abschnitte (Verschieben ohne Überlappung)
+  roles.js       Zuordnung Dienst (ChurchTools) zu Programmpunkt
 src/preload.js   Brücke zur Oberfläche
 src/renderer/    Oberfläche
   capture.js     Audioerfassung (AudioWorklet)

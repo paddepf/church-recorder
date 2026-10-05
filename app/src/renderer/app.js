@@ -605,6 +605,31 @@
     name.value = x.label || '';
     artist.value = x.artist || '';
 
+    // Vorschläge aus der Dienstplanung zum Anklicken (passender Dienst zuerst, z. B. "Predigt" beim Punkt Predigt)
+    const byName = new Map();
+    (state.session?.service?.suggestions || []).forEach((sug) => {
+      if (!byName.has(sug.name)) byName.set(sug.name, []);
+      byName.get(sug.name).push(sug.role);
+    });
+    const matches = (roles) => roles.some((r) => window.RoleLogic.roleMatchesLabel(r, x.label));
+    const suggestions = [...byName.entries()]
+      .map(([nm, roles]) => ({ name: nm, roles }))
+      .sort((a, b) => Number(matches(b.roles)) - Number(matches(a.roles)));
+    if (suggestions.length) {
+      const row = document.createElement('div');
+      row.className = 'ie-suggest';
+      suggestions.forEach((sug) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'chip' + (matches(sug.roles) ? ' match' : '');
+        chip.textContent = `${sug.name} · ${sug.roles.join(', ')}`;
+        chip.title = 'Als Interpret übernehmen';
+        chip.addEventListener('click', () => { artist.value = sug.name; finish(true); });
+        row.appendChild(chip);
+      });
+      box.appendChild(row);
+    }
+
     const width = Math.max(anchor.width, 300);
     box.style.left = Math.max(4, Math.min(anchor.left, window.innerWidth - width - 4)) + 'px';
     box.style.top = anchor.top + 'px';
@@ -612,6 +637,9 @@
     box.style.minHeight = Math.max(anchor.height, 26) + 'px';
     document.body.appendChild(box);
     state.inlineEdit = id;
+    // Mit den Vorschlägen wird das Feld höher: nicht über den unteren Rand hinausragen lassen.
+    const bottom = box.getBoundingClientRect().bottom;
+    if (bottom > window.innerHeight - 8) box.style.top = Math.max(4, anchor.top - (bottom - window.innerHeight + 8)) + 'px';
 
     let done = false;
     const finish = async (save) => {
@@ -1329,6 +1357,18 @@
     } else {
       toast('success', `${service.name}: ${res.count} Ablaufpunkte übernommen.`);
     }
+    // Interpret-Vorschläge aus der Dienstplanung (Leitung, Predigt …)
+    if ((res.wanted || []).length) {
+      if (res.suggestionError) {
+        toast('warn', `Dienstplanung nicht gelesen: ${res.suggestionError}`, 8000);
+      } else if ((res.suggestions || []).length) {
+        const text = res.suggestions.map((x) => `${x.role}: ${x.name}`).join(' · ');
+        const auto = res.autoFilled ? ` · ${res.autoFilled} Punkt${res.autoFilled === 1 ? '' : 'e'} automatisch zugeordnet` : '';
+        toast('info', `Aus der Dienstplanung – ${text}${auto}`, 9000);
+      } else {
+        toast('info', `In der Dienstplanung ist für „${res.wanted.join(', ')}" niemand eingetragen.`, 7000);
+      }
+    }
   }
 
   $('btn-manual-service')?.addEventListener('click', async () => {
@@ -1434,6 +1474,7 @@
     $('set-bitrate').value = String(s.mp3Bitrate);
     $('set-ct-url').value = s.churchToolsUrl;
     $('set-ct-auto').checked = Boolean(s.autoLoadTodaysService);
+    $('set-ct-services').value = s.artistServices || '';
     $('ct-token-state').textContent = s.churchToolsTokenSet
       ? (s.encryptionAvailable ? 'Ein Token ist hinterlegt (verschlüsselt gespeichert).' : 'Ein Token ist hinterlegt. Achtung: Verschlüsselung auf diesem System nicht verfügbar.')
       : 'Noch kein Token hinterlegt.';
@@ -1620,6 +1661,7 @@
       mp3Bitrate: Number($('set-bitrate').value),
       churchToolsUrl: $('set-ct-url').value.trim(),
       autoLoadTodaysService: $('set-ct-auto').checked,
+      artistServices: $('set-ct-services').value.trim(),
       networkEnabled: $('set-net-on').checked,
       networkPort: Number($('set-net-port').value) || 8765,
       networkPassword: $('set-net-pass').value,

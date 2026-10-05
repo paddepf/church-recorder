@@ -90,6 +90,23 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Liste (`section:reorder`, setzt `order` der offenen Punkte neu). Dieselbe Drag-Quelle (`text/marker-id`) dient
   weiter zum Ablegen auf der Wellenform, das Ziel unterscheidet.
 
+### Interpret aus ChurchTools
+- Ablaufpunkt mit zuständiger Person (`item.responsible`, tolerant geparst in `responsibleText`/`personName`;
+  verknüpfte Personen vor Freitext) → `artist` des Abschnitts (`setAgenda`: `it.responsible`).
+- Dienstplanung: `churchtools.eventServices(eventId, wanted)` liest `GET /api/events/{id}?include=eventServices`,
+  Dienstnamen über `GET /api/services`, Personennamen aus `es.person`, `es.name` (wenn ungleich Dienstname) oder
+  per `GET /api/persons/{id}`; Filter: Dienstname enthält ein Wort aus Einstellung `artistServices`
+  (Standard `Leitung, Predigt`). Ergebnis in `session.service.suggestions` (`{role,name}`), im Editor
+  (`editSection`) als Chips; passender Dienst zuerst (Wortvergleich, damit „Einleitung“ nicht zu „Leitung“ passt).
+  **Automatisch eintragen:** `Session.setAgenda` ruft `_applySuggestions()`: für Punkte ohne `artist` kommen die
+  Namen aus `service.suggestions`, deren Dienst zum Punktnamen passt (`src/shared/roles.js`, `RoleLogic`:
+  ganze Wörter, reine Zahlen zählen nicht; "Predigt 2" → Punkt "Predigt"; mehrere Treffer mit Komma). Dieselbe
+  Regel sortiert die Chips im Editor. `setAgenda` gibt die Anzahl zurück (`autoFilled` in der Antwort von
+  `ct:agenda`). Reihenfolge der Quellen: Ablaufplan-Person vor Dienstplanung.
+  **Die genaue Antwortform von ChurchTools wurde nicht gegen eine echte Instanz geprüft** (nur mit nachgebauten
+  Antworten); bei Abweichungen die echte Antwort ansehen und `eventServices` anpassen. Fehler beim Lesen stören
+  den Termin-Import nicht (Hinweis per Toast, `suggestionError`).
+
 ### Rückgängig, Schnitte, Vorlagen, Health
 - **Rückgängig:** `Session._changed()` vergleicht `JSON({sections, cuts})` mit dem letzten Stand und legt
   Änderungen auf einen Verlauf (`_undo`/`_redo`, 60 Schritte). `{ undoable: false }` für Änderungen, die nicht

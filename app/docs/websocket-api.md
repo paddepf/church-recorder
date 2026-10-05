@@ -48,7 +48,10 @@ Wird direkt nach der Anmeldung und bei jeder Änderung gesendet (max. 10×/s).
   "type": "state",
   "payload": {
     "status": "recording",
-    "service": { "id": 4711, "name": "Sonntagsgottesdienst", "date": "2026-09-06" },
+    "service": {
+      "id": 4711, "name": "Sonntagsgottesdienst", "date": "2026-09-06",
+      "suggestions": [ { "role": "Predigt", "name": "Ben Muster" } ]
+    },
     "duration": 1832.4,
     "startedAt": "2026-09-06T09:30:02.000Z",
     "sampleRate": 48000,

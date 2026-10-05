@@ -516,11 +516,21 @@ ipcMain.handle('ct:agenda', async (_e, { eventId, name, date }) => {
       if (err.status !== 404) throw err;
       plan = { name: null, items: [] };
     }
-    session.setService({ id: eventId, name: name || plan.name || 'Gottesdienst', date });
+
+    // Personen aus der Dienstplanung (Leitung, Predigt …) als Interpret-Vorschläge; Fehler stören nicht.
+    const wanted = String(settings.get('artistServices') || '').split(',').map((x) => x.trim()).filter(Boolean);
+    let suggestions = [];
+    let suggestionError = null;
+    try {
+      suggestions = (await churchtools.eventServices(eventId, wanted)).suggestions;
+    } catch (err) {
+      suggestionError = String(err?.message || err);
+    }
+    session.setService({ id: eventId, name: name || plan.name || 'Gottesdienst', date, suggestions });
     const usedDefaults = plan.items.length === 0;
     const items = usedDefaults ? defaultAgendaItems() : plan.items;
-    session.setAgenda(items, usedDefaults ? 'plan' : 'churchtools');
-    return ok({ items, count: items.length, usedDefaults });
+    const autoFilled = session.setAgenda(items, usedDefaults ? 'plan' : 'churchtools');
+    return ok({ items, count: items.length, usedDefaults, suggestions, suggestionError, wanted, autoFilled });
   } catch (err) { return fail(err); }
 });
 
