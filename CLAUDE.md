@@ -142,6 +142,14 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - Wellenform: Standardansicht 5 Minuten (`DEFAULT_VISIBLE_SECONDS`, `setDefaultZoom()` beim Start und
   bei neuer/fortgesetzter Aufnahme), beendete Aufnahmen werden eingepasst (`fitZoom`). Der Zoom wird nicht
   mehr in den Einstellungen gespeichert.
+- Die drei unteren Bereiche sind bewusst groß ausgelegt (Zeilenschrift 16 px, Überschriften 17 px, Knöpfe
+  ✎/× 18 px, Eingabefelder 16 px); die Exportspalte ist 400 px breit, Exportzeilen sind zweizeilig
+  (Name / Zeitraum + „gesichert“). Beim Ändern der Größen im 1360×880-Fenster mit der Layout-Vorschau prüfen.
+- Kopfleiste, Transport und Werkzeugleiste sind ebenfalls groß (Dienstname 21 px, Aufnahmeknopf 18 px,
+  Timer 60 px, Pegel 280 px breit). Für kleine Fenster gibt es zwei Abstufungen: `max-width: 1180px` (kleinere
+  Schrift/Abstände, sonst läuft die Seite über) und `max-height: 820px` bzw. `720px` (Wellenform 150/120 px
+  hoch, engere Leisten, damit unten genug Platz für die Listen bleibt). Mindestfenster ist 1024×680; nach
+  Änderungen bei 1360×880 **und** 1024×680 messen (kein Überlauf: `scrollWidth == innerWidth`).
 - Layout unter der Wellenform: drei Bereiche (Ablaufplan | Abschnitte | Export), ganz
   unten die Tastenleiste (`.keybar`). Die Kürzelliste steht zentral in `shortcutList()`
   (`app.js`) und speist Leiste und Dialog (`?`): neue Kürzel dort eintragen.
