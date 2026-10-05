@@ -5,6 +5,10 @@ on:
     tags:
       - 'v*'
 
+defaults:
+  run:
+    working-directory: app
+
 jobs:
   windows:
     runs-on: windows-latest
@@ -17,6 +21,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: app/package-lock.json
 
       - name: Abhängigkeiten installieren
         run: npm ci
@@ -37,6 +42,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: app/package-lock.json
 
       - name: Abhängigkeiten installieren
         run: npm ci

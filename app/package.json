@@ -107,7 +107,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "DEIN-GITHUB-BENUTZER",
+        "owner": "paddepf",
         "repo": "church-recorder",
         "private": false,
         "releaseType": "release"
