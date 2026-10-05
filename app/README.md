@@ -83,7 +83,7 @@ Windows erzeugen. Der mitgelieferte Workflow erledigt beides auf GitHub.
    wieder **M**) die Endmarke. Beginnt ein Programmpunkt des Ablaufplans, auf
    „Nächster Ablaufpunkt" drücken (Taste **N**) oder den Punkt in der Liste anklicken:
    Ein laufender Abschnitt endet dabei an derselben Stelle. Die Marke wird sofort
-   gesetzt, benannt wird danach (✎, Doppelklick oder **F2**). Jeder Abschnitt hat
+   gesetzt, benannt wird danach direkt im Feld (siehe unten). Jeder Abschnitt hat
    eine eigene dezente Farbe in Wellenform und Liste.
 4. Marken sitzen selten sofort richtig. Sie lassen sich jederzeit – auch während
    der Aufnahme – am Fähnchen auf der Wellenform verschieben; mit der
@@ -101,15 +101,44 @@ Windows erzeugen. Der mitgelieferte Workflow erledigt beides auf GitHub.
    erhalten ID3-Tags: **Titel** = Abschnittsname, **Album** = Datum des
    Gottesdienstes (z. B. `2026-10-05`), **Jahr**, **Interpret** = der beim
    Abschnitt eingetragene Name, sonst der „Standard-Interpret" aus den Einstellungen.
-   Den Interpreten trägst du über ✎ (oder Doppelklick, F2) ein – auch schon bei
-   den offenen Punkten im Ablaufplan, bevor sie aufgenommen werden. In der
-   Wellenform steht der Interpret hell hinter dem Namen am Anfangs-Fähnchen; fehlt
-   er, erscheint beim Darüberfahren „+ Interpret". Ein Doppelklick darauf öffnet
-   den Dialog direkt im Interpret-Feld, ein Doppelklick auf den Namen im Namensfeld.
+   Den Interpreten trägst du direkt im Feld ein (siehe „Name und Interpret direkt
+   bearbeiten") – auch schon bei den offenen Punkten im Ablaufplan, bevor sie
+   aufgenommen werden. Er steht hell hinter dem Namen, fehlt er, erscheint beim
+   Darüberfahren „+ Interpret".
 
 Die WAV-Masteraufnahme bleibt erhalten. Über „Aufnahmen" kann eine frühere
 Session erneut geöffnet, die Marken nachjustiert und ein weiterer Abschnitt
 exportiert werden.
+
+### Name und Interpret direkt bearbeiten
+
+Ohne Dialog, direkt am Element: ein kleines Eingabefeld legt sich über das Fähnchen
+oder die Listenzeile, links der Name, rechts der Interpret.
+- **Wellenform:** Doppelklick auf das Fähnchen eines Abschnitts. Ein Doppelklick auf den
+  Interpreten (bzw. „+ Interpret") springt direkt in dieses Feld.
+- **Abschnittsliste:** Doppelklick auf den Namen, ✎, oder ein Klick auf den Interpreten.
+- **Ablaufplan:** ✎ oder ein Klick auf den Interpreten (ein Klick auf den Punkt selbst
+  beginnt ihn).
+- **F2:** bearbeitet den gewählten Abschnitt in der Abschnittsliste.
+
+`Enter` speichert, `Esc` bricht ab, `Tab` wechselt zwischen Name und Interpret, ein Klick
+daneben speichert ebenfalls.
+
+### Ablaufplan bearbeiten und Standardpunkte
+
+Hat ein Termin in ChurchTools **keinen Ablaufplan** (die Abfrage meldet 404) oder wird
+ohne ChurchTools aufgenommen, trägt die App die **Standard-Programmpunkte** ein
+(Vorgabe: Einleitung, Kinderbeitrag, Predigt, Abschluss). Sie lassen sich unter
+**Einstellungen → Standard-Programmpunkte** bearbeiten: Namen ändern, mit ↑/↓
+umsortieren, entfernen oder hinzufügen.
+
+In der Kachel **Ablaufplan** lässt sich die Liste jederzeit anpassen:
+- **Hinzufügen:** unten Namen eintippen, Enter oder „+".
+- **Entfernen:** × neben dem Punkt. Ein bereits gesetzter Abschnitt aus dem Ablaufplan
+  geht über × in der Abschnittsliste zurück in den Ablaufplan.
+- **Umsortieren:** einen Punkt in der Liste auf einen anderen ziehen (oberhalb/unterhalb
+  der Mitte entscheidet, davor oder dahinter) oder auf den freien Platz darunter, um ihn ans
+  Ende zu setzen. „Nächster Ablaufpunkt" (N) nimmt immer den obersten.
 
 ### Oberfläche rund um die Wellenform
 

@@ -77,6 +77,19 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Mac schlief ein, der Eingang blieb nach dem Aufwachen stumm, die Aufnahme stand
   still, die App zeigte weiter „läuft“.
 
+### Ablaufplan und Standardpunkte
+- Quellen der Abschnitte (`section.source`): `churchtools` (aus dem Ablaufplan), `plan` (Standardpunkte
+  und in der Kachel selbst hinzugefügte Punkte), `manual` (mit M gesetzte Abschnitte). Alles außer `manual`
+  zählt als Ablaufplan: Beim Entfernen eines gesetzten Abschnitts geht er zurück in den Plan, bei einer neuen
+  Aufnahme werden die Plan-Punkte wieder offen (`manual` entfällt).
+- Meldet ChurchTools für `/agenda` einen 404 (`err.status`) oder liefert keine Punkte, nutzt `ct:agenda` die
+  Einstellung `defaultAgenda` (Standard: Einleitung, Kinderbeitrag, Predigt, Abschluss; Editor unter
+  Einstellungen) und meldet `usedDefaults`. Der Termin wird dabei trotzdem gesetzt. `session:service` (ohne
+  ChurchTools) trägt die Standardpunkte ein, wenn noch keine Abschnitte existieren.
+- Ablaufplan-Kachel: Punkt hinzufügen (`section:add`), entfernen (`section:delete`), umsortieren per Drag in der
+  Liste (`section:reorder`, setzt `order` der offenen Punkte neu). Dieselbe Drag-Quelle (`text/marker-id`) dient
+  weiter zum Ablegen auf der Wellenform, das Ziel unterscheidet.
+
 ### MP3-Export
 - Einstellung `exportDir` (Oberordner). Gesetzt: Export ohne Dialog nach
   `<exportDir>/<Datum>_<Gottesdienstname aus ChurchTools>/`, vorhandene Dateien
@@ -90,10 +103,12 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - ID3-Tags (`id3.js`, eigener ID3v2.3-Schreiber, UTF-16): Titel = Abschnittsname, Album =
   `session.service.date`, Jahr, Interpret = `section.artist` bzw. Einstellung
   `defaultArtist`. `artist` ist ein Feld des Abschnitts (auch bei offenen Ablaufpunkten),
-  bearbeitet über den Dialog `modal-section` (Name + Interpret; ersetzt den alten
-  Prompt-Dialog). „Gesamte Aufnahme“ nimmt nur den Standard-Interpret. Das Start-Fähnchen
+  bearbeitet direkt im Feld über `editSection()` (`app.js`): ein Overlay mit Name- und
+  Interpret-Eingabe legt sich über Fähnchen bzw. Listenzeile (Enter speichern, Esc abbrechen,
+  Fokusverlust speichert); es gibt keinen Dialog mehr. „Gesamte Aufnahme“ nimmt nur den Standard-Interpret. Das Start-Fähnchen
   der Wellenform zeigt den Interpreten hinter dem Namen (`hoverHandle` blendet „+ Interpret“
-  ein); Doppelklick darauf fokussiert das Interpret-Feld (`onRenameSection(id, 'artist')`).
+  ein); Doppelklick darauf startet den Editor im Interpret-Feld (`onRenameSection(id, 'artist', rect)`,
+  `rect` = Fähnchen in Zeichenflächen-Koordinaten).
 - Der Export-Bereich ist eine Auswahlliste mit Häkchen (kein Dropdown): alle echten,
   beendeten Abschnitte plus „Gesamte Aufnahme“; ein Knopf „Ausgewählte als MP3
   speichern“ (`export:batch`, nacheinander, ein Fehler stoppt die übrigen nicht,

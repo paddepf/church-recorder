@@ -189,10 +189,10 @@ class Session extends EventEmitter {
   }
 
   /** Übernimmt Ablaufplan-Punkte als noch nicht gesetzte Abschnitte. */
-  setAgenda(items) {
+  setAgenda(items, source = 'churchtools') {
     const manual = this.sections.filter((x) => x.source === 'manual');
-    const placedFromPlan = this.sections.filter((x) => x.source === 'churchtools' && x.start != null);
-    const keepIds = new Set(placedFromPlan.map((x) => x.ctId));
+    const placedFromPlan = this.sections.filter((x) => x.source !== 'manual' && x.start != null);
+    const keepIds = new Set(placedFromPlan.map((x) => x.ctId).filter((id) => id != null));
     const fresh = (items || [])
       .filter((it) => !keepIds.has(it.id))
       .map((it, i) => ({
@@ -206,7 +206,7 @@ class Session extends EventEmitter {
         color: this._nextColor(),
         start: null,
         end: null,
-        source: 'churchtools'
+        source
       }));
     this.sections = [...placedFromPlan, ...fresh, ...manual];
     this._changed();
@@ -320,6 +320,42 @@ class Session extends EventEmitter {
     return { ok: true, section: x };
   }
 
+  /** Neuen offenen Ablaufpunkt am Ende des Ablaufplans anlegen. */
+  addPending({ label, artist } = {}) {
+    const name = String(label || '').trim();
+    if (!name) return { ok: false, error: 'Bitte einen Namen eingeben.' };
+    const maxOrder = this.pendingSections().reduce((m, x) => Math.max(m, x.order || 0), -1);
+    const section = {
+      id: newId('sec'),
+      ctId: null,
+      label: name,
+      category: null,
+      plannedDuration: null,
+      artist: artist ? String(artist).trim() || null : null,
+      order: maxOrder + 1,
+      color: this._nextColor(),
+      start: null,
+      end: null,
+      source: 'plan'
+    };
+    this.sections.push(section);
+    this._changed();
+    return { ok: true, section };
+  }
+
+  /** Verschiebt einen offenen Ablaufpunkt vor einen anderen (beforeId = null: ans Ende). */
+  reorderPending(id, beforeId) {
+    const list = this.pendingSections().sort((a, b) => (a.order || 0) - (b.order || 0));
+    const moving = list.find((x) => x.id === id);
+    if (!moving) return { ok: false, error: 'Ablaufpunkt nicht gefunden.' };
+    const rest = list.filter((x) => x !== moving);
+    const at = beforeId ? rest.findIndex((x) => x.id === beforeId) : -1;
+    rest.splice(at < 0 ? rest.length : at, 0, moving);
+    rest.forEach((x, i) => { x.order = i; });
+    this._changed();
+    return { ok: true };
+  }
+
   /** Beendet einen laufenden Abschnitt und beginnt den nächsten offenen Ablaufpunkt. */
   startNextPending(time) {
     const pending = this.pendingSections().sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -358,8 +394,9 @@ class Session extends EventEmitter {
   removeSection(id) {
     const x = this.sections.find((y) => y.id === id);
     if (!x) return false;
-    // Ablaufplan-Punkte werden nicht gelöscht, sondern nur von der Zeitachse genommen.
-    if (x.source === 'churchtools' && x.start != null) {
+    // Ablaufplan-Punkte (egal ob aus ChurchTools oder selbst angelegt) werden von der Zeitachse
+    // genommen und bleiben offen; offene Punkte und selbst gesetzte Abschnitte werden gelöscht.
+    if (x.source !== 'manual' && x.start != null) {
       x.start = null;
       x.end = null;
     } else {
@@ -418,7 +455,7 @@ class Session extends EventEmitter {
   _resetSectionsForNewRecording() {
     this.exports = {};
     this.sections = this.sections
-      .filter((x) => x.source === 'churchtools')
+      .filter((x) => x.source !== 'manual')
       .map((x) => ({ ...x, start: null, end: null }));
   }
 

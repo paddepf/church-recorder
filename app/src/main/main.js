@@ -398,12 +398,30 @@ ipcMain.handle('ct:services', async (_e, { from, to } = {}) => {
   } catch (err) { return fail(err); }
 });
 
+/** Standard-Programmpunkte aus den Einstellungen (leere Einträge entfallen). */
+function defaultAgendaItems() {
+  const list = settings.get('defaultAgenda');
+  return (Array.isArray(list) ? list : [])
+    .map((t) => String(t || '').trim())
+    .filter(Boolean)
+    .map((title) => ({ id: null, title }));
+}
+
 ipcMain.handle('ct:agenda', async (_e, { eventId, name, date }) => {
   try {
-    const plan = await churchtools.agenda(eventId);
+    let plan;
+    try {
+      plan = await churchtools.agenda(eventId);
+    } catch (err) {
+      // Für den Termin ist kein Ablaufplan gepflegt (404): mit den Standardpunkten weiterarbeiten.
+      if (err.status !== 404) throw err;
+      plan = { name: null, items: [] };
+    }
     session.setService({ id: eventId, name: name || plan.name || 'Gottesdienst', date });
-    session.setAgenda(plan.items);
-    return ok({ items: plan.items, count: plan.items.length });
+    const usedDefaults = plan.items.length === 0;
+    const items = usedDefaults ? defaultAgendaItems() : plan.items;
+    session.setAgenda(items, usedDefaults ? 'plan' : 'churchtools');
+    return ok({ items, count: items.length, usedDefaults });
   } catch (err) { return fail(err); }
 });
 
@@ -411,6 +429,8 @@ ipcMain.handle('ct:agenda', async (_e, { eventId, name, date }) => {
 
 ipcMain.handle('session:service', (_e, service) => {
   session.setService(service);
+  // Ohne ChurchTools gibt es keinen Ablaufplan: Standardpunkte anbieten, solange noch nichts da ist.
+  if (session.sections.length === 0) session.setAgenda(defaultAgendaItems(), 'plan');
   return ok({ state: session.snapshot() });
 });
 
@@ -451,6 +471,8 @@ ipcMain.on('audio:chunk', (_e, arrayBuffer) => {
 
 ipcMain.handle('section:toggle', (_e, params) => session.toggleSection(params || {}));
 ipcMain.handle('section:start', (_e, { id, time }) => session.startPending(id, time));
+ipcMain.handle('section:add', (_e, params) => session.addPending(params || {}));
+ipcMain.handle('section:reorder', (_e, { id, beforeId }) => session.reorderPending(id, beforeId));
 ipcMain.handle('section:place', (_e, { id, time }) => session.placePending(id, time));
 ipcMain.handle('section:next', (_e, { time } = {}) => session.startNextPending(time));
 ipcMain.handle('section:edge', (_e, { id, edge, time }) => ok({ section: session.moveEdge(id, edge, time) }));

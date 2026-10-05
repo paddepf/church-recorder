@@ -80,7 +80,10 @@
         await window.api.section.moveEdge(id, edge, time);
       },
       onSeek: (t) => setPlayhead(t, true),
-      onRenameSection: (id, focus) => renameSection(id, focus),
+      onRenameSection: (id, focus, r) => {
+        const cv = $('wave').getBoundingClientRect();
+        editSection(id, focus, { left: cv.left + r.x, top: cv.top + r.y, width: r.w, height: r.h });
+      },
       onSelectSection: (id) => {
         state.selectedSectionId = id;
         renderLists();
@@ -457,22 +460,46 @@
       li.style.setProperty('--hue', window.sectionHue(x));
       li.draggable = true;
       li.innerHTML = `<span class="label"></span>
-        <button class="mini" data-rename title="Name und Interpret bearbeiten">✎</button>`;
+        <button class="mini" data-rename title="Name und Interpret bearbeiten">✎</button>
+        <button class="mini" data-remove title="Punkt aus dem Ablaufplan entfernen">×</button>`;
       // Klick auf den Punkt beginnt ihn jetzt (nur während der Aufnahme); Ziehen auf die Wellenform bleibt möglich.
       li.classList.toggle('clickable', live);
       li.title = live
         ? 'Klicken: jetzt beginnen · auf die Wellenform ziehen: an die Stelle legen'
         : 'Auf die Wellenform ziehen, um den Punkt an eine Stelle zu legen';
       li.querySelector('.label').textContent = x.label;
-      if (x.artist) li.querySelector('.label').appendChild(artistTag(x.artist));
+      li.querySelector('.label').appendChild(artistTag(x, () => li.getBoundingClientRect()));
       li.querySelector('[data-rename]').addEventListener('click', (e) => {
         e.stopPropagation();
-        renameSection(x.id);
+        editSection(x.id, 'name', li.getBoundingClientRect());
+      });
+      li.querySelector('[data-remove]').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await window.api.section.remove(x.id);
       });
       li.addEventListener('dragstart', (e) => {
         e.dataTransfer.setData('text/marker-id', x.id);
         e.dataTransfer.effectAllowed = 'move';
       });
+      // Umsortieren: einen Punkt auf einen anderen Punkt der Liste ziehen (auf die Wellenform = ablegen).
+      li.addEventListener('dragover', (e) => {
+        if (!e.dataTransfer.types.includes('text/marker-id')) return;
+        e.preventDefault();
+        const before = e.clientY - li.getBoundingClientRect().top < li.offsetHeight / 2;
+        li.classList.toggle('drop-before', before);
+        li.classList.toggle('drop-after', !before);
+      });
+      li.addEventListener('dragleave', () => li.classList.remove('drop-before', 'drop-after'));
+      li.addEventListener('drop', async (e) => {
+        const dragged = e.dataTransfer.getData('text/marker-id');
+        const before = e.clientY - li.getBoundingClientRect().top < li.offsetHeight / 2;
+        li.classList.remove('drop-before', 'drop-after');
+        if (!dragged || dragged === x.id) return;
+        e.preventDefault();
+        const next = before ? x.id : (li.nextElementSibling?.dataset.id || null);
+        await window.api.section.reorder(dragged, next);
+      });
+      li.dataset.id = x.id;
       li.addEventListener('click', async () => {
         if (!live) return;
         const res = await window.api.section.start(x.id, null);
@@ -495,7 +522,8 @@
         <button class="mini" data-remove title="Entfernen">×</button>`;
       li.querySelector('.time').textContent = `${fmt(x.start)} – ${x.end != null ? fmt(x.end) : 'läuft'}`;
       li.querySelector('.label').textContent = x.label;
-      if (x.artist) li.querySelector('.label').appendChild(artistTag(x.artist));
+      li.dataset.id = x.id;
+      li.querySelector('.label').appendChild(artistTag(x, () => li.getBoundingClientRect()));
       li.addEventListener('click', () => {
         state.selectedSectionId = x.id;
         wave.scrollTo(x.start);
@@ -503,9 +531,9 @@
       });
       li.querySelector('[data-rename]').addEventListener('click', (e) => {
         e.stopPropagation();
-        renameSection(x.id);
+        editSection(x.id, 'name', li.getBoundingClientRect());
       });
-      li.querySelector('.label').addEventListener('dblclick', () => renameSection(x.id));
+      li.querySelector('.label').addEventListener('dblclick', () => editSection(x.id, 'name', li.getBoundingClientRect()));
       li.querySelector('[data-remove]').addEventListener('click', async (e) => {
         e.stopPropagation();
         await window.api.section.remove(x.id);
@@ -514,22 +542,73 @@
     });
   }
 
-  function artistTag(artist) {
+  /** Interpret hinter dem Namen; ohne Eintrag erscheint beim Darüberfahren "+ Interpret". Klick = direkt bearbeiten. */
+  function artistTag(section, getAnchor) {
     const el = document.createElement('span');
-    el.className = 'artist';
-    el.textContent = ' · ' + artist;
+    el.className = 'artist' + (section.artist ? '' : ' empty');
+    el.textContent = section.artist ? ' · ' + section.artist : ' + Interpret';
+    el.title = 'Interpret direkt bearbeiten';
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      editSection(section.id, 'artist', getAnchor());
+    });
     return el;
   }
 
-  /** Name und Interpret ändern – auch bei noch offenen Ablaufpunkten. */
-  async function renameSection(id, focus = 'name') {
+  /**
+   * Bearbeitet Name und Interpret direkt an Ort und Stelle: ein Feld legt sich über das Element
+   * (Fähnchen in der Wellenform oder Listenzeile). Enter speichert, Esc bricht ab, ein Klick
+   * daneben speichert ebenfalls. Tab wechselt zwischen Name und Interpret.
+   * @param {{left:number, top:number, width:number, height:number}} anchor Lage in Bildschirmkoordinaten
+   */
+  function editSection(id, focus = 'name', anchor) {
     const x = (state.session?.sections || []).find((y) => y.id === id);
-    if (!x) return;
-    const result = await sectionDialog(x, focus);
-    if (!result) return;
-    const patch = { artist: result.artist };
-    if (result.label) patch.label = result.label;
-    await window.api.section.update(id, patch);
+    if (!x || state.inlineEdit) return;
+    if (!anchor) {
+      const row = document.querySelector(`#marker-list .item[data-id="${id}"], #pending-list .item[data-id="${id}"]`);
+      if (!row) return;
+      anchor = row.getBoundingClientRect();
+    }
+
+    const box = document.createElement('div');
+    box.className = 'inline-edit';
+    box.style.setProperty('--hue', window.sectionHue(x));
+    box.innerHTML = '<input class="ie-name" type="text" aria-label="Name" /><input class="ie-artist" type="text" placeholder="Interpret" aria-label="Interpret" />';
+    const name = box.querySelector('.ie-name');
+    const artist = box.querySelector('.ie-artist');
+    name.value = x.label || '';
+    artist.value = x.artist || '';
+
+    const width = Math.max(anchor.width, 300);
+    box.style.left = Math.max(4, Math.min(anchor.left, window.innerWidth - width - 4)) + 'px';
+    box.style.top = anchor.top + 'px';
+    box.style.width = width + 'px';
+    box.style.minHeight = Math.max(anchor.height, 26) + 'px';
+    document.body.appendChild(box);
+    state.inlineEdit = id;
+
+    let done = false;
+    const finish = async (save) => {
+      if (done) return;
+      done = true;
+      box.remove();
+      state.inlineEdit = null;
+      if (!save) return;
+      const patch = {};
+      const label = name.value.trim();
+      if (label && label !== x.label) patch.label = label;
+      if (artist.value.trim() !== (x.artist || '')) patch.artist = artist.value.trim();
+      if (Object.keys(patch).length) await window.api.section.update(id, patch);
+    };
+    box.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); finish(true); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+    });
+    // Klick außerhalb (Fokus verlässt beide Felder) speichert.
+    box.addEventListener('focusout', () => setTimeout(() => { if (!box.contains(document.activeElement)) finish(true); }, 0));
+    const first = focus === 'artist' ? artist : name;
+    first.focus();
+    first.select();
   }
 
   /** Abschnitte zum Export; beendete Abschnitte sind anklickbar, bereits gesicherte tragen einen Vermerk. */
@@ -698,6 +777,26 @@
       if (state.playing) setPlayhead(player.currentTime, false);
     });
 
+    const addPlanPoint = async () => {
+      const input = $('plan-new');
+      const label = input.value.trim();
+      if (!label) return;
+      const res = await window.api.section.add({ label });
+      if (!res.ok) return toast('error', res.error);
+      input.value = '';
+      input.focus();
+    };
+    $('btn-plan-add').addEventListener('click', addPlanPoint);
+    $('plan-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addPlanPoint(); } });
+    // Auf den freien Platz unter der Liste ziehen: ans Ende sortieren.
+    $('pending-list').addEventListener('dragover', (e) => {
+      if (e.target === $('pending-list') && e.dataTransfer.types.includes('text/marker-id')) e.preventDefault();
+    });
+    $('pending-list').addEventListener('drop', async (e) => {
+      if (e.target !== $('pending-list')) return;
+      const dragged = e.dataTransfer.getData('text/marker-id');
+      if (dragged) await window.api.section.reorder(dragged, null);
+    });
     $('btn-all-keys').addEventListener('click', () => openModal('modal-keys'));
     $('btn-export').addEventListener('click', exportSelected);
     $('export-all').addEventListener('click', () => setExportChecks(true));
@@ -721,47 +820,6 @@
     $(id).hidden = false;
     // Geräte können seit dem Start ein- oder ausgesteckt worden sein.
     if (id === 'modal-settings') refreshDevices();
-  }
-
-  /** Dialog zum Bearbeiten von Name und Interpret eines Abschnitts; liefert null bei Abbruch. */
-  function sectionDialog(section, focus = 'name') {
-    const modal = $('modal-section');
-    const name = $('section-name');
-    const artist = $('section-artist');
-    name.value = section.label || '';
-    artist.value = section.artist || '';
-    const fallback = state.settings?.defaultArtist;
-    $('section-artist-hint').textContent = fallback
-      ? `Leer = Standard-Interpret („${fallback}")`
-      : 'Leer = kein Interpret (oder der Standard aus den Einstellungen)';
-    modal.hidden = false;
-    const first = focus === 'artist' ? artist : name;
-    first.focus();
-    first.select();
-
-    return new Promise((resolve) => {
-      const finish = (value) => {
-        modal.hidden = true;
-        modal.removeEventListener('click', onBackdrop);
-        modal.removeEventListener('keydown', onKey);
-        $('section-close').removeEventListener('click', onCancel);
-        $('section-cancel').removeEventListener('click', onCancel);
-        $('section-ok').removeEventListener('click', onOk);
-        resolve(value);
-      };
-      const onOk = () => finish({ label: name.value.trim(), artist: artist.value.trim() });
-      const onCancel = () => finish(null);
-      const onBackdrop = (e) => { if (e.target === modal) onCancel(); };
-      const onKey = (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); onOk(); }
-        if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
-      };
-      modal.addEventListener('click', onBackdrop);
-      modal.addEventListener('keydown', onKey);
-      $('section-close').addEventListener('click', onCancel);
-      $('section-cancel').addEventListener('click', onCancel);
-      $('section-ok').addEventListener('click', onOk);
-    });
   }
 
   /** Ja/Nein-Abfrage; Abbrechen ist vorausgewählt. */
@@ -822,7 +880,7 @@
       }
       if (e.key === 'F2' && state.selectedSectionId) {
         e.preventDefault();
-        renameSection(state.selectedSectionId);
+        editSection(state.selectedSectionId, 'name');
         return;
       }
       if (e.code === 'Space') {
@@ -953,10 +1011,10 @@
       { keys: ['M'], text: 'Abschnitt starten / beenden', main: true },
       { keys: ['N'], text: 'Nächster Ablaufpunkt', main: true },
       { keys: ['Leertaste'], text: 'Mithören / Abspielen ab Cursor', main: true },
-      { keys: ['F2'], text: 'Gewählten Abschnitt umbenennen', main: true },
+      { keys: ['F2'], text: 'Gewählten Abschnitt bearbeiten', main: true },
       { keys: ['?'], text: 'Alle Kürzel anzeigen' },
       { keys: ['Klick'], text: 'In die Wellenform: Hörcursor setzen' },
-      { keys: ['Doppelklick'], text: 'Auf eine Marke: umbenennen' },
+      { keys: ['Doppelklick'], text: 'Auf eine Marke: Name/Interpret direkt bearbeiten' },
       { keys: ['Ziehen'], text: 'Marke verschieben, Nachbarn weichen aus' },
       { keys: ['Mausrad'], text: 'Wellenform scrollen' },
       { keys: [mod === 'Cmd' ? 'Cmd' : 'Strg', 'Mausrad'], text: 'Wellenform zoomen' },
@@ -1179,7 +1237,11 @@
       date: service.date
     });
     if (!res.ok) return toast('warn', 'Ablaufplan nicht geladen: ' + res.error);
-    toast('success', `${service.name}: ${res.count} Ablaufpunkte übernommen.`);
+    if (res.usedDefaults) {
+      toast('info', `${service.name}: In ChurchTools ist kein Ablaufplan gepflegt – ${res.count} Standardpunkte eingetragen.`, 9000);
+    } else {
+      toast('success', `${service.name}: ${res.count} Ablaufpunkte übernommen.`);
+    }
   }
 
   $('btn-manual-service')?.addEventListener('click', async () => {
@@ -1276,6 +1338,7 @@
     const s = state.settings;
     $('set-samplerate').value = String(s.sampleRate);
     $('set-dir').value = s.recordingsDir;
+    renderDefaultAgenda(s.defaultAgenda);
     $('set-default-artist').value = s.defaultArtist || '';
     $('set-export-dir').value = s.exportDir || '';
     $('set-pattern').value = s.fileNamePattern;
@@ -1293,7 +1356,39 @@
     $('set-theme').value = s.theme || 'dark';
   }
 
+  /** Editor für die Standard-Programmpunkte (Name, nach oben/unten, entfernen). */
+  function renderDefaultAgenda(list) {
+    const box = $('default-agenda-list');
+    box.innerHTML = '';
+    (list || []).forEach((text) => addDefaultAgendaRow(text));
+  }
+
+  function addDefaultAgendaRow(text = '') {
+    const box = $('default-agenda-list');
+    const row = document.createElement('div');
+    row.className = 'agenda-row';
+    row.innerHTML = `<input type="text" />
+      <button class="secondary" data-up title="Nach oben">↑</button>
+      <button class="secondary" data-down title="Nach unten">↓</button>
+      <button class="secondary" data-del title="Entfernen">×</button>`;
+    row.querySelector('input').value = text;
+    row.querySelector('[data-up]').addEventListener('click', () => {
+      if (row.previousElementSibling) box.insertBefore(row, row.previousElementSibling);
+    });
+    row.querySelector('[data-down]').addEventListener('click', () => {
+      if (row.nextElementSibling) box.insertBefore(row.nextElementSibling, row);
+    });
+    row.querySelector('[data-del]').addEventListener('click', () => row.remove());
+    box.appendChild(row);
+    return row;
+  }
+
+  function readDefaultAgenda() {
+    return [...$('default-agenda-list').querySelectorAll('input')].map((i) => i.value.trim()).filter(Boolean);
+  }
+
   function bindSettingsForm() {
+    $('btn-default-agenda-add').addEventListener('click', () => addDefaultAgendaRow('').querySelector('input').focus());
     $('btn-choose-dir').addEventListener('click', async () => {
       const res = await window.api.settings.chooseFolder();
       if (res.ok && res.path) $('set-dir').value = res.path;
@@ -1329,6 +1424,7 @@
       sampleRate: Number($('set-samplerate').value),
       recordingsDir: $('set-dir').value,
       exportDir: $('set-export-dir').value,
+      defaultAgenda: readDefaultAgenda(),
       defaultArtist: $('set-default-artist').value.trim(),
       fileNamePattern: $('set-pattern').value.trim() || '{interpret}_{abschnitt}_{gottesdienst}_{datum}',
       mp3Bitrate: Number($('set-bitrate').value),

@@ -71,15 +71,19 @@
     <div class="panel panel-plan">
       <div class="panel-head">
         <h2>Ablaufplan</h2>
-        <span id="plan-hint" class="hint">Anklicken oder auf die Wellenform ziehen</span>
+        <span id="plan-hint" class="hint">Klicken, auf die Wellenform ziehen oder in der Liste umsortieren</span>
       </div>
       <ol id="pending-list" class="pending"></ol>
+      <div class="add-row">
+        <input id="plan-new" type="text" placeholder="Neuer Punkt" aria-label="Neuen Programmpunkt hinzufügen" />
+        <button id="btn-plan-add" class="secondary" title="Punkt am Ende des Ablaufplans hinzufügen">+</button>
+      </div>
     </div>
 
     <div class="panel panel-sections">
       <div class="panel-head">
         <h2>Abschnitte</h2>
-        <span class="hint">Doppelklick zum Umbenennen</span>
+        <span class="hint">Doppelklick zum Bearbeiten</span>
       </div>
       <ol id="marker-list" class="markers"></ol>
     </div>
@@ -181,6 +185,13 @@
         </fieldset>
 
         <fieldset>
+          <legend>Standard-Programmpunkte</legend>
+          <small>Werden eingetragen, wenn für einen Termin in ChurchTools kein Ablaufplan gepflegt ist oder ohne ChurchTools aufgenommen wird.</small>
+          <div id="default-agenda-list" class="agenda-editor"></div>
+          <button id="btn-default-agenda-add" class="secondary">Punkt hinzufügen</button>
+        </fieldset>
+
+        <fieldset>
           <legend>Netzwerk</legend>
           <label class="check"><input type="checkbox" id="set-net-on" /> Netzwerkschnittstelle aktiv</label>
           <label>Port
@@ -255,28 +266,6 @@
   </div>
 
   <!-- Texteingabe (ersetzt window.prompt, das Electron nicht unterstützt) -->
-  <div id="modal-section" class="modal" hidden>
-    <div class="modal-card narrow">
-      <div class="modal-head">
-        <h2>Abschnitt bearbeiten</h2>
-        <button id="section-close" class="icon close">×</button>
-      </div>
-      <div class="modal-body">
-        <label>Name (Titel der MP3)
-          <input id="section-name" type="text" />
-        </label>
-        <label>Interpret (ID3-Tag, optional)
-          <input id="section-artist" type="text" />
-          <small id="section-artist-hint"></small>
-        </label>
-      </div>
-      <div class="modal-foot">
-        <button id="section-cancel" class="secondary">Abbrechen</button>
-        <button id="section-ok" class="primary">Übernehmen</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Alle Tastenkürzel -->
   <div id="modal-keys" class="modal" hidden>
     <div class="modal-card narrow">

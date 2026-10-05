@@ -455,7 +455,13 @@
         const { x, y } = this._pos(e);
         const handle = this._handleAt(x, y);
         // Doppelklick auf den Interpreten (oder den Hinweis) springt direkt in dieses Feld.
-        if (handle) this.onRenameSection(handle.id, handle.artistX != null && x >= handle.artistX ? 'artist' : 'name');
+        if (handle) {
+          const focus = handle.artistX != null && x >= handle.artistX ? 'artist' : 'name';
+          // Rechteck des Fähnchens (Zeichenfläche), damit der Editor genau darüber erscheint.
+          this.onRenameSection(handle.id, focus, {
+            x: handle.flag[0], y: RULER_H + 3, w: Math.max(10, handle.flag[1] - handle.flag[0]), h: FLAG_H - 6
+          });
+        }
       });
 
       cv.addEventListener('pointerleave', () => {

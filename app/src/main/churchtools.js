@@ -46,7 +46,9 @@ async function request(pathname, params) {
     throw new Error('ChurchTools hat den Zugriff abgelehnt. Bitte Token prüfen.');
   }
   if (!res.ok) {
-    throw new Error(`ChurchTools meldet Fehler ${res.status}.`);
+    const err = new Error(`ChurchTools meldet Fehler ${res.status}.`);
+    err.status = res.status;
+    throw err;
   }
   const json = await res.json();
   return json.data !== undefined ? json.data : json;

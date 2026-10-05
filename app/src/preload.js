@@ -52,6 +52,10 @@ contextBridge.exposeInMainWorld('api', {
     /** Offenen Ablaufpunkt beginnen (time = null: jetzt). */
     start: (id, time) => invoke('section:start', { id, time }),
     /** Ablaufpunkt auf die Zeitachse legen (Drag & Drop): füllt eine Lücke oder beginnt an der Stelle. */
+    /** Neuen offenen Ablaufpunkt anlegen. */
+    add: (params) => invoke('section:add', params),
+    /** Offenen Ablaufpunkt vor einen anderen schieben (beforeId = null: ans Ende). */
+    reorder: (id, beforeId) => invoke('section:reorder', { id, beforeId }),
     place: (id, time) => invoke('section:place', { id, time }),
     /** Laufenden Abschnitt beenden und nächsten Ablaufpunkt beginnen. */
     next: (time) => invoke('section:next', { time }),
