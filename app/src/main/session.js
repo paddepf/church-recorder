@@ -345,7 +345,9 @@ class Session extends EventEmitter {
       name: service?.name || 'Gottesdienst',
       date: service?.date || dateStamp(),
       // Personen aus der ChurchTools-Dienstplanung (z. B. Leitung, Predigt) als Interpret-Vorschläge
-      suggestions: Array.isArray(service?.suggestions) ? service.suggestions : []
+      suggestions: Array.isArray(service?.suggestions) ? service.suggestions : [],
+      // Infotext des Termins aus ChurchTools (bei der Bibelstunde z. B. der Predigttitel)
+      info: service?.info ? String(service.info) : null
     };
     this._changed();
   }
@@ -362,7 +364,7 @@ class Session extends EventEmitter {
     const placedFromPlan = this.sections.filter((x) => x.source !== 'manual' && x.start != null);
     const keepIds = new Set(placedFromPlan.map((x) => x.ctId).filter((id) => id != null));
     // Punkte aus Vorlagen haben keine ChurchTools-Id: bereits gesetzte am Namen erkennen, sonst entstehen Doppelte.
-    const keepLabels = new Set(placedFromPlan.filter((x) => x.ctId == null).map((x) => String(x.label).trim().toLowerCase()));
+    const keepLabels = new Set(placedFromPlan.filter((x) => x.ctId == null).map((x) => String(x.baseLabel || x.label).trim().toLowerCase()));
     const fresh = (items || [])
       .filter((it) => !(it.id != null && keepIds.has(it.id)))
       .filter((it) => !(it.id == null && keepLabels.has(String(it.title || '').trim().toLowerCase())))
@@ -381,6 +383,7 @@ class Session extends EventEmitter {
       }));
     this.sections = [...placedFromPlan, ...fresh, ...manual];
     const autoFilled = this._applySuggestions();
+    this._applyInfo();
     this._changed();             // lässt sich rückgängig machen (z. B. versehentlich geladene Vorlage)
     return autoFilled;
   }
@@ -402,6 +405,22 @@ class Session extends EventEmitter {
       }
     });
     return count;
+  }
+
+  /**
+   * Hängt den Infotext des Termins an den Predigt-Abschnitt („Predigt: Kolosser 2,6-7 Verwurzelt in Christus“).
+   * Nur der erste passende Abschnitt, nur einmal (`baseLabel` merkt den ursprünglichen Namen) und nur, wenn
+   * der Text nicht schon im Namen steht.
+   */
+  _applyInfo() {
+    const info = this.service.info;
+    if (!info) return false;
+    const target = this.sections.find((x) => RoleLogic.takesEventInfo(x.label) || (x.baseLabel && RoleLogic.takesEventInfo(x.baseLabel)));
+    if (!target || target.baseLabel) return false;
+    if (String(target.label).toLowerCase().includes(info.toLowerCase())) return false;
+    target.baseLabel = target.label;
+    target.label = `${target.label}: ${info}`;
+    return true;
   }
 
   _closeOpen(time) {

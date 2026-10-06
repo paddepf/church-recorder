@@ -58,5 +58,10 @@
     return best;
   }
 
-  return { words, roleMatchesLabel, namesForLabel, templateForTitle, ALIASES };
+  /** Abschnitt, der den Infotext des Termins (Predigttitel) bekommt: Name enthält das Wort „Predigt“. */
+  function takesEventInfo(label) {
+    return words(label).includes('predigt');
+  }
+
+  return { words, roleMatchesLabel, namesForLabel, templateForTitle, takesEventInfo, ALIASES };
 });

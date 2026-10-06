@@ -745,19 +745,22 @@ ipcMain.handle('ct:agenda', async (_e, { eventId, name, date } = {}) => {
       if (!wanted.some((x) => RoleLogic.words(x).includes(w))) wanted.push(w);
     });
     let suggestions = [];
+    let info = null;
     let suggestionError = null;
     try {
-      suggestions = (await churchtools.eventServices(eventId, wanted)).suggestions;
+      const es = await churchtools.eventServices(eventId, wanted);
+      suggestions = es.suggestions;
+      info = es.info;
     } catch (err) {
       suggestionError = String(err?.message || err);
     }
-    session.setService({ id: eventId, name: name || plan.name || 'Gottesdienst', date, suggestions });
+    session.setService({ id: eventId, name: name || plan.name || 'Gottesdienst', date, suggestions, info });
     const usedDefaults = plan.items.length === 0;
     // Ohne Ablaufplan: die Vorlage, die zum Titel passt (sonst die Standardvorlage).
     const tpl = usedDefaults ? templateForTitle(session.service.name) : null;
     const items = usedDefaults ? templateItems(tpl) : plan.items;
     const autoFilled = session.setAgenda(items, usedDefaults ? 'plan' : 'churchtools');
-    return ok({ items, count: items.length, usedDefaults, templateName: tpl ? tpl.name : null, suggestions, suggestionError, wanted, autoFilled });
+    return ok({ items, count: items.length, usedDefaults, templateName: tpl ? tpl.name : null, info, suggestions, suggestionError, wanted, autoFilled });
   } catch (err) { return fail(err); }
 });
 

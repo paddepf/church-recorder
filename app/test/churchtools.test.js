@@ -54,6 +54,16 @@ test('Dienstplanung: Personen der gewünschten Dienste', async () => {
   assert.deepEqual(res.suggestions, [{ role: 'Leitung', name: 'Anna' }, { role: 'Predigt', name: 'Ben M' }]);
 });
 
+test('Infotext des Termins: erste Zeile, ohne HTML und doppelte Leerzeichen', async () => {
+  assert.equal(ct.eventInfoText({ description: '<p>Kolosser 2,6-7  Verwurzelt in Christus</p><p>Bitte Bibel mitbringen</p>' }), 'Kolosser 2,6-7 Verwurzelt in Christus');
+  assert.equal(ct.eventInfoText({ description: '', note: 'Kolosser 2,6-7\nweiter' }), 'Kolosser 2,6-7');
+  assert.equal(ct.eventInfoText({ name: 'x' }), null);
+  assert.equal(ct.eventInfoText(null), null);
+  ct.resetCache();
+  routes = { '/api/events/12': { data: { description: 'Römer 8', eventServices: [] } } };
+  assert.equal((await ct.eventServices(12, [])).info, 'Römer 8');
+});
+
 test('404 trägt den Status, kaputte Antwort eine klare Meldung', async () => {
   routes = {};
   await assert.rejects(ct.agenda(77), (err) => err.status === 404);

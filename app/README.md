@@ -170,6 +170,12 @@ Umsortieren), neue Vorlage mit „Neu“, und eine als Standard festlegen. Im Ab
 **„Vorlage laden …“** jederzeit eine andere Vorlage; die offenen Punkte werden dabei (nach Rückfrage)
 ersetzt, bereits gesetzte Abschnitte bleiben.
 
+**Infotext als Predigttitel:** Trägt der Termin in ChurchTools einen Infotext (z. B. bei der Bibelstunde
+„Kolosser 2,6-7 Verwurzelt in Christus“), hängt die App ihn beim Laden an den Abschnitt „Predigt“ an – er heißt
+dann „Predigt: Kolosser 2,6-7 Verwurzelt in Christus“ und landet so auch im Dateinamen und im MP3-Titel. Nur die
+erste Zeile wird genommen; der Name lässt sich jederzeit wie gewohnt ändern. Ein Hinweis beim Laden nennt den
+übernommenen Text.
+
 **Passende Vorlage automatisch:** Fehlt der Ablaufplan, nimmt die App nicht blind die Standardvorlage,
 sondern die Vorlage, deren **Name zum Titel des Gottesdienstes passt** – ein Termin „Bibelstunde“ (oder
 „Bibelstunde im Gemeindehaus“) lädt die Vorlage „Bibelstunde“. Das gilt für jede selbst angelegte Vorlage:

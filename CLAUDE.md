@@ -110,6 +110,15 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Antworten); bei Abweichungen die echte Antwort ansehen und `eventServices` anpassen. Fehler beim Lesen stören
   den Termin-Import nicht (Hinweis per Toast, `suggestionError`).
 
+### Infotext des Termins als Predigttitel
+- `churchtools.eventServices` liefert zusätzlich `info` (`eventInfoText`: erste Zeile aus `description`, sonst
+  `information`/`note`/`notes`/`info`, ohne HTML). Gespeichert in `session.service.info`; `Session._applyInfo()` hängt ihn
+  beim ersten Abschnitt mit dem Wort „Predigt“ an: „Predigt: Kolosser 2,6-7 Verwurzelt in Christus“ (`baseLabel` merkt den
+  ursprünglichen Namen, damit erneutes Laden keine Doppelten erzeugt und der Text nicht zweimal angehängt wird; Regel
+  `RoleLogic.takesEventInfo`). Das Etikett ist Abschnittsname, Dateiname-`{abschnitt}` und ID3-Titel.
+  **Welches ChurchTools-Feld den Infotext trägt, ist nicht gegen eine echte Instanz geprüft** (mehrere Feldnamen
+  werden probiert); bei Abweichungen die echte Antwort von `GET /api/events/{id}` ansehen und `eventInfoText` anpassen.
+
 ### Absicherung der Aufnahme (Review Oktober 2026)
 - Die Audioerfassung lebt im Renderer. Deshalb: kein „Neu laden“ im Mac-Menü (lag auf Cmd+R), Live-Reload des
   Renderers nicht während einer Aufnahme, und bei `render-process-gone` wird neu geladen. `init()` erkennt eine

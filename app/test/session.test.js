@@ -92,6 +92,23 @@ test('Interpreten aus der Dienstplanung werden zugeordnet', () => withSession(as
   assert.deepEqual(s.pendingSections().map((x) => x.artist), ['Ben', null]);
 }));
 
+test('Infotext des Termins landet im Predigt-Abschnitt, nur einmal', () => withSession(async (s) => {
+  s.setService({ id: 1, name: 'Bibelstunde', date: '2026-10-07', info: 'Kolosser 2,6-7 Verwurzelt in Christus' });
+  const items = [{ id: null, title: 'Einleitung' }, { id: null, title: 'Predigt' }];
+  s.setAgenda(items, 'plan');
+  assert.deepEqual(s.sections.map((x) => x.label), ['Einleitung', 'Predigt: Kolosser 2,6-7 Verwurzelt in Christus']);
+  // Erneutes Laden: kein Doppelter, kein zweites Anhängen
+  s.setAgenda(items, 'plan');
+  assert.equal(s.sections.filter((x) => x.label.startsWith('Predigt')).length, 1);
+  assert.equal(s.sections.find((x) => x.label.startsWith('Predigt')).label, 'Predigt: Kolosser 2,6-7 Verwurzelt in Christus');
+  // Ohne Infotext bleibt alles wie es ist
+  const t = new (require(src('main/session')).Session)();
+  t.setService({ name: 'X' });
+  t.setAgenda([{ id: null, title: 'Predigt' }], 'plan');
+  assert.equal(t.sections[0].label, 'Predigt');
+  t._stopAutosave();
+}));
+
 test('alte Sessions mit Einzelmarkern werden übernommen', () => withSession(async (s) => {
   const dir = tmpDir();
   const file = path.join(dir, 'alt.session.json');

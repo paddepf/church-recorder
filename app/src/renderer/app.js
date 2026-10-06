@@ -1512,6 +1512,7 @@
     } else {
       toast('success', `${service.name}: ${res.count} Ablaufpunkte übernommen.`);
     }
+    if (res.info) toast('info', `Infotext des Termins: „${res.info}“ – beim Predigt-Abschnitt ergänzt.`, 9000);
     // Interpret-Vorschläge aus der Dienstplanung (Leitung, Predigt …)
     if ((res.wanted || []).length) {
       if (res.suggestionError) {

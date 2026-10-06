@@ -214,9 +214,10 @@ async function serviceNames() {
  */
 async function eventServices(eventId, wanted) {
   const wantedList = (wanted || []).map((w) => String(w).trim().toLowerCase()).filter(Boolean);
-  if (wantedList.length === 0) return { suggestions: [], found: 0 };
 
   const event = await request(`/api/events/${eventId}`, { include: 'eventServices' });
+  const info = eventInfoText(event);
+  if (wantedList.length === 0) return { suggestions: [], found: 0, info };
   const entries = event?.eventServices || event?.services || [];
   let names = {};
   try { names = await serviceNames(); } catch { /* Dienstnamen fehlen: dann nur Einträge mit eigenem Namen */ }
@@ -233,7 +234,28 @@ async function eventServices(eventId, wanted) {
     }
     if (name) out.push({ role, name });
   }
-  return { suggestions: out, found: entries.length };
+  return { suggestions: out, found: entries.length, info };
+}
+
+/**
+ * Infotext des Termins (z. B. „Kolosser 2,6-7 Verwurzelt in Christus“ bei der Bibelstunde): die erste Zeile
+ * aus dem ersten gefüllten Feld, ohne HTML und doppelte Leerzeichen. Die Feldnamen sind nicht gegen eine echte
+ * Instanz geprüft, deshalb werden mehrere gängige probiert.
+ */
+function eventInfoText(event) {
+  for (const key of ['description', 'information', 'note', 'notes', 'info']) {
+    const raw = event && event[key];
+    if (typeof raw !== 'string') continue;
+    const line = raw
+      .replace(/<br\s*\/?>|<\/p>|<\/div>|<\/li>/gi, '\n')
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+      .split(/\r?\n/)
+      .map((l) => l.replace(/\s+/g, ' ').trim())
+      .find(Boolean);
+    if (line) return line.length > 150 ? line.slice(0, 149).trimEnd() + '…' : line;
+  }
+  return null;
 }
 
 /** Kalender (für die Auswahl in den Einstellungen). */
@@ -249,4 +271,4 @@ function resetCache() {
   servicesCache = null;
 }
 
-module.exports = { test, listServices, listCalendars, todaysServices, agenda, eventServices, resetCache, isoDate };
+module.exports = { test, listServices, listCalendars, todaysServices, agenda, eventServices, eventInfoText, resetCache, isoDate };
