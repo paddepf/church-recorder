@@ -286,6 +286,12 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Schrift/Abstände, sonst läuft die Seite über) und `max-height: 820px` bzw. `720px` (Wellenform 150/120 px
   hoch, engere Leisten, damit unten genug Platz für die Listen bleibt). Mindestfenster ist 1024×680; nach
   Änderungen bei 1360×880 **und** 1024×680 messen (kein Überlauf: `scrollWidth == innerWidth`).
+- **Der große Timer darf in keinem Zustand wandern** (bereit, läuft, pausiert, beendet): `.transport-controls` hat feste
+  Mindestbreite (486 px), Aufnahmeknopf 244 px, Pause/Fortsetzen 116 px; im beendeten Zustand (`body.review`) entfallen die
+  ausgegrauten Knöpfe Pause/Beenden zugunsten von „An Aufnahme anhängen“. Ändern sich Beschriftungen oder Größen, mit der
+  Layout-Vorschau in allen vier Zuständen bei 1360 und 1024 px die Timer-Mitte messen (`#timecode`).
+  Ab 1340 px Fensterbreite sitzt er exakt in der Fenstermitte (Spalten `1fr 300px 1fr`); darunter (Knöpfe + Pegel brauchen
+  mehr Platz) bleibt er zwischen beiden stabil, aber nicht mittig.
 - Layout unter der Wellenform: drei Bereiche (Ablaufplan | Abschnitte | Export), ganz
   unten die Tastenleiste (`.keybar`). Die Kürzelliste steht zentral in `shortcutList()`
   (`app.js`) und speist Leiste und Dialog (`?`): neue Kürzel dort eintragen.

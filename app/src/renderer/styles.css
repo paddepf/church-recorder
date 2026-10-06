@@ -186,8 +186,19 @@ input[readonly] { color: var(--muted); }
   border-bottom: 1px solid var(--line);
 }
 
-.transport-controls { display: flex; gap: 12px; }
+.transport-controls { display: flex; gap: 12px; min-width: 486px; }
+/* Breit genug: Timer exakt in der Fenstermitte (gleich breite Außenspalten); schmaler: Timer zwischen Knöpfen und Pegel */
+@media (min-width: 1340px) {
+  .transport { grid-template-columns: minmax(0, 1fr) 300px minmax(0, 1fr); }
+  .transport .meters { justify-self: end; }
+  .transport .clock { justify-self: center; width: 300px; }
+}
 .transport-controls button { font-size: 18px; padding: 15px 24px; }
+/* Feste Breiten, damit der große Timer in allen Zuständen (bereit, läuft, pausiert, beendet) am selben Platz bleibt */
+body:not(.compact) button.record { min-width: 244px; justify-content: center; }
+body:not(.compact) #btn-pause { min-width: 116px; }
+body.review:not(.compact) #btn-pause,
+body.review:not(.compact) #btn-stop { display: none; }
 
 .audio-warning {
   padding: 8px 16px;
@@ -765,7 +776,7 @@ body.compact .meters { grid-area: meters; width: 150px; gap: 4px; }
 body.compact .bar { height: 9px; }
 body.compact .meter-label { font-size: 11px; }
 body.compact .clip { font-size: 11px; }
-body.compact .transport-controls { grid-area: controls; gap: 6px; }
+body.compact .transport-controls { grid-area: controls; gap: 6px; min-width: 0; }
 body.compact .transport-controls button { font-size: 14px; padding: 8px 12px; }
 body.compact .transport-controls button.record { flex: 1; justify-content: center; }
 
