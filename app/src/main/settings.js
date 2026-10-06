@@ -24,7 +24,6 @@ const DEFAULTS = {
   agendaTemplates: [{ id: 'tpl_default', name: 'Gottesdienst', items: ['Einleitung', 'Kinderbeitrag', 'Predigt', 'Abschluss'] }],
   defaultTemplateId: 'tpl_default',
   defaultArtist: '',            // Interpret in den ID3-Tags, wenn ein Abschnitt keinen eigenen hat
-  keepMasterWavDays: 0,         // 0 = nie automatisch löschen
 
   // ChurchTools
   churchToolsUrl: '',           // z. B. https://meinegemeinde.church.tools
@@ -76,6 +75,7 @@ function load() {
     cache.defaultTemplateId = 'tpl_default';
   }
   delete cache.defaultAgenda;
+  delete cache.keepMasterWavDays;   // frühere, nie umgesetzte Einstellung
   if (!Array.isArray(cache.agendaTemplates) || cache.agendaTemplates.length === 0) {
     cache.agendaTemplates = DEFAULTS.agendaTemplates;
   }

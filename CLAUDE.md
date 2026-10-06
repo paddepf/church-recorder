@@ -120,14 +120,45 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   entsteht sofort beim Start. Eine geöffnete unterbrochene Aufnahme wird als wiederhergestellt gespeichert.
   Einstellungen werden atomar geschrieben (`.tmp` + `rename`).
 - `start()` legt zuerst die WAV-Datei an; scheitert das, bleibt die angezeigte Aufnahme unverändert.
-- WAV: Header-Größen werden bei 4 GB gedeckelt (kein Fehler mehr nach gut 6 h), ab 3,8 GB eine Warnung;
-  `writeSync` schreibt bei Teil-Schreibvorgängen den Rest nach. MP3-Export liest blockweise (30 s,
+- WAV: siehe „Umgesetzte Review-Vorschläge“ (eigener Schreib-Thread, RF64 ab 4 GB). MP3-Export liest blockweise (30 s,
   `wav.readFrames`), räumt bei Fehlern die halbe Datei weg.
 - Fernstart (`record.start` von Companion) startet ohne Rückfrage (`remote: true`); `record.toggle` beendet auch
   eine pausierte Aufnahme. Startbefehle setzen den Status lokal sofort auf `recording`, damit ein Doppeldruck die
   laufende Erfassung nicht beendet. Gehaltene Tasten (`e.repeat`) werden ignoriert.
 - Einstellungen speichern startet die Netzwerkschnittstelle nur bei geänderten Werten neu. `settings:chooseFolder`
   wählt nur aus (speichert nichts). Der Updater sucht während einer Aufnahme nicht automatisch.
+
+### Umgesetzte Review-Vorschläge (Oktober 2026)
+- **Schreiben in eigenem Thread** (`wav.js`): `WavWriter` öffnet die Datei synchron (Fehler sofort sichtbar),
+  schreibt dann über einen Worker (`WORKER_SOURCE`, per `eval` gestartet, damit es aus `app.asar` heraus ohne
+  entpackte Dateien läuft). Der Worker nutzt die fd des Hauptprozesses, schreibt Header etwa jede Sekunde,
+  `fdatasync` alle 10 s; den fd schließt der Hauptprozess nach `closed`. `close()` liefert ein Versprechen;
+  `Session.whenWritten()` / `session.writing` – Export, Fortsetzen und App-Beenden warten darauf. Ereignisse
+  `error` (→ `health.write = 'error'`) und `slow` (> 32 MB Rückstau → `'slow'`).
+- **RF64:** Neue Dateien haben 80 Byte Kopf mit `JUNK`-Block; ab 4 GB wird daraus `RF64`/`ds64`. `readInfo`
+  liest Chunks und liefert `dataOffset` (44 bei alten Dateien, 80 bei neuen); alte Dateien werden beim Anhängen
+  weiter im alten Format geschrieben (gedeckelt).
+- Beim Beenden gibt die Erfassung den angefangenen Block ab (`capture.flush()` vor `record.stop`).
+- **Beenden-Rückfrage asynchron** (`confirmAndFinishRecording`, `guardClose`): blockiert den Hauptprozess nicht.
+- **Fernbefehle mit echter Antwort:** `record.start/stop/toggle` warten auf `recording-started/-stopped`
+  (`waitForRemote`, 8 s); die Oberfläche meldet Fehlschläge über `remote:result`.
+- **Netzwerk:** Origin-Header → nur `monitor`; 5 Fehlversuche → 60 s Sperre (`auth_locked`); `monitor` bekommt
+  den Zustand ohne Pfade/Namen (`_forRole`). „Im Ordner zeigen“ nur in Aufnahme-/Exportordner oder für eben
+  exportierte Dateien (`revealable`). Passwortfelder verdeckt.
+- **ChurchTools:** `requestAll` folgt der Paginierung; Kalender-Filter `churchToolsCalendarIds` (Auswahl in den
+  Einstellungen, `ct:calendars`; Termine ohne Kalenderangabe bleiben); flache Überschriften im Ablaufplan
+  werden Kategorie der folgenden Punkte.
+- Die frühere, nie umgesetzte Einstellung `keepMasterWavDays` ist entfernt (wird beim Laden gelöscht) –
+  automatisches Löschen von Masteraufnahmen ist bewusst nicht vorgesehen.
+- Oberfläche: Aufnahmeknopf in der Pause „Aufnahme pausiert“ (gesperrt), „An Aufnahme anhängen“ statt
+  „Fortsetzen“; Tooltips mit Cmd/Strg je System; Listenzeilen per Tastatur (Pfeile, Enter, F2); Fokus in
+  Dialoge; Schnittfarben als CSS-Variablen (`--cut`, `--cut-text`); Wellenform reagiert auf andere
+  Pixeldichte; typografische Anführungszeichen „…“ überall.
+- Updater auf dem Mac ohne Zertifikat: Status `manual` mit Hinweis statt Fehler. Release-Workflow: Tag-Prüfung,
+  Tests, Entwurf, beide Builds, dann Freigabe; Mac ohne Zertifikat ad hoc signiert (`-c.mac.identity=-`).
+  App-Icon `app/build/icon.png` (1024 px, wird von electron-builder umgerechnet).
+- **Tests:** `npm test` (`node --test`, Ordner `app/test/`, `helpers.js` ersetzt `./settings`). CI:
+  `.github/workflows/test.yml` auf Windows und macOS. Neue Logik dort mit Tests absichern.
 
 ### Rückgängig, Schnitte, Vorlagen, Health
 - **Rückgängig:** `Session._changed()` vergleicht `JSON({sections, cuts})` mit dem letzten Stand und legt
@@ -235,8 +266,10 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   (`close: true`) schließen.
 - DevTools öffnen nicht automatisch: F12 bzw. Strg/Cmd+Umschalt+I oder
   `npm run dev:tools`.
-- Skripte zum Testen der Session-Logik ohne Electron: `settings`-Modul per
-  `Module._load` ersetzen und am Ende `process.exit(0)` aufrufen (Autosave-Timer).
+- Tests: `npm test` im Ordner `app/`. Für eigene Prüfskripte: `settings`-Modul per `Module._load` ersetzen
+  (siehe `test/helpers.js`), Aufnahmen mit `stop()` beenden und auf `whenWritten()` warten.
+- Tests dürfen keine Dateideskriptoren unter der Hand schließen: Die Nummer wird sofort neu vergeben (z. B.
+  an den Kanal des Testrunners) und der Schreib-Thread schreibt dann dort hinein.
 
 ### Entfernt: Mitschrift
 Die lokale Transkription (whisper.cpp, Mitschrift-Panel, Einstellungen) wurde

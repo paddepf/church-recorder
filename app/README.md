@@ -54,18 +54,18 @@ Windows erzeugen. Der mitgelieferte Workflow erledigt beides auf GitHub.
 
 ## Einrichtung beim ersten Start
 
-1. **Einstellungen → Audio:** Eingang und Abtastrate wählen. Die Auswahl wird
+1. **Einstellungen → Audio:** Eingang, Ausgang (fürs Mithören) und Abtastrate wählen. Die Auswahl wird
    gespeichert und beim nächsten Start wiederverwendet.
 2. **Einstellungen → Ablage:** Ordner für die Aufnahmen festlegen. Rechne mit
    etwa 700 MB pro Stunde für die WAV-Masteraufnahme. Zusätzlich lässt sich ein
-   Oberordner für die MP3-Exporte angeben (z. B. „Aufnahmen 2026"); darin
+   Oberordner für die MP3-Exporte angeben (z. B. „Aufnahmen 2026“); darin
    entsteht je Gottesdienst ein Unterordner `Datum_Gottesdienstname`. Der **Dateiname**
    der MP3s ist ein Muster mit den Platzhaltern `{interpret}`, `{abschnitt}`,
    `{gottesdienst}`, `{datum}` und `{zeit}`; Standard ist
    `{interpret}_{abschnitt}_{gottesdienst}_{datum}`. Fehlt der Interpret, entfällt er
    samt Trennzeichen (z. B. `Predigt_Sonntagsgottesdienst_2026-10-05.mp3`).
 3. **Einstellungen → ChurchTools:** Adresse und Personal Access Token eintragen,
-   dann „Verbindung prüfen". Der Token wird über die Schlüsselverwaltung des
+   dann „Verbindung prüfen“. Der Token wird über die Schlüsselverwaltung des
    Betriebssystems verschlüsselt abgelegt.
 4. **Einstellungen → Netzwerk:** Ein Passwort für die Steuerung vergeben, sonst
    startet die Schnittstelle nicht. Optional ein zweites Passwort nur zum
@@ -78,35 +78,35 @@ Windows erzeugen. Der mitgelieferte Workflow erledigt beides auf GitHub.
    Programmpunkte erscheinen links als offene Punkte.
 2. **Neue Aufnahme starten.** Die Wellenform wächst mit, die Pegelanzeige zeigt den
    Eingang, der obere Fensterrand leuchtet rot.
-3. Jeder Abschnitt besteht aus zwei Marken: Anfang und Ende. „Abschnitt starten"
-   (Taste **M**) setzt die Anfangsmarke, derselbe Knopf („Abschnitt beenden",
+3. Jeder Abschnitt besteht aus zwei Marken: Anfang und Ende. „Abschnitt starten“
+   (Taste **M**) setzt die Anfangsmarke, derselbe Knopf („Abschnitt beenden“,
    wieder **M**) die Endmarke. Beginnt ein Programmpunkt des Ablaufplans, auf
-   „Nächster Ablaufpunkt" drücken (Taste **N**) oder den Punkt in der Liste anklicken:
+   „Nächster Ablaufpunkt“ drücken (Taste **N**) oder den Punkt in der Liste anklicken:
    Ein laufender Abschnitt endet dabei an derselben Stelle. Die Marke wird sofort
    gesetzt, benannt wird danach direkt im Feld (siehe unten). Jeder Abschnitt hat
    eine eigene dezente Farbe in Wellenform und Liste.
 4. Marken sitzen selten sofort richtig. Sie lassen sich jederzeit – auch während
    der Aufnahme – am Fähnchen auf der Wellenform verschieben; mit der
-   Leertaste lässt sich dabei in die Aufnahme hineinhören. Nach „Beenden" werden noch
+   Leertaste lässt sich dabei in die Aufnahme hineinhören. Nach „Beenden“ werden noch
    laufende Abschnitte am Ende der Aufnahme geschlossen.
-5. **Beenden.** Danach unten rechts unter „Abschnitte exportieren" die gewünschten
-   Abschnitte anhaken (neue sind vorausgewählt, „Alle"/„Keine" schalten um; ein
+5. **Beenden.** Danach unten rechts unter „Abschnitte exportieren“ die gewünschten
+   Abschnitte anhaken (neue sind vorausgewählt, „Alle“/„Keine“ schalten um; ein
    Klick auf den Namen zeigt den Abschnitt in der Wellenform) und mit „Ausgewählte
    als MP3 speichern" exportieren. Bereits gesicherte Abschnitte tragen den
-   Vermerk „✓ gesichert" (oder „✓ geändert seit Export", wenn ihre Marken seitdem
-   verschoben wurden) und sind nicht mehr vorausgewählt. „Gesamte Aufnahme" steht
+   Vermerk „✓ gesichert“ (oder „✓ geändert seit Export“, wenn ihre Marken seitdem
+   verschoben wurden) und sind nicht mehr vorausgewählt. „Gesamte Aufnahme“ steht
    ebenfalls zur Wahl. Ist ein Export-Oberordner eingestellt, wird ohne Rückfrage
    in dessen Unterordner `Datum_Gottesdienstname` gespeichert (bei gleichem Namen
-   mit „ (2)" usw.); ohne Oberordner wird ein Zielordner abgefragt. Die MP3s
+   mit „ (2)“ usw.); ohne Oberordner wird ein Zielordner abgefragt. Die MP3s
    erhalten ID3-Tags: **Titel** = Abschnittsname, **Album** = Datum des
    Gottesdienstes (z. B. `2026-10-05`), **Jahr**, **Interpret** = der beim
-   Abschnitt eingetragene Name, sonst der „Standard-Interpret" aus den Einstellungen.
+   Abschnitt eingetragene Name, sonst der „Standard-Interpret“ aus den Einstellungen.
    Den Interpreten trägst du direkt im Feld ein (siehe „Name und Interpret direkt
    bearbeiten") – auch schon bei den offenen Punkten im Ablaufplan, bevor sie
    aufgenommen werden. Er steht hell hinter dem Namen, fehlt er, erscheint beim
-   Darüberfahren „+ Interpret".
+   Darüberfahren „+ Interpret“.
 
-Die WAV-Masteraufnahme bleibt erhalten. Über „Aufnahmen" kann eine frühere
+Die WAV-Masteraufnahme bleibt erhalten. Über „Aufnahmen“ kann eine frühere
 Session erneut geöffnet, die Marken nachjustiert und ein weiterer Abschnitt
 exportiert werden.
 
@@ -114,18 +114,18 @@ exportiert werden.
 
 - **Ablaufplan:** Ist bei einem Ablaufpunkt in ChurchTools eine zuständige Person eingetragen, wird sie
   automatisch als Interpret übernommen (jederzeit änderbar).
-- **Dienstplanung:** Auch ohne Ablaufplan sind meist Dienste wie „Leitung" und „Predigt" besetzt. Beim Wählen
+- **Dienstplanung:** Auch ohne Ablaufplan sind meist Dienste wie „Leitung“ und „Predigt“ besetzt. Beim Wählen
   eines Termins liest die App diese Personen aus der Dienstplanung. Beim Bearbeiten eines Abschnitts erscheinen
   sie als **Vorschläge zum Anklicken** (Name · Dienst) unter den Eingabefeldern; ein Klick übernimmt den Namen
   und speichert.
 - **Automatisch eintragen:** Passt ein Dienst zum Namen eines Ablaufpunkts, wird die Person direkt als Interpret
-  eingetragen – zum Beispiel der Dienst „Predigt 2" beim Punkt „Predigt". Verglichen werden ganze Wörter
-  („Leitung" passt nicht zu „Einleitung"), Zahlen zählen nicht („Predigt 2" passt nicht zu „Lied 2").
-  Sind mehrere Dienste passend (z. B. „Predigt" und „Predigt 2"), stehen alle Namen mit Komma dort. Eine
+  eingetragen – zum Beispiel der Dienst „Predigt 2“ beim Punkt „Predigt“. Verglichen werden ganze Wörter
+  („Leitung“ passt nicht zu „Einleitung“), Zahlen zählen nicht („Predigt 2“ passt nicht zu „Lied 2“).
+  Sind mehrere Dienste passend (z. B. „Predigt“ und „Predigt 2“), stehen alle Namen mit Komma dort. Eine
   zuständige Person aus dem Ablaufplan hat Vorrang, und jeder Eintrag lässt sich ändern. Die übrigen Personen
   bleiben als Vorschläge zum Anklicken; passende stehen zuerst und haben einen grünen Rand. Welche Dienste gelesen werden, steht unter **Einstellungen → ChurchTools →
   Dienste für Interpret-Vorschläge** (Standard: `Leitung, Predigt`, durch Komma getrennt; der Dienstname muss
-  das Wort enthalten, „Leitung" findet also auch „Gebetsleitung").
+  das Wort enthalten, „Leitung“ findet also auch „Gebetsleitung“).
 - Beim Wählen des Termins meldet die App kurz, welche Personen gefunden wurden – oder dass niemand
   eingetragen ist bzw. die Dienstplanung nicht gelesen werden konnte.
 
@@ -134,7 +134,7 @@ exportiert werden.
 Ohne Dialog, direkt am Element: ein kleines Eingabefeld legt sich über das Fähnchen
 oder die Listenzeile, links der Name, rechts der Interpret.
 - **Wellenform:** Doppelklick auf das Fähnchen eines Abschnitts. Ein Doppelklick auf den
-  Interpreten (bzw. „+ Interpret") springt direkt in dieses Feld.
+  Interpreten (bzw. „+ Interpret“) springt direkt in dieses Feld.
 - **Abschnittsliste:** Doppelklick auf den Namen, ✎, oder ein Klick auf den Interpreten.
 - **Ablaufplan:** ✎ oder ein Klick auf den Interpreten (ein Klick auf den Punkt selbst
   beginnt ihn).
@@ -148,14 +148,14 @@ daneben speichert ebenfalls.
 - **Rückgängig / Wiederholen:** `Strg`/`Cmd` + `Z` nimmt die letzte Änderung an Abschnitten oder Schnitten
   zurück (Marke gesetzt, verschoben, gelöscht, umbenannt …), `Umschalt` + `Strg`/`Cmd` + `Z` bzw. `Strg` + `Y`
   stellt sie wieder her. Bis zu 60 Schritte; auch das Laden einer Vorlage oder eines Ablaufplans lässt sich
-  zurücknehmen. Mit „Beenden", einer neuen Aufnahme oder dem Öffnen einer anderen beginnt der Verlauf neu. In Eingabefeldern wirkt
+  zurücknehmen. Mit „Beenden“, einer neuen Aufnahme oder dem Öffnen einer anderen beginnt der Verlauf neu. In Eingabefeldern wirkt
   Rückgängig wie gewohnt auf den Text.
 - **Schnitte (Stellen, die im MP3 fehlen sollen):** Ein Husten oder eine Störung mitten im Abschnitt lässt sich
   auslassen, ohne die Aufnahme zu verändern. Während der Aufnahme beginnt `X` einen Schnitt und beendet ihn
   mit dem zweiten Druck. Nachträglich: mit `Umschalt` + Ziehen in der Wellenform aufziehen. Schnitte erscheinen
   rot schraffiert, ihre Ränder lassen sich ziehen, ein Doppelklick entfernt sie. Beim Export fehlen die Stellen
-  (mit kurzer Ein-/Ausblendung an den Nahtstellen); die Exportliste zeigt die gekürzte Länge („✂ −0:12").
-  Beim Abschnitt „✓ geändert seit Export" erscheint auch, wenn sich die Schnitte seither geändert haben.
+  (mit kurzer Ein-/Ausblendung an den Nahtstellen); die Exportliste zeigt die gekürzte Länge („✂ −0:12“).
+  Beim Abschnitt „✓ geändert seit Export“ erscheint auch, wenn sich die Schnitte seither geändert haben.
 - **Eingang überwacht:** Kommt über 20 Sekunden fast kein Pegel (Mischpult stumm, Kabel gezogen), erscheint ein
   oranger Balken. Fällt der Eingang ganz aus, ein roter. Beides sehen auch Companion und Dashboards (`health`).
 
@@ -165,18 +165,18 @@ Hat ein Termin in ChurchTools **keinen Ablaufplan** (die Abfrage meldet 404) ode
 ohne ChurchTools aufgenommen, trägt die App die **Standard-Programmpunkte** ein
 (Vorgabe: Einleitung, Kinderbeitrag, Predigt, Abschluss). Das ist die **Standardvorlage**.
 Unter **Einstellungen → Vorlagen für Programmpunkte** lassen sich beliebig viele Vorlagen anlegen
-(z. B. „Gottesdienst", „Jugend", „Gebetsabend"): Vorlage wählen, Namen und Punkte bearbeiten (↑/↓ zum
-Umsortieren), neue Vorlage mit „Neu", und eine als Standard festlegen. Im Ablaufplan lädt das Auswahlfeld
-**„Vorlage laden …"** jederzeit eine andere Vorlage; die offenen Punkte werden dabei (nach Rückfrage)
+(z. B. „Gottesdienst“, „Jugend“, „Gebetsabend“): Vorlage wählen, Namen und Punkte bearbeiten (↑/↓ zum
+Umsortieren), neue Vorlage mit „Neu“, und eine als Standard festlegen. Im Ablaufplan lädt das Auswahlfeld
+**„Vorlage laden …“** jederzeit eine andere Vorlage; die offenen Punkte werden dabei (nach Rückfrage)
 ersetzt, bereits gesetzte Abschnitte bleiben.
 
 In der Kachel **Ablaufplan** lässt sich die Liste jederzeit anpassen:
-- **Hinzufügen:** unten Namen eintippen, Enter oder „+".
+- **Hinzufügen:** unten Namen eintippen, Enter oder „+“.
 - **Entfernen:** × neben dem Punkt. Ein bereits gesetzter Abschnitt aus dem Ablaufplan
   geht über × in der Abschnittsliste zurück in den Ablaufplan.
 - **Umsortieren:** einen Punkt in der Liste auf einen anderen ziehen (oberhalb/unterhalb
   der Mitte entscheidet, davor oder dahinter) oder auf den freien Platz darunter, um ihn ans
-  Ende zu setzen. „Nächster Ablaufpunkt" (N) nimmt immer den obersten.
+  Ende zu setzen. „Nächster Ablaufpunkt“ (N) nimmt immer den obersten.
 
 ### Oberfläche rund um die Wellenform
 
@@ -189,7 +189,7 @@ nicht überlappen; weiter hineinzoomen zeigt mehr vom Namen.
 Unter der Wellenform stehen drei Bereiche: **Ablaufplan** (offene Punkte),
 **Abschnitte** (gesetzte Abschnitte mit Zeitraum, Doppelklick zum Umbenennen) und
 **Abschnitte exportieren**. Ganz unten zeigt eine Leiste die wichtigsten
-**Tastenkürzel** („alle Kürzel (?)" öffnet die komplette Liste). Rechts oben in
+**Tastenkürzel** („alle Kürzel (?)“ öffnet die komplette Liste). Rechts oben in
 der Kopfleiste steht der **freie Speicherplatz** und wie viele Aufnahmestunden das
 sind; unter 3 Stunden wird die Anzeige orange, unter 30 Minuten rot (dann auch mit
 Meldung während der Aufnahme).
@@ -212,6 +212,18 @@ Meldung während der Aufnahme).
 
 Gehaltene Tasten wiederholen nicht (sonst würden sich z. B. Abschnitte im Wechsel starten und beenden).
 
+### Kalender, Beenden, Bedienung per Tastatur
+
+- **Kalender:** Unter Einstellungen → ChurchTools → „Kalender laden“ lassen sich die Kalender
+  wählen, deren Termine in der Auswahl erscheinen (ohne Häkchen: alle).
+- **Beenden:** Beim Schließen während einer Aufnahme fragt die App nach, ohne die Aufnahme dabei
+  anzuhalten, und schließt erst, wenn die Datei vollständig geschrieben ist.
+- **Pause:** In der Pause zeigt der Aufnahmeknopf „Aufnahme pausiert“, fortgesetzt wird mit dem
+  Pause-Knopf („Fortsetzen“). „An Aufnahme anhängen“ hängt an eine bereits beendete Aufnahme an.
+- **Tastatur:** Die Punkte in Ablaufplan und Abschnittsliste lassen sich mit `Tab` erreichen,
+  mit den Pfeiltasten wechseln, mit `Enter` auslösen (Ablaufpunkt beginnen bzw. Abschnitt
+  anzeigen) und mit `F2` bearbeiten.
+
 ## Netzwerkschnittstelle
 
 Beschreibung aller Nachrichten: [`docs/websocket-api.md`](docs/websocket-api.md).
@@ -226,7 +238,7 @@ Das Companion-Modul liegt im Ordner `companion-module/` dieses Repositorys.
 
 Die App prüft beim Start und danach alle sechs Stunden, ob im GitHub-Repository
 ein neues Release liegt, und lädt es im Hintergrund herunter. Ist es fertig,
-erscheint oben „Update installieren".
+erscheint oben „Update installieren“.
 
 **Während einer laufenden oder pausierten Aufnahme wird nie installiert oder neu
 gestartet.** Der Knopf verweigert in diesem Fall mit einem Hinweis; das Update
@@ -240,9 +252,10 @@ wird spätestens beim nächsten regulären Beenden eingespielt.
 2. Änderung committen und den Tag selbst setzen – er muss zur Version in
    `package.json` passen, denn veröffentlicht wird unter dieser Version:
    `git tag v1.2.3` und `git push --tags`.
-3. Der Workflow `.github/workflows/release.yml` baut daraufhin die Windows- und
-   Mac-Version und veröffentlicht sie. Alternativ lokal mit einem Token als
-   `GH_TOKEN`: `npm run publish`.
+3. Der Workflow `.github/workflows/release.yml` prüft, ob Tag und Version
+   übereinstimmen, lässt die Tests laufen, legt einen Release-Entwurf an, baut
+   Windows- und Mac-Version hinein und gibt das Release erst frei, wenn beide
+   vollständig sind. Ohne Mac-Zertifikat wird die Mac-App ad hoc signiert.
 
 Da das Repository öffentlich ist, braucht niemand ein Zugriffstoken, um Updates
 herunterzuladen – `electron-updater` liest öffentliche Releases ohne Anmeldung.
@@ -269,8 +282,8 @@ Silicon. Ein paar Dinge unterscheiden sich:
 Ohne Apple-Entwicklerzertifikat (99 $ im Jahr) lässt sich die App zwar bauen und
 benutzen – beim ersten Öffnen blockiert Gatekeeper sie aber. Seit macOS 15 hilft
 der frühere Rechtsklick → *Öffnen* nicht mehr: Nach dem ersten Startversuch unter
-*Systemeinstellungen → Datenschutz & Sicherheit* auf **„Dennoch öffnen"** klicken.
-Meldet macOS die App als „beschädigt", entfernt
+*Systemeinstellungen → Datenschutz & Sicherheit* auf **„Dennoch öffnen“** klicken.
+Meldet macOS die App als „beschädigt“, entfernt
 `xattr -dr com.apple.quarantine /Applications/ChurchRecorder.app` die Sperre.
 
 **Wichtig:** Die automatische Update-Funktion arbeitet auf macOS ausschließlich
@@ -300,7 +313,7 @@ in `build/entitlements.mac.plist`.
 src/main/        Hauptprozess
   main.js        Fenster, IPC, Verdrahtung
   session.js     Zustand, Abschnitte, Aufnahme/Fortsetzen, Autosave
-  wav.js         WAV schreiben/lesen (Masteraufnahme)
+  wav.js         WAV/RF64 schreiben (eigener Thread) und lesen
   mp3.js         MP3-Export eines Abschnitts
   id3.js         ID3-Tags (Titel, Interpret, Album, Jahr)
   churchtools.js ChurchTools-API
@@ -319,12 +332,22 @@ src/renderer/    Oberfläche
 ```
 
 Audio wird in der Oberfläche erfasst, als Int16-Blöcke an den Hauptprozess
-übergeben und dort sofort auf die Festplatte geschrieben. Der Hauptprozess
+übergeben und von einem eigenen Schreib-Thread auf die Festplatte geschrieben (ein
+langsames Laufwerk bremst so nie die Aufnahme; alle 10 Sekunden werden die Daten fest
+auf die Platte gezwungen). Ab 4 GB (gut 6 Stunden) wird die Datei im laufenden Betrieb
+zu **RF64**, der WAV-Erweiterung für große Dateien – es bleibt eine Datei, die gängige
+Programme (Audacity, VLC, Reaper …) öffnen. Der Hauptprozess
 berechnet Pegel und Wellenform-Spitzenwerte und führt die einzige gültige
 Version des Zustands – Oberfläche, Netzwerk und Companion sehen alle dasselbe.
+
+Tests: `npm test` im Ordner `app/` (Node-Testrunner, ohne Electron). Sie liegen in `test/` und
+laufen bei jedem Push automatisch auf Windows und macOS (`.github/workflows/test.yml`).
 
 ## Sicherheitshinweis
 
 Die Netzwerkschnittstelle ist für ein vertrauenswürdiges lokales Netz gedacht.
 Die Verbindung ist unverschlüsselt; das Passwort verhindert versehentlichen
-Zugriff, schützt aber nicht gegen einen Angreifer im selben Netz.
+Zugriff, schützt aber nicht gegen einen Angreifer im selben Netz. Zusätzlich:
+Webseiten im Browser dürfen nur mitlesen, nach 5 Fehlversuchen wird eine Adresse
+für eine Minute gesperrt, und mit dem Mitlese-Passwort sind weder Dateipfade noch
+Personennamen zu sehen.

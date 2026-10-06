@@ -12,8 +12,7 @@ const PEAK_BUCKET_MS = 50;   // Auflösung der Wellenform
 const AUTOSAVE_MS = 3000;
 const MIN_SECTION = SectionLogic.MIN_SECTION;
 const MIN_CUT = 0.2;       // kürzester Schnitt in Sekunden
-const UNDO_LIMIT = 60;
-const WAV_WARN_BYTES = 3.8e9; // Warnung vor der 4-GB-Grenze des WAV-Formats     // so viele Schritte lassen sich zurücknehmen
+const UNDO_LIMIT = 60;     // so viele Schritte lassen sich zurücknehmen
 
 let counter = 0;
 function newId(prefix) {
@@ -633,7 +632,7 @@ class Session extends EventEmitter {
     this.basePath = base;
     this.wavPath = `${base}.wav`;
     this.writer = writer;
-    this._sizeWarned = false;
+    this._attachWriter(writer);
     this.startedAt = new Date().toISOString();
     this.status = 'recording';
     this.finalized = false;
@@ -678,6 +677,7 @@ class Session extends EventEmitter {
     this.sampleRate = info.sampleRate;
     this.channels = info.channels;
     this.writer = new WavWriter(this.wavPath, this.sampleRate, this.channels, { append: true });
+    this._attachWriter(this.writer);
     this.status = 'recording';
     this.finalized = false;
     this._bucketAcc = 0;
@@ -692,6 +692,17 @@ class Session extends EventEmitter {
     this._changed();
     this.emit('recording-started', { wavPath: this.wavPath, sampleRate: this.sampleRate, channels: this.channels });
     return { ok: true, wavPath: this.wavPath, sampleRate: this.sampleRate, channels: this.channels };
+  }
+
+  /** Fehler und Engpässe des Schreib-Threads weitergeben (Platte voll, Laufwerk zu langsam …). */
+  _attachWriter(writer) {
+    writer.on('error', (err) => this.emit('write-error', err));
+    writer.on('slow', (slow) => this.emit('write-slow', slow));
+  }
+
+  /** Erfüllt sich, sobald die zuletzt beendete Aufnahme vollständig auf der Platte ist. */
+  whenWritten() {
+    return this._closing || Promise.resolve();
   }
 
   pause() {
@@ -717,7 +728,12 @@ class Session extends EventEmitter {
     this._restoredDuration = this.duration;
     this._closeOpen(this._restoredDuration);
     this._closeOpenCuts(this._restoredDuration);
-    if (this.writer) this.writer.close();
+    // Der Schreib-Thread leert seine Warteschlange und schließt die Datei; whenWritten() wartet darauf.
+    this._closing = this.writer ? this.writer.close() : null;
+    if (this._closing) {
+      this.writing = true;
+      this._closing.finally(() => { this.writing = false; });
+    }
     this.status = 'stopped';
     this.finalized = true;
     this._stopAutosave();
@@ -735,10 +751,6 @@ class Session extends EventEmitter {
   pushAudio(buffer) {
     if (this.status !== 'recording' || !this.writer) return;
     this.writer.write(buffer);
-    if (!this._sizeWarned && this.writer.dataBytes > WAV_WARN_BYTES) {
-      this._sizeWarned = true;
-      this.emit('error-notice', 'Die Aufnahme nähert sich der Größengrenze einer WAV-Datei (4 GB, gut 6 Stunden). Bitte beenden und eine neue Aufnahme starten.');
-    }
 
     const ch = this.channels;
     const frames = buffer.length / (2 * ch);

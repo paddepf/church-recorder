@@ -8,6 +8,8 @@ const settings = require('./settings');
 
 const PROTOCOL_VERSION = 1;
 const LEVEL_INTERVAL_MS = 200;
+const MAX_FAILURES = 5;        // Fehlversuche pro Adresse …
+const LOCK_MS = 60000;         // … danach so lange keine Anmeldung
 
 function safeEqual(a, b) {
   const bufA = Buffer.from(String(a || ''));
@@ -29,7 +31,8 @@ class NetServer extends EventEmitter {
     this.wss = null;
     this.http = null;
     this.port = null;
-    this.clients = new Map();       // ws -> {role, authed, ip}
+    this.clients = new Map();       // ws -> {role, authed, ip, fromBrowser}
+    this.failures = new Map();      // ip -> {count, until}: Bremse gegen Durchprobieren
     this.lastState = null;
     this.lastLevelSent = 0;
   }
@@ -135,7 +138,10 @@ class NetServer extends EventEmitter {
 
   _onConnection(ws, req) {
     const ip = req.socket.remoteAddress;
-    this.clients.set(ws, { authed: false, role: null, ip });
+    // Browser schicken einen Origin-Header, Companion und eigene Programme nicht. Webseiten dürfen
+    // höchstens mitlesen: Eine fremde Seite im Browser des Technikrechners soll nicht steuern können.
+    const fromBrowser = Boolean(req.headers.origin);
+    this.clients.set(ws, { authed: false, role: null, ip, fromBrowser });
     ws.isAlive = true;
     ws.on('pong', () => { ws.isAlive = true; });
 
@@ -179,22 +185,38 @@ class NetServer extends EventEmitter {
     if (!info || info.authed) return;
     const cfg = settings.load();
 
+    // Bremse gegen Durchprobieren: nach 5 Fehlversuchen einer Adresse 60 s keine Anmeldung.
+    const lock = this.failures.get(info.ip);
+    if (lock && lock.until > Date.now()) {
+      this._send(ws, { type: 'error', code: 'auth_locked', message: 'Zu viele Fehlversuche – bitte eine Minute warten.' });
+      setTimeout(() => ws.close(), 200);
+      return;
+    }
+
     let role = null;
     if (cfg.networkPassword && safeEqual(password, cfg.networkPassword)) role = 'control';
     else if (cfg.monitorPassword && safeEqual(password, cfg.monitorPassword)) role = 'monitor';
 
     if (!role) {
+      const entry = this.failures.get(info.ip) || { count: 0, until: 0 };
+      entry.count += 1;
+      if (entry.count >= MAX_FAILURES) {
+        entry.until = Date.now() + LOCK_MS;
+        entry.count = 0;
+      }
+      this.failures.set(info.ip, entry);
       this._send(ws, { type: 'error', code: 'auth_failed', message: 'Passwort ist falsch.' });
       setTimeout(() => ws.close(), 200);
       return;
     }
-    // Wer das Vollzugriffs-Passwort nutzt, kann sich freiwillig beschränken.
-    if (requestedRole === 'monitor') role = 'monitor';
+    this.failures.delete(info.ip);
+    // Wer das Vollzugriffs-Passwort nutzt, kann sich freiwillig beschränken; Browser dürfen nur mitlesen.
+    if (requestedRole === 'monitor' || info.fromBrowser) role = 'monitor';
 
     info.authed = true;
     info.role = role;
     this._send(ws, { type: 'auth', ok: true, role });
-    if (this.lastState) this._send(ws, { type: 'state', payload: this.lastState });
+    if (this.lastState) this._send(ws, { type: 'state', payload: this._forRole(this.lastState, role) });
     this.emit('status', this.statusInfo());
   }
 
@@ -212,7 +234,7 @@ class NetServer extends EventEmitter {
     }
     if (msg.type === 'ping') return this._send(ws, { type: 'pong', id: msg.id ?? null });
     if (msg.type === 'get_state') {
-      return this._send(ws, { type: 'state', payload: this.lastState, id: msg.id ?? null });
+      return this._send(ws, { type: 'state', payload: this._forRole(this.lastState, info.role), id: msg.id ?? null });
     }
     if (msg.type !== 'command') {
       return this._send(ws, { type: 'error', code: 'unknown_type', message: 'Unbekannter Nachrichtentyp.' });
@@ -247,10 +269,31 @@ class NetServer extends EventEmitter {
     });
   }
 
-  /** Vollständiger Zustand – wird bei jeder Änderung gesendet. */
+  /** Vollständiger Zustand – wird bei jeder Änderung gesendet (Mitlesende ohne Pfade und Namen). */
   publishState(state) {
     this.lastState = state;
-    this.broadcast({ type: 'state', payload: state });
+    const forMonitor = this._forRole(state, 'monitor');
+    this.clients.forEach((info, ws) => {
+      if (!info.authed) return;
+      this._send(ws, { type: 'state', payload: info.role === 'monitor' ? forMonitor : state });
+    });
+  }
+
+  /**
+   * Die Mitlese-Rolle (Dashboards, ggf. öffentlich sichtbar) bekommt keine Dateipfade und keine
+   * Personennamen (Interpreten, Dienstplanung).
+   */
+  _forRole(state, role) {
+    if (!state || role !== 'monitor') return state;
+    const strip = (x) => ({ ...x, artist: undefined });
+    return {
+      ...state,
+      wavPath: undefined,
+      service: state.service ? { ...state.service, suggestions: undefined } : state.service,
+      sections: (state.sections || []).map(strip),
+      pending: (state.pending || []).map(strip),
+      exports: Object.fromEntries(Object.entries(state.exports || {}).map(([k, v]) => [k, { at: v.at }]))
+    };
   }
 
   /** Pegel – gedrosselt, damit das Netz nicht geflutet wird. */

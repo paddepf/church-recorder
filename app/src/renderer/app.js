@@ -108,6 +108,7 @@
     bindUi();
     bindEvents();
     renderShortcuts(info.platform);
+    applyPlatformTitles(info.platform);
     refreshDisk();
     setInterval(refreshDisk, 30000);
     await refreshDevices();
@@ -126,7 +127,7 @@
     if (isLive()) {
       state.lastChunkAt = 0;
       toast('warn', 'Die Oberfläche wurde neu geladen – der Audioeingang wird wieder verbunden.', 8000);
-      recoverCapture();
+      recoverCapture({ quiet: true });
       return;
     }
 
@@ -182,7 +183,9 @@
       plan: v('--plan'),
       manual: v('--manual'),
       tally: v('--tally'),
-      selection: v('--wave-selection')
+      selection: v('--wave-selection'),
+      cut: v('--cut'),
+      cutText: v('--cut-text')
     };
   }
 
@@ -219,8 +222,9 @@
     const paused = session.status === 'paused';
     const stopped = session.status === 'stopped';
 
-    $('record-label').textContent = rec ? 'Aufnahme läuft' : (paused ? 'Fortsetzen' : 'Neue Aufnahme starten');
-    $('btn-record').disabled = rec || state.starting;
+    // In der Pause setzt der Pause-Knopf fort; der Aufnahmeknopf zeigt nur den Zustand.
+    $('record-label').textContent = rec ? 'Aufnahme läuft' : (paused ? 'Aufnahme pausiert' : 'Neue Aufnahme starten');
+    $('btn-record').disabled = rec || paused || state.starting;
     $('btn-continue').hidden = !(stopped && session.wavPath);
     $('btn-continue').disabled = state.starting;
     $('btn-pause').disabled = !(rec || paused);
@@ -284,7 +288,7 @@
         const go = await confirmDialog(
           'Neue Aufnahme starten?',
           `Die angezeigte Aufnahme (${longTime(state.session.duration || 0)}, ${sections} Abschnitte) ist als Datei gespeichert ` +
-          'und lässt sich über „Aufnahmen" jederzeit wieder öffnen. Die neue Aufnahme beginnt mit leerer Wellenform, ' +
+          'und lässt sich über „Aufnahmen“ jederzeit wieder öffnen. Die neue Aufnahme beginnt mit leerer Wellenform, ' +
           'die gesetzten Abschnitte werden zurückgesetzt. Noch nicht exportierte MP3-Abschnitte bitte vorher speichern.',
           'Neue Aufnahme starten'
         );
@@ -309,6 +313,7 @@
       if (!rec.ok) {
         await capture.stop();
         toast('error', rec.error || 'Die Aufnahme konnte nicht gestartet werden.');
+        if (opts.remote) window.api.reportRemoteResult({ kind: 'start', ok: false, error: rec.error });
         return;
       }
       // Status sofort lokal setzen: Die Statusmeldung aus dem Hauptprozess kommt leicht verzögert, ein
@@ -332,11 +337,12 @@
       toast('success', `Aufnahme läuft – ${result.deviceLabel || 'Eingang'} bei ${Math.round(result.sampleRate / 1000)} kHz.`);
     } catch (err) {
       toast('error', err.message);
+      if (opts.remote) window.api.reportRemoteResult({ kind: 'start', ok: false, error: err.message });
     } finally {
       state.starting = false;
       // Knopf nur sperren, solange tatsächlich aufgenommen wird (auch nach Abbruch oder Fehler wieder frei).
       const st = state.session?.status;
-      $('btn-record').disabled = st === 'recording';
+      $('btn-record').disabled = st === 'recording' || st === 'paused';
     }
   }
 
@@ -356,7 +362,11 @@
   function applyHealth(h) {
     state.health = h;
     if (state.recovering) return;
-    if (h && h.input === 'silent' && state.session?.status === 'recording') {
+    if (h && h.write === 'error' && isLive()) {
+      showAudioWarning(true, `Audio kann nicht gespeichert werden – Laufwerk prüfen! (${h.writeMessage || 'Schreibfehler'})`, 'lost');
+    } else if (h && h.write === 'slow' && isLive()) {
+      showAudioWarning(true, 'Das Laufwerk ist zu langsam – die Aufnahme wird im Speicher gepuffert.', 'silent');
+    } else if (h && h.input === 'silent' && state.session?.status === 'recording') {
       showAudioWarning(true, 'Seit über 20 Sekunden kaum Pegel – Mischpult oder Kabel prüfen?', 'silent');
     } else {
       showAudioWarning(false);
@@ -367,13 +377,14 @@
    * Der Audioeingang liefert nichts mehr (z. B. nach Ruhezustand oder wenn das Gerät
    * kurz weg war): Eingang neu öffnen und in dieselbe Datei weiterschreiben.
    */
-  async function recoverCapture() {
+  /** @param {{quiet?: boolean}} [opts] quiet: ohne eigene Meldung (der Aufrufer hat schon gemeldet) */
+  async function recoverCapture(opts = {}) {
     if (state.recovering) return;
     state.recovering = true;
     window.api.reportInputLost(true);
     const lostSince = state.lastChunkAt;
     showAudioWarning(true, 'Kein Audiosignal – der Eingang wird neu verbunden …', 'lost');
-    toast('error', 'Der Audioeingang liefert keine Daten mehr – er wird neu verbunden.', 8000);
+    if (!opts.quiet) toast('error', 'Der Audioeingang liefert keine Daten mehr – er wird neu verbunden.', 8000);
     try {
       // Auch in der Pause weiter versuchen: Sonst bliebe der Eingang nach "Fortsetzen" stumm.
       while (isLive()) {
@@ -469,11 +480,17 @@
     }
   }
 
-  async function stopRecording() {
+  /** @param {{remote?: boolean}} [opts] remote: per Fernsteuerung – Ergebnis an den Hauptprozess melden */
+  async function stopRecording(opts = {}) {
+    // Erst den angefangenen Audioblock abgeben, dann beenden: so fehlen am Ende keine Sekundenbruchteile.
+    await capture.flush();
     const res = await window.api.record.stop();
     await capture.stop();
     monitor.pause();
-    if (!res.ok) return toast('error', res.error);
+    if (!res.ok) {
+      if (opts.remote) window.api.reportRemoteResult({ kind: 'stop', ok: false, error: res.error });
+      return toast('error', res.error);
+    }
     toast('success', 'Aufnahme beendet und gespeichert.');
     state.cursorT = null;
     wave.update({ playhead: res.duration || 0 });
@@ -508,6 +525,14 @@
   /* ----------------------------------------------------------------- Listen */
 
   function renderLists() {
+    // Tastaturfokus über das Neuaufbauen der Listen hinweg erhalten
+    const focusedRow = document.activeElement?.closest?.('#pending-list .item, #marker-list .item');
+    const focusId = focusedRow?.dataset.id;
+    renderListsInner();
+    if (focusId) document.querySelector(`#pending-list .item[data-id="${focusId}"], #marker-list .item[data-id="${focusId}"]`)?.focus();
+  }
+
+  function renderListsInner() {
     const session = state.session;
     const pendingEl = $('pending-list');
     const sectionEl = $('marker-list');
@@ -569,6 +594,7 @@
         await window.api.section.reorder(dragged, next);
       });
       li.dataset.id = x.id;
+      li.tabIndex = 0;
       li.addEventListener('click', async () => {
         if (!live) return;
         const res = await window.api.section.start(x.id, null);
@@ -592,6 +618,7 @@
       li.querySelector('.time').textContent = `${fmt(x.start)} – ${x.end != null ? fmt(x.end) : 'läuft'}`;
       li.querySelector('.label').textContent = x.label;
       li.dataset.id = x.id;
+      li.tabIndex = 0;
       li.querySelector('.label').appendChild(artistTag(x, () => li.getBoundingClientRect()));
       li.addEventListener('click', () => {
         state.selectedSectionId = x.id;
@@ -894,6 +921,25 @@
       input.focus();
     };
     $('btn-plan-add').addEventListener('click', addPlanPoint);
+    // Listen per Tastatur: Pfeiltasten wandern, Enter = Klick, F2 = Name/Interpret bearbeiten
+    ['pending-list', 'marker-list'].forEach((listId) => {
+      $(listId).addEventListener('keydown', (e) => {
+        const row = e.target.closest('.item');
+        if (!row || e.target !== row) return;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          const next = e.key === 'ArrowDown' ? row.nextElementSibling : row.previousElementSibling;
+          if (next && next.classList.contains('item')) next.focus();
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          row.click();
+        } else if (e.key === 'F2') {
+          e.preventDefault();
+          e.stopPropagation();
+          editSection(row.dataset.id, 'name', row.getBoundingClientRect());
+        }
+      });
+    });
     $('plan-template').addEventListener('change', (e) => { e.target.blur(); applyPlanTemplate(e.target.value); });
     $('plan-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addPlanPoint(); } });
     // Auf den freien Platz unter der Liste ziehen: ans Ende sortieren.
@@ -926,6 +972,8 @@
 
   function openModal(id) {
     $(id).hidden = false;
+    // Fokus in den Dialog setzen (Tastaturbedienung, Bildschirmleser)
+    setTimeout(() => $(id).querySelector('input:not([type=hidden]), select, button:not(.close)')?.focus(), 0);
     // Geräte können seit dem Start ein- oder ausgesteckt worden sein.
     if (id === 'modal-settings') {
       // Ohne Speichern geschlossene Änderungen verwerfen: immer die gespeicherten Werte zeigen.
@@ -1075,7 +1123,7 @@
 
     window.api.on('command', ({ action, remote }) => {
       if (action === 'record.start') startRecording({ remote });
-      if (action === 'record.stop') stopRecording();
+      if (action === 'record.stop') stopRecording({ remote });
     });
 
     // Einträge aus dem macOS-Menü
@@ -1113,6 +1161,8 @@
         };
       }
       if (s.state === 'error') $('version-info').title = s.message || '';
+      // Mac ohne Zertifikat: kein Fehler, sondern ein Hinweis in den Einstellungen
+      if (s.state === 'manual') $('version-info').textContent = `${$('version-info').textContent.split(' – ')[0]} – ${s.message}`;
     });
 
     window.api.on('export-progress', ({ progress, index, total }) => {
@@ -1201,6 +1251,13 @@
       { keys: ['Strg', 'Mausrad'], text: 'Wellenform zoomen (auch Zwei-Finger-Zoom auf dem Trackpad)' },
       { keys: ['F12'], text: 'Entwicklerwerkzeuge (nur Dev-Modus)' }
     ];
+  }
+
+  /** Tooltips mit der passenden Taste (Cmd auf dem Mac, sonst Strg). */
+  function applyPlatformTitles(platform) {
+    const mod = platform === 'darwin' ? 'Cmd' : 'Strg';
+    $('btn-record').title = `Neue Aufnahme starten (${mod}+R)`;
+    $('btn-stop').title = `Aufnahme beenden (${mod}+R)`;
   }
 
   function renderShortcuts(platform) {
@@ -1432,7 +1489,7 @@
         const auto = res.autoFilled ? ` · ${res.autoFilled} Punkt${res.autoFilled === 1 ? '' : 'e'} automatisch zugeordnet` : '';
         toast('info', `Aus der Dienstplanung – ${text}${auto}`, 9000);
       } else {
-        toast('info', `In der Dienstplanung ist für „${res.wanted.join(', ')}" niemand eingetragen.`, 7000);
+        toast('info', `In der Dienstplanung ist für „${res.wanted.join(', ')}“ niemand eingetragen.`, 7000);
       }
     }
   }
@@ -1484,7 +1541,7 @@
     const res = await window.api.session.recoverable();
     if (!res.ok || res.sessions.length === 0) return;
     const s = res.sessions[0];
-    toast('warn', `Eine unterbrochene Aufnahme wurde gefunden (${s.date}, ${fmt(s.duration)}). Über "Aufnahmen" wiederherstellbar.`, 12000);
+    toast('warn', `Eine unterbrochene Aufnahme wurde gefunden (${s.date}, ${fmt(s.duration)}). Über „Aufnahmen“ wiederherstellbar.`, 12000);
   }
 
   /* --------------------------------------------------------- Einstellungen */
@@ -1540,6 +1597,11 @@
     $('set-bitrate').value = String(s.mp3Bitrate);
     $('set-ct-url').value = s.churchToolsUrl;
     $('set-ct-auto').checked = Boolean(s.autoLoadTodaysService);
+    state.calendarIds = (s.churchToolsCalendarIds || []).map(String);
+    $('ct-calendars').innerHTML = '';
+    $('ct-calendars-info').textContent = state.calendarIds.length
+      ? `${state.calendarIds.length} Kalender ausgewählt`
+      : 'alle Kalender';
     $('set-ct-services').value = s.artistServices || '';
     $('ct-token-state').textContent = s.churchToolsTokenSet
       ? (s.encryptionAvailable ? 'Ein Token ist hinterlegt (verschlüsselt gespeichert).' : 'Ein Token ist hinterlegt. Achtung: Verschlüsselung auf diesem System nicht verfügbar.')
@@ -1642,21 +1704,50 @@
     if (!tpl) return;
     if ((state.session?.pending || []).length > 0) {
       const go = await confirmDialog(
-        `Vorlage „${tpl.name}" laden?`,
+        `Vorlage „${tpl.name}“ laden?`,
         'Die offenen Punkte im Ablaufplan werden durch die Punkte der Vorlage ersetzt. Bereits gesetzte Abschnitte bleiben erhalten.',
         'Vorlage laden'
       );
       if (!go) return;
     }
     const res = await window.api.agenda.applyTemplate(id);
-    toast(res.ok ? 'success' : 'error', res.ok ? `Vorlage „${res.name}": ${res.count} Punkte eingetragen.` : res.error, 4000);
+    toast(res.ok ? 'success' : 'error', res.ok ? `Vorlage „${res.name}“: ${res.count} Punkte eingetragen.` : res.error, 4000);
   }
 
   function readDefaultAgenda() {
     return [...$('default-agenda-list').querySelectorAll('input')].map((i) => i.value.trim()).filter(Boolean);
   }
 
+  /** Ausgewählte Kalender: aus den Häkchen, falls geladen, sonst die gespeicherte Auswahl. */
+  function readCalendarSelection() {
+    const boxes = $('ct-calendars').querySelectorAll('input[type=checkbox]');
+    if (!boxes.length) return (state.calendarIds || []).map((id) => (Number.isFinite(Number(id)) ? Number(id) : id));
+    return [...boxes].filter((b) => b.checked).map((b) => Number(b.value));
+  }
+
+  async function loadCalendars() {
+    $('ct-calendars-info').textContent = 'Wird geladen …';
+    const res = await window.api.churchtools.calendars();
+    if (!res.ok) {
+      $('ct-calendars-info').textContent = res.error;
+      return;
+    }
+    const box = $('ct-calendars');
+    box.innerHTML = '';
+    res.calendars.forEach((c) => {
+      const label = document.createElement('label');
+      label.innerHTML = '<input type="checkbox" />';
+      const input = label.querySelector('input');
+      input.value = c.id;
+      input.checked = (state.calendarIds || []).includes(String(c.id));
+      label.append(c.name);
+      box.appendChild(label);
+    });
+    $('ct-calendars-info').textContent = `${res.calendars.length} Kalender – ohne Häkchen gelten alle`;
+  }
+
   function bindSettingsForm() {
+    $('btn-ct-calendars').addEventListener('click', loadCalendars);
     $('btn-default-agenda-add').addEventListener('click', () => addDefaultAgendaRow('').querySelector('input').focus());
     $('tpl-select').addEventListener('change', (e) => { commitTemplateDraft(); state.tpl.selectedId = e.target.value; renderTemplateEditor(); });
     $('btn-tpl-add').addEventListener('click', () => {
@@ -1705,8 +1796,8 @@
     });
 
     $('btn-check-update').addEventListener('click', async () => {
-      await window.api.update.check();
-      toast('info', 'Es wird nach einem Update gesucht.');
+      const res = await window.api.update.check();
+      toast(res.ok ? 'info' : 'warn', res.ok ? 'Es wird nach einem Update gesucht.' : res.error);
     });
 
     $('btn-save-settings').addEventListener('click', () => saveSettings(false));
@@ -1727,6 +1818,7 @@
       mp3Bitrate: Number($('set-bitrate').value),
       churchToolsUrl: $('set-ct-url').value.trim(),
       autoLoadTodaysService: $('set-ct-auto').checked,
+      churchToolsCalendarIds: readCalendarSelection(),
       artistServices: $('set-ct-services').value.trim(),
       networkEnabled: $('set-net-on').checked,
       networkPort: Number($('set-net-port').value) || 8765,

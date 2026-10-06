@@ -1,6 +1,8 @@
 import { InstanceBase, InstanceStatus, Regex, runEntrypoint, combineRgb } from '@companion-module/base'
 import WebSocket from 'ws'
 
+const PROTOCOL_VERSION = 1 // muss zu app/src/main/netserver.js passen
+
 class GottesdienstRecorderInstance extends InstanceBase {
 	async init(config) {
 		this.config = config
@@ -36,7 +38,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				label: 'ChurchRecorder',
 				value:
 					'Verbindet sich mit der Netzwerkschnittstelle von ChurchRecorder. ' +
-					'Port und Passwort stehen dort in den Einstellungen unter „Netzwerk".',
+					'Port und Passwort stehen dort in den Einstellungen unter „Netzwerk“.',
 			},
 			{
 				type: 'textinput',
@@ -56,7 +58,8 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				max: 65535,
 			},
 			{
-				type: 'textinput',
+				// verdeckt angezeigt und nicht im Klartext exportiert
+				type: 'secret-text',
 				id: 'password',
 				label: 'Passwort für Steuerung',
 				width: 12,
@@ -200,6 +203,15 @@ class GottesdienstRecorderInstance extends InstanceBase {
 
 	handleMessage(msg) {
 		switch (msg.type) {
+			case 'hello':
+				if (msg.protocol !== PROTOCOL_VERSION) {
+					this.log(
+						'warn',
+						`Der Recorder spricht Protokoll ${msg.protocol}, dieses Modul ${PROTOCOL_VERSION} – bitte Modul und App auf denselben Stand bringen.`
+					)
+				}
+				break
+
 			case 'auth':
 				if (msg.ok) {
 					this.authed = true
@@ -238,9 +250,12 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				break
 
 			case 'error':
-				if (msg.code === 'auth_failed') {
+				if (msg.code === 'auth_failed' || msg.code === 'auth_locked') {
 					this.authFailed = true
-					this.updateStatus(InstanceStatus.AuthenticationFailure, 'Passwort ist falsch')
+					this.updateStatus(
+						InstanceStatus.AuthenticationFailure,
+						msg.code === 'auth_locked' ? 'Zu viele Fehlversuche – Passwort prüfen' : 'Passwort ist falsch'
+					)
 					this.disconnect()
 				} else {
 					this.log('warn', `Recorder meldet: ${msg.message}`)
@@ -267,6 +282,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 			{ variableId: 'level_right', name: 'Pegel rechts (0-100)' },
 			{ variableId: 'clipping', name: 'Übersteuerung (ja/nein)' },
 			{ variableId: 'input_status', name: 'Eingang (ok / leise / ausgefallen)' },
+			{ variableId: 'write_status', name: 'Speichern (ok / langsam / Fehler)' },
 			{ variableId: 'disk_free', name: 'Freier Speicherplatz (GB)' },
 			{ variableId: 'disk_hours', name: 'Aufnahmestunden, die noch Platz haben' },
 			{ variableId: 'cut_open', name: 'Schnitt läuft gerade (ja/nein)' },
@@ -286,6 +302,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 			level_right: 0,
 			clipping: 'nein',
 			input_status: '-',
+			write_status: '-',
 			disk_free: '-',
 			disk_hours: '-',
 			cut_open: 'nein',
@@ -312,11 +329,12 @@ class GottesdienstRecorderInstance extends InstanceBase {
 			marker_count: (s.sections || []).filter((x) => x.start != null).length,
 			pending_count: pending.length,
 			input_status: { ok: 'ok', silent: 'leise', lost: 'ausgefallen' }[s.health?.input] || '-',
+			write_status: { ok: 'ok', slow: 'langsam', error: 'Fehler' }[s.health?.write] || '-',
 			disk_free: s.health?.disk ? (s.health.disk.freeBytes / 1073741824).toFixed(1) : '-',
 			disk_hours: s.health?.disk ? this.formatHours(s.health.disk.hoursLeft) : '-',
 			cut_open: (s.cuts || []).some((c) => c.end == null) ? 'ja' : 'nein',
 		})
-		this.checkFeedbacks('recording', 'paused', 'has_pending', 'input_problem', 'disk_warn', 'disk_low', 'cut_open')
+		this.checkFeedbacks('recording', 'paused', 'has_pending', 'input_problem', 'write_problem', 'disk_warn', 'disk_low', 'cut_open')
 	}
 
 	formatHours(h) {
@@ -468,6 +486,17 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				options: [],
 				callback: () => ['silent', 'lost'].includes(this.state?.health?.input),
 			},
+			write_problem: {
+				type: 'boolean',
+				name: 'Aufnahme kann nicht gespeichert werden',
+				description: 'Schreibfehler (z. B. Platte voll, Laufwerk entfernt) oder Laufwerk zu langsam',
+				defaultStyle: {
+					bgcolor: combineRgb(220, 40, 30),
+					color: combineRgb(255, 255, 255),
+				},
+				options: [],
+				callback: () => ['error', 'slow'].includes(this.state?.health?.write),
+			},
 			disk_warn: {
 				type: 'boolean',
 				name: 'Speicherplatz wird knapp (unter 3 Stunden)',
@@ -551,7 +580,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 			marker_predigt: {
 				type: 'button',
 				category: 'Abschnitte',
-				name: 'Abschnitt „Predigt" starten / beenden',
+				name: 'Abschnitt „Predigt“ starten / beenden',
 				style: { ...base, text: 'Predigt' },
 				steps: [{ down: [{ actionId: 'marker_add', options: { label: 'Predigt' } }], up: [] }],
 				feedbacks: [],
@@ -590,7 +619,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 					text: 'Eingang: $(churchrecorder:input_status)\\nSpeicher: $(churchrecorder:disk_free) GB\\n$(churchrecorder:disk_hours)',
 				},
 				steps: [{ down: [], up: [] }],
-				feedbacks: [fb('input_problem'), fb('disk_warn'), fb('disk_low')],
+				feedbacks: [fb('input_problem'), fb('write_problem'), fb('disk_warn'), fb('disk_low')],
 			},
 			status: {
 				type: 'button',

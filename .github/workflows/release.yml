@@ -10,7 +10,46 @@ defaults:
     working-directory: app
 
 jobs:
+  # Vor dem Bauen: Passt der Tag zur Version in package.json, laufen die Tests?
+  # Danach wird ein Entwurf des Releases angelegt, in den beide Builds hochladen.
+  vorbereiten:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Tag und Version vergleichen
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME passt nicht zur Version $VERSION in app/package.json."
+            exit 1
+          fi
+
+      - name: Abhängigkeiten installieren
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
+      - name: Tests
+        run: npm test
+
+      - name: Release-Entwurf anlegen
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" --notes ""
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   windows:
+    needs: vorbereiten
     runs-on: windows-latest
     permissions:
       contents: write
@@ -26,12 +65,13 @@ jobs:
       - name: Abhängigkeiten installieren
         run: npm ci
 
-      - name: Bauen und veröffentlichen
+      - name: Bauen und hochladen
         run: npm run publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   macos:
+    needs: vorbereiten
     runs-on: macos-latest
     permissions:
       contents: write
@@ -47,16 +87,39 @@ jobs:
       - name: Abhängigkeiten installieren
         run: npm ci
 
-      - name: Bauen und veröffentlichen
-        run: npm run publish:mac
+      - name: Bauen und hochladen
+        shell: bash
+        run: |
+          if [ -n "$CSC_LINK" ]; then
+            npm run publish:mac
+          else
+            # Ohne Zertifikat ad hoc signieren: Auf Apple Silicon startet eine gar nicht signierte App
+            # sonst mit der Meldung „beschädigt“. Gatekeeper fragt trotzdem einmal nach („Dennoch öffnen“).
+            npm run publish:mac -- -c.mac.identity=-
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Signiert wird erst, wenn diese Secrets im Repository hinterlegt sind;
           # notarisiert zusätzlich erst, wenn in package.json build.mac.notarize
-          # auf true steht. Ohne Secrets entsteht ein unsigniertes DMG: nutzbar,
-          # aber ohne automatische Updates.
+          # auf true steht. Ohne Secrets entsteht eine ad hoc signierte App:
+          # nutzbar, aber ohne automatische Updates.
           CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+  # Erst wenn beide Builds hochgeladen sind, wird der Entwurf veröffentlicht. So sehen die
+  # Aufnahmerechner nie ein Release, dem noch Dateien (z. B. latest-mac.yml) fehlen.
+  veroeffentlichen:
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Release freigeben
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

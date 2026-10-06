@@ -47,7 +47,16 @@ class Updater extends EventEmitter {
       this._set('ready', { version: info.version });
     });
     au.on('error', (err) => {
-      this._set('error', { message: String(err?.message || err) });
+      const message = String(err?.message || err);
+      // macOS ohne Entwicklerzertifikat: Updates lassen sich nicht automatisch einspielen. Das ist kein
+      // Fehler im Betrieb – stattdessen einen klaren Hinweis geben.
+      if (process.platform === 'darwin' && /signature|signed|codesign|ShipIt|code object/i.test(message)) {
+        this._set('manual', {
+          message: 'Auf dem Mac ohne Entwicklerzertifikat keine automatischen Updates – neue Version bitte von GitHub laden.'
+        });
+        return;
+      }
+      this._set('error', { message });
     });
 
     if (settings.get('autoUpdateCheck')) {

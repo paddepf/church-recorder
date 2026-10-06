@@ -17,7 +17,7 @@ npm install
 ```
 
 3. Companion neu starten. Das Modul erscheint unter **Connections** als
-   „ChurchRecorder".
+   „ChurchRecorder“.
 
 Für die Weitergabe an andere Rechner lässt sich mit
 `npx companion-module-build` ein Paket erzeugen.
@@ -50,13 +50,18 @@ die Verbindung abbricht.
 ## Verbindung
 
 - Das Modul meldet sich mit dem **Steuer-Passwort** an. Wird stattdessen das Passwort
-  „nur zum Mitlesen" eingetragen, zeigt die Verbindung einen Hinweis: Status und
+  „nur zum Mitlesen“ eingetragen, zeigt die Verbindung einen Hinweis: Status und
   Variablen kommen an, die Tasten steuern aber nichts.
 - Bei falschem Passwort versucht das Modul es nicht endlos weiter, sondern erst wieder,
-  wenn die Einstellungen der Verbindung geändert werden.
+  wenn die Einstellungen der Verbindung geändert werden. Nach 5 Fehlversuchen sperrt der
+  Recorder die Adresse für eine Minute.
+- Das Passwortfeld wird verdeckt angezeigt. Passt die Protokollversion von Modul und App nicht
+  zusammen, steht eine Warnung im Log.
+- „Aufnahme starten/beenden“ meldet einen Fehler ins Log, wenn die Aufnahme am Rechner nicht
+  wirklich startet bzw. endet (z. B. Eingang nicht verfügbar).
 - Alle 10 Sekunden prüft das Modul, ob der Recorder noch antwortet. Fällt der
   Aufnahmerechner weg, wird neu verbunden und die Tasten zeigen keinen veralteten
-  Zustand (z. B. „Aufnahme läuft") mehr an.
+  Zustand (z. B. „Aufnahme läuft“) mehr an.
 
 ## Feedbacks
 
@@ -66,6 +71,7 @@ die Verbindung abbricht.
 | Aufnahme pausiert | Taste wird orange |
 | Es gibt offene Programmpunkte | Taste wird blau |
 | Eingang übersteuert | Taste wird gelb |
+| Aufnahme kann nicht gespeichert werden | Taste wird rot: Schreibfehler (z. B. Platte voll) oder Laufwerk zu langsam |
 | Eingang leise oder ausgefallen | Taste wird rot: seit über 20 s kaum Pegel oder der Eingang wird neu verbunden |
 | Speicherplatz wird knapp | Taste wird orange (unter 3 Stunden Platz) |
 | Speicherplatz fast voll | Taste wird rot (unter 30 Minuten) |
@@ -75,7 +81,8 @@ die Verbindung abbricht.
 
 `status`, `timecode`, `service_name`, `current_item`, `next_item`,
 `marker_count`, `pending_count`, `level_left`, `level_right`, `clipping`,
-`input_status` (ok / leise / ausgefallen), `disk_free` (GB), `disk_hours`, `cut_open`
+`input_status` (ok / leise / ausgefallen), `write_status` (ok / langsam / Fehler), `disk_free` (GB),
+`disk_hours`, `cut_open`
 
 Beispiel für eine Tastenbeschriftung:
 
@@ -87,5 +94,5 @@ $(churchrecorder:current_item)
 ## Mitgelieferte Presets
 
 Unter **Aufnahme**, **Abschnitte**, **Ablaufplan** und **Anzeige** liegen fertige
-Tasten, unter anderem eine Aufnahmetaste mit Laufzeit, eine Taste „Predigt" und
+Tasten, unter anderem eine Aufnahmetaste mit Laufzeit, eine Taste „Predigt“ und
 eine Weiter-Taste, die den nächsten Programmpunkt anzeigt.

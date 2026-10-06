@@ -24,6 +24,8 @@
   --ruler-bg: #101720;
   --wave-flag-text: #0E1318;
   --wave-selection: rgba(108,124,224,0.22);
+  --cut: 255,59,48;               /* Schnitte (RGB, Deckkraft setzt die Wellenform) */
+  --cut-text: #FF8A80;
   --wave-stripe: rgba(255,255,255,0.022);
   --wave-hover: rgba(255,255,255,0.18);
   --overlay: rgba(6, 9, 12, .72);
@@ -58,6 +60,8 @@
   --ruler-bg: #E8ECF1;
   --wave-flag-text: #0E1318;     /* dunkle Schrift: die Fähnchen sind auch im hellen Design hell */
   --wave-selection: rgba(79,95,208,0.18);
+  --cut: 200,30,25;
+  --cut-text: #A3140F;
   --wave-stripe: rgba(0,0,0,0.03);
   --wave-hover: rgba(0,0,0,0.25);
   --overlay: rgba(20, 28, 38, .45);
@@ -367,7 +371,11 @@ canvas.wave {
 .agenda-row button { padding: 3px 8px; }
 .item .artist { color: var(--muted); font-size: 14px; cursor: text; }
 .item .artist.empty { display: none; }          /* belegt sonst Platz und kürzt den Namen */
-.item:hover .artist.empty { display: inline; opacity: .55; }
+.item:hover .artist.empty, .item:focus-within .artist.empty, .item:focus .artist.empty { display: inline; opacity: .7; }
+.item:focus-visible { outline: 2px solid var(--plan); outline-offset: 1px; }
+.calendar-list { display: grid; gap: 4px; max-height: 160px; overflow-y: auto; }
+.calendar-list label { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.field { display: grid; gap: 6px; }
 .item .artist:hover { color: var(--text); }
 .inline-edit {
   position: fixed;

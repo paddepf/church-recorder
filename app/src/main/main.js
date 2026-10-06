@@ -59,10 +59,13 @@ function diskInfo() {
 
 function currentHealth() {
   const input = health.inputLost || health.chunksStale ? 'lost' : (health.silent ? 'silent' : 'ok');
+  const write = health.writeError ? 'error' : (health.writeSlow ? 'slow' : 'ok');
   const d = health.disk;
   const diskLevel = !d ? 'ok' : (d.hoursLeft < 0.5 ? 'low' : (d.hoursLeft < 3 ? 'warn' : 'ok'));
   return {
     input,
+    write,
+    writeMessage: health.writeError || null,
     disk: d ? { freeBytes: d.freeBytes, hoursLeft: d.hoursLeft, level: diskLevel } : null
   };
 }
@@ -89,6 +92,12 @@ setInterval(() => {
     publishHealth();
   }
 }, 1000);
+
+// Während der Aufnahme regelmäßig den vollständigen Zustand senden (Dauer, offene Abschnitte, Export-Liste),
+// auch wenn gerade niemand etwas ändert.
+setInterval(() => {
+  if (session.status === 'recording') pushState(session.snapshot());
+}, 5000);
 
 function refreshDisk() {
   try { health.disk = diskInfo(); } catch { health.disk = null; }
@@ -137,21 +146,52 @@ function recordingTime() {
  * Fragt nach, wenn beim Schließen oder Beenden noch aufgenommen wird.
  * @returns {boolean} true, wenn fortgefahren werden darf
  */
-function confirmLeavingWhileRecording() {
-  if (session.status !== 'recording' && session.status !== 'paused') return true;
+let allowClose = false;      // nach bestätigtem Beenden nicht erneut fragen
+let closePending = false;
 
-  const choice = dialog.showMessageBoxSync(win, {
-    type: 'warning',
-    buttons: ['Weiter aufnehmen', 'Aufnahme beenden und schließen'],
-    defaultId: 0,
-    cancelId: 0,
-    title: 'Aufnahme läuft',
-    message: 'Es läuft noch eine Aufnahme.',
-    detail: 'Beim Schließen wird die Aufnahme gestoppt und gespeichert.'
+function isBusy() {
+  return session.status === 'recording' || session.status === 'paused';
+}
+
+/**
+ * Fragt – ohne den Hauptprozess zu blockieren –, ob eine laufende Aufnahme beendet werden soll,
+ * beendet sie dann und wartet, bis der Schreib-Thread alles auf der Platte hat.
+ * @returns {Promise<boolean>} true, wenn geschlossen werden darf
+ */
+async function confirmAndFinishRecording() {
+  if (isBusy()) {
+    const parent = win && !win.isDestroyed() ? win : undefined;
+    const { response } = await dialog.showMessageBox(parent, {
+      type: 'warning',
+      buttons: ['Weiter aufnehmen', 'Aufnahme beenden und schließen'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Aufnahme läuft',
+      message: 'Es läuft noch eine Aufnahme.',
+      detail: 'Beim Schließen wird die Aufnahme gestoppt und gespeichert.'
+    });
+    if (response === 0) return false;
+    if (isBusy()) session.stop();
+  }
+  await session.whenWritten();
+  session.flushSave();
+  return true;
+}
+
+/** Gemeinsamer Ablauf für Fenster schließen und App beenden. */
+function guardClose(e, finish) {
+  if (allowClose) return false;
+  if (!isBusy() && !session.writing) return false;
+  e.preventDefault();
+  if (closePending) return true;
+  closePending = true;
+  confirmAndFinishRecording().then((go) => {
+    closePending = false;
+    if (go) {
+      allowClose = true;
+      finish();
+    }
   });
-  if (choice === 0) return false;
-
-  session.stop();
   return true;
 }
 
@@ -308,10 +348,7 @@ function createWindow() {
   });
 
   win.on('close', (e) => {
-    if (!confirmLeavingWhileRecording()) {
-      e.preventDefault();
-      return;
-    }
+    if (guardClose(e, () => { if (win && !win.isDestroyed()) win.close(); })) return;
     session.flushSave();
     net.stop();
   });
@@ -362,6 +399,8 @@ session.on('recording-started', () => {
   preventSleep(true);
   silentSince = null;
   health.silent = false;
+  health.writeError = null;
+  health.writeSlow = false;
   refreshDisk();
   net.publishEvent('recording.started', { wavPath: session.wavPath });
 });
@@ -377,8 +416,42 @@ session.on('recording-stopped', (info) => {
 
 session.on('error-notice', (message) => toast('error', message));
 
+// Schreib-Thread: Platte voll, Laufwerk entfernt, zu langsam … – sofort sichtbar machen, auch für Companion.
+session.on('write-error', (err) => {
+  health.writeError = `${err.code ? err.code + ': ' : ''}${err.message}`;
+  toast('error', `Audio kann nicht gespeichert werden (${err.code || err.message}). Bitte Laufwerk prüfen!`);
+  publishHealth();
+});
+session.on('write-slow', (slow) => {
+  health.writeSlow = slow;
+  if (slow) toast('warn', 'Das Laufwerk kommt mit dem Schreiben nicht hinterher – die Aufnahme wird im Speicher gepuffert.');
+  publishHealth();
+});
+
 net.on('status', (info) => send('network-status', info));
 net.on('error-notice', (message) => toast('error', message));
+
+/* Rückmeldung für Fernbefehle: Start und Stopp laufen über die Oberfläche (dort ist die Audioerfassung).
+   Die Antwort kommt erst, wenn die Aufnahme wirklich läuft bzw. beendet ist – oder mit Fehler. */
+const remoteWaiters = new Map();
+function waitForRemote(kind, eventName, ms = 8000) {
+  return new Promise((resolve) => {
+    const finish = (result) => {
+      clearTimeout(timer);
+      session.off(eventName, onEvent);
+      remoteWaiters.delete(kind);
+      resolve(result);
+    };
+    const onEvent = () => finish({ ok: true });
+    const timer = setTimeout(() => finish({ ok: false, error: 'Keine Rückmeldung von der Aufnahme – bitte am Aufnahmerechner prüfen.' }), ms);
+    session.once(eventName, onEvent);
+    remoteWaiters.set(kind, finish);
+  });
+}
+ipcMain.on('remote:result', (_e, { kind, ok: success, error } = {}) => {
+  const finish = remoteWaiters.get(kind);
+  if (finish && !success) finish({ ok: false, error: error || 'Die Aufnahme konnte nicht gestartet werden.' });
+});
 
 net.on('command', ({ action, params, reply }) => {
   const done = (result) => {
@@ -391,14 +464,16 @@ net.on('command', ({ action, params, reply }) => {
       // eine angezeigte, beendete Aufnahme ist ohnehin als Datei gespeichert.
       if (session.status === 'recording') return done({ ok: false, error: 'Es läuft bereits eine Aufnahme.' });
       if (session.status === 'paused') return done(session.resume());
+      waitForRemote('start', 'recording-started').then(done);
       send('command', { action: 'record.start', remote: true });
-      return done({ ok: true, accepted: true });
+      return;
     case 'record.stop':
       if (session.status !== 'recording' && session.status !== 'paused') {
         return done({ ok: false, error: 'Es läuft keine Aufnahme.' });
       }
-      send('command', { action: 'record.stop' });
-      return done({ ok: true, accepted: true });
+      waitForRemote('stop', 'recording-stopped').then(done);
+      send('command', { action: 'record.stop', remote: true });
+      return;
     case 'record.pause':
       return done(session.pause());
     case 'record.resume':
@@ -406,11 +481,13 @@ net.on('command', ({ action, params, reply }) => {
     case 'record.toggle':
       // Auch eine pausierte Aufnahme wird beendet ("starten bzw. beenden").
       if (session.status === 'recording' || session.status === 'paused') {
-        send('command', { action: 'record.stop' });
-        return done({ ok: true, accepted: true });
+        waitForRemote('stop', 'recording-stopped').then(done);
+        send('command', { action: 'record.stop', remote: true });
+        return;
       }
+      waitForRemote('start', 'recording-started').then(done);
       send('command', { action: 'record.start', remote: true });
-      return done({ ok: true, accepted: true });
+      return;
     case 'marker.add': {
       if (session.status !== 'recording' && session.status !== 'paused') {
         return done({ ok: false, error: 'Es läuft keine Aufnahme.' });
@@ -518,6 +595,10 @@ ipcMain.handle('ct:test', async () => {
   try { return ok(await churchtools.test()); } catch (err) { return fail(err); }
 });
 
+ipcMain.handle('ct:calendars', async () => {
+  try { return ok({ calendars: await churchtools.listCalendars() }); } catch (err) { return fail(err); }
+});
+
 ipcMain.handle('ct:services', async (_e, { from, to } = {}) => {
   try {
     const today = churchtools.isoDate(new Date());
@@ -603,8 +684,11 @@ ipcMain.handle('session:service', (_e, service) => {
 ipcMain.handle('rec:start', (_e, { sampleRate, channels } = {}) => {
   try { return session.start({ sampleRate, channels }); } catch (err) { return fail(err); }
 });
-ipcMain.handle('rec:continue', () => {
-  try { return session.continueRecording(); } catch (err) { return fail(err); }
+ipcMain.handle('rec:continue', async () => {
+  try {
+    await session.whenWritten();      // die Datei der eben beendeten Aufnahme erst fertig schreiben lassen
+    return session.continueRecording();
+  } catch (err) { return fail(err); }
 });
 ipcMain.handle('rec:pause', () => {
   try { return session.pause(); } catch (err) { return fail(err); }
@@ -703,6 +787,7 @@ ipcMain.handle('export:batch', async (_e, { items } = {}) => {
       return fail('Es ist keine Masteraufnahme vorhanden.');
     }
     if (!Array.isArray(items) || items.length === 0) return fail('Es ist kein Abschnitt ausgewählt.');
+    await session.whenWritten();         // die gerade beendete Aufnahme muss vollständig auf der Platte sein
 
     let folder = exportTargetFolder();
     if (!folder) {
@@ -740,6 +825,7 @@ ipcMain.handle('export:batch', async (_e, { items } = {}) => {
           onProgress: (p) => send('export-progress', { progress: (i + p) / items.length, index: i + 1, total: items.length })
         });
         files.push(result.outPath);
+        revealable.add(path.resolve(result.outPath));
         if (id) session.recordExport(id, { file: result.outPath, start, end, cuts });
         net.publishEvent('export.finished', { file: result.outPath, label });
       } catch (err) {
@@ -753,8 +839,20 @@ ipcMain.handle('export:batch', async (_e, { items } = {}) => {
   }
 });
 
-ipcMain.handle('file:reveal', (_e, { filePath }) => {
-  if (filePath && fs.existsSync(filePath)) shell.showItemInFolder(filePath);
+/* "Im Ordner zeigen" nur für Dateien in Aufnahme- oder Exportordner bzw. eben exportierte Dateien. */
+const revealable = new Set();
+function isInside(file, dir) {
+  if (!dir) return false;
+  const rel = path.relative(path.resolve(dir), path.resolve(file));
+  return rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+ipcMain.handle('file:reveal', (_e, { filePath } = {}) => {
+  if (!filePath || !fs.existsSync(filePath)) return fail('Datei nicht gefunden.');
+  const allowed = revealable.has(path.resolve(filePath))
+    || isInside(filePath, settings.get('recordingsDir'))
+    || isInside(filePath, settings.get('exportDir'));
+  if (!allowed) return fail('Dieser Ort wird nicht angezeigt.');
+  shell.showItemInFolder(filePath);
   return ok();
 });
 
@@ -862,7 +960,7 @@ if (!singleInstance) {
       try {
         const granted = await systemPreferences.askForMediaAccess('microphone');
         if (!granted) {
-          toast('warn', 'macOS verweigert den Zugriff auf den Audioeingang. Freigabe unter „Systemeinstellungen → Datenschutz & Sicherheit → Mikrofon".');
+          toast('warn', 'macOS verweigert den Zugriff auf den Audioeingang. Freigabe unter „Systemeinstellungen → Datenschutz & Sicherheit → Mikrofon“.');
         }
       } catch (err) {
         console.warn('Mikrofonfreigabe konnte nicht abgefragt werden:', err);
@@ -892,10 +990,7 @@ if (!singleInstance) {
 
   app.on('before-quit', (e) => {
     // Greift vor allem unter macOS, wo Cmd+Q das Fenster umgeht.
-    if (!confirmLeavingWhileRecording()) {
-      e.preventDefault();
-      return;
-    }
+    if (guardClose(e, () => app.quit())) return;
     session.flushSave();
     net.stop();
   });

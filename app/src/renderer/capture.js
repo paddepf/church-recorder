@@ -11,6 +11,13 @@ class RecProcessor extends AudioWorkletProcessor {
     this.chunks = [];
     this.frames = 0;
     this.target = Math.round(sampleRate * 0.1); // 100 ms
+    // Beim Beenden den angefangenen Block noch abgeben, sonst fehlen bis zu 0,1 s am Ende.
+    this.port.onmessage = (event) => {
+      if (event.data === 'flush') {
+        this.flush();
+        this.port.postMessage('flushed');
+      }
+    };
   }
   process (inputs) {
     const input = inputs[0];
@@ -122,6 +129,10 @@ registerProcessor('rec-processor', RecProcessor);
           channelCountMode: 'explicit'
         });
         this.node.port.onmessage = (event) => {
+          if (event.data === 'flushed') {
+            if (this._onFlushed) this._onFlushed();
+            return;
+          }
           if (this.onChunk) this.onChunk(event.data);
         };
         this.source.connect(this.node);
@@ -172,6 +183,17 @@ registerProcessor('rec-processor', RecProcessor);
       proc.connect(silent);
       silent.connect(this.context.destination);
       this.node = proc;
+    }
+
+    /** Gibt den angefangenen Block sofort ab (vor dem Beenden der Aufnahme). Höchstens 300 ms warten. */
+    flush() {
+      if (!this.running || !this.node || !this.node.port) return Promise.resolve();
+      return new Promise((resolve) => {
+        const timer = setTimeout(done, 300);
+        function done() { clearTimeout(timer); resolve(); }
+        this._onFlushed = () => { this._onFlushed = null; done(); };
+        this.node.port.postMessage('flush');
+      });
     }
 
     async stop() {

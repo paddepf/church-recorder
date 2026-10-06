@@ -5,19 +5,18 @@
   "description": "Steuert ChurchRecorder: Aufnahme, Abschnitte, Schnitte und Ablaufplan",
   "version": "1.0.0",
   "license": "MIT",
-  "repository": "",
-  "bugs": "",
+  "repository": "git+https://github.com/paddepf/church-recorder.git",
+  "bugs": "https://github.com/paddepf/church-recorder/issues",
   "maintainers": [
     {
-      "name": "",
-      "email": ""
+      "name": "paddepf"
     }
   ],
   "legacyIds": [],
   "runtime": {
     "type": "node22",
     "api": "nodejs-ipc",
-    "apiVersion": "1.0.0",
+    "apiVersion": "1.11.0",
     "entrypoint": "../main.js"
   },
   "manufacturer": "Eigenentwicklung",

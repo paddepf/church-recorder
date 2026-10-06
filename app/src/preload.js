@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('api', {
   churchtools: {
     test: () => invoke('ct:test'),
     services: (range) => invoke('ct:services', range),
+    calendars: () => invoke('ct:calendars'),
     agenda: (params) => invoke('ct:agenda', params)
   },
 
@@ -79,6 +80,9 @@ contextBridge.exposeInMainWorld('api', {
   agenda: {
     applyTemplate: (templateId) => invoke('agenda:applyTemplate', { templateId })
   },
+
+  /** Meldet einen gescheiterten Fernbefehl (Start/Stopp per Companion) an den Hauptprozess. */
+  reportRemoteResult: (result) => ipcRenderer.send('remote:result', result),
 
   /** Meldet dem Hauptprozess, ob der Audioeingang ausgefallen ist. */
   reportInputLost: (lost) => ipcRenderer.send('health:input', { lost }),

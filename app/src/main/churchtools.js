@@ -13,7 +13,7 @@ function baseUrl() {
   return url;
 }
 
-async function request(pathname, params) {
+async function requestRaw(pathname, params) {
   const token = settings.churchToolsToken();
   if (!token) throw new Error('Es ist kein ChurchTools-Token hinterlegt.');
 
@@ -57,7 +57,25 @@ async function request(pathname, params) {
     // z. B. eine HTML-Anmeldeseite bei falscher Adresse
     throw new Error('ChurchTools hat keine gültige Antwort geliefert. Bitte die Adresse prüfen.');
   }
-  return json.data !== undefined ? json.data : json;
+  return json;
+}
+
+async function request(pathname, params) {
+  const json = await requestRaw(pathname, params);
+  return json && json.data !== undefined ? json.data : json;
+}
+
+/** Holt alle Seiten einer Liste (ChurchTools liefert lange Listen seitenweise). */
+async function requestAll(pathname, params) {
+  const out = [];
+  for (let page = 1; page <= 20; page++) {
+    const json = await requestRaw(pathname, { ...params, page, limit: 100 });
+    const data = json && json.data !== undefined ? json.data : json;
+    if (Array.isArray(data)) out.push(...data);
+    const pg = json?.meta?.pagination;
+    if (!pg || !pg.lastPage || page >= pg.lastPage) break;
+  }
+  return out;
 }
 
 function isoDate(d) {
@@ -80,9 +98,14 @@ async function test() {
  * @param {string} to   ISO-Datum
  */
 async function listServices(from, to) {
-  const data = await request('/api/events', { from, to });
-  const list = Array.isArray(data) ? data : [];
-  return list
+  const list = await requestAll('/api/events', { from, to });
+  // Optional nur bestimmte Kalender (Einstellung; leer = alle). Termine ohne Kalenderangabe bleiben.
+  const wanted = (settings.get('churchToolsCalendarIds') || []).map(String);
+  const filtered = wanted.length === 0 ? list : list.filter((e) => {
+    const id = e.calendar?.id ?? e.calendarId ?? e.calendar_id;
+    return id == null || wanted.includes(String(id));
+  });
+  return filtered
     .map((e) => ({
       id: e.id,
       name: e.name || e.caption || 'Gottesdienst',
@@ -110,16 +133,21 @@ async function agenda(eventId) {
   const flat = [];
 
   const walk = (list, headerTitle) => {
+    // Überschriften kommen verschachtelt (mit Unterpunkten) oder als flache Liste (Überschrift, danach
+    // ihre Punkte). In beiden Fällen wird der Titel zur Kategorie der folgenden Punkte.
+    let currentHeader = headerTitle;
     (list || []).forEach((item) => {
       const title = item.title || item.bezeichnung || 'Programmpunkt';
       if (item.type === 'header' || item.isHeader) {
-        walk(item.items || item.children, title);
+        const children = item.items || item.children;
+        if (children && children.length) walk(children, title);
+        else currentHeader = title;
         return;
       }
       flat.push({
         id: item.id ?? null,
         title,
-        category: headerTitle || item.serviceCategoryName || null,
+        category: currentHeader || item.serviceCategoryName || null,
         duration: item.duration ?? null,
         responsible: responsibleText(item),
         position: item.position ?? flat.length
@@ -208,9 +236,17 @@ async function eventServices(eventId, wanted) {
   return { suggestions: out, found: entries.length };
 }
 
+/** Kalender (für die Auswahl in den Einstellungen). */
+async function listCalendars() {
+  const data = await request('/api/calendars');
+  return (Array.isArray(data) ? data : [])
+    .map((c) => ({ id: c.id, name: c.name || c.nameTranslated || `Kalender ${c.id}` }))
+    .sort((a, b) => String(a.name).localeCompare(String(b.name), 'de'));
+}
+
 /** Zwischenspeicher leeren, z. B. nach geänderter Adresse oder geändertem Token. */
 function resetCache() {
   servicesCache = null;
 }
 
-module.exports = { test, listServices, todaysServices, agenda, eventServices, resetCache, isoDate };
+module.exports = { test, listServices, listCalendars, todaysServices, agenda, eventServices, resetCache, isoDate };

@@ -3,84 +3,224 @@
 /**
  * Schreiben und Lesen von 16-Bit-PCM-WAV-Dateien.
  *
- * Der Writer schreibt fortlaufend (streaming) und hält den Header aktuell,
- * damit eine unterbrochene Aufnahme (Absturz, Stromausfall) trotzdem eine
- * abspielbare Datei hinterlässt.
+ * - Geschrieben wird in einem eigenen Thread (Worker): Ein langsames Laufwerk (USB-Stick,
+ *   Netzlaufwerk) bremst so nie den Hauptprozess und damit nie die Aufnahme selbst.
+ * - Der Header wird laufend aktualisiert und die Daten werden regelmäßig auf die Platte
+ *   gezwungen (fdatasync): Auch nach Absturz oder Stromausfall bleibt eine abspielbare Datei.
+ * - Neue Dateien reservieren Platz für einen "ds64"-Block. Überschreitet die Aufnahme 4 GB
+ *   (gut 6 Stunden bei 48 kHz Stereo), wird die Datei im laufenden Betrieb zu RF64 – der
+ *   Erweiterung des WAV-Formats für große Dateien. Es bleibt eine einzige Datei.
  */
 
 const fs = require('fs');
-const HEADER_BYTES = 44;
-const MAX_UINT32 = 0xFFFFFFFF;
+const { EventEmitter } = require('events');
+const { Worker } = require('worker_threads');
 
-function buildHeader(sampleRate, channels, dataBytes) {
-  const buf = Buffer.alloc(HEADER_BYTES);
+const LEGACY_HEADER_BYTES = 44;   // ältere Aufnahmen: RIFF + fmt + data
+const HEADER_BYTES = 80;          // neue Aufnahmen: RIFF + JUNK/ds64 + fmt + data
+const MAX_UINT32 = 0xFFFFFFFF;
+const SLOW_QUEUE_BYTES = 32 * 1024 * 1024;   // so viel ungeschriebenes Audio gilt als "Laufwerk zu langsam"
+
+/**
+ * Baut den Dateikopf.
+ * layout 'ds64': 80 Byte mit Platz für RF64 (wird ab 4 GB benutzt); 'legacy': klassische 44 Byte.
+ * Wird auch im Schreib-Thread verwendet (als Quelltext übergeben) – daher ohne äußere Abhängigkeiten.
+ */
+function buildHeader(layout, sampleRate, channels, dataBytes) {
   const bitsPerSample = 16;
   const byteRate = (sampleRate * channels * bitsPerSample) / 8;
   const blockAlign = (channels * bitsPerSample) / 8;
+  const U32 = 0xFFFFFFFF;
 
-  // Ein WAV-Header fasst höchstens 4 GB (~6 h 13 min bei 48 kHz Stereo). Darüber hinaus wird die
-  // Größe gedeckelt statt einen Fehler zu werfen – die Daten werden weiter geschrieben und von
-  // dieser App über die tatsächliche Dateigröße gelesen.
-  const riffSize = Math.min(MAX_UINT32, Math.max(0, dataBytes + HEADER_BYTES - 8));
-  const dataSize = Math.min(MAX_UINT32, dataBytes);
-  buf.write('RIFF', 0, 'ascii');
-  buf.writeUInt32LE(riffSize, 4);
+  const writeFmt = (buf, at) => {
+    buf.write('fmt ', at, 'ascii');
+    buf.writeUInt32LE(16, at + 4);
+    buf.writeUInt16LE(1, at + 8);              // PCM
+    buf.writeUInt16LE(channels, at + 10);
+    buf.writeUInt32LE(sampleRate, at + 12);
+    buf.writeUInt32LE(byteRate, at + 16);
+    buf.writeUInt16LE(blockAlign, at + 20);
+    buf.writeUInt16LE(bitsPerSample, at + 22);
+  };
+
+  if (layout === 'legacy') {
+    // Alte Dateien haben keinen Platz für RF64: Größen bei 4 GB deckeln (gelesen wird über die Dateigröße).
+    const buf = Buffer.alloc(44);
+    buf.write('RIFF', 0, 'ascii');
+    buf.writeUInt32LE(Math.min(U32, dataBytes + 36), 4);
+    buf.write('WAVE', 8, 'ascii');
+    writeFmt(buf, 12);
+    buf.write('data', 36, 'ascii');
+    buf.writeUInt32LE(Math.min(U32, dataBytes), 40);
+    return buf;
+  }
+
+  const buf = Buffer.alloc(80);
+  const riffSize = dataBytes + 72;              // Dateigröße minus 8
+  const big = riffSize > U32;
+  buf.write(big ? 'RF64' : 'RIFF', 0, 'ascii');
+  buf.writeUInt32LE(big ? U32 : riffSize, 4);
   buf.write('WAVE', 8, 'ascii');
-  buf.write('fmt ', 12, 'ascii');
-  buf.writeUInt32LE(16, 16);            // Größe fmt-Chunk
-  buf.writeUInt16LE(1, 20);             // PCM
-  buf.writeUInt16LE(channels, 22);
-  buf.writeUInt32LE(sampleRate, 24);
-  buf.writeUInt32LE(byteRate, 28);
-  buf.writeUInt16LE(blockAlign, 32);
-  buf.writeUInt16LE(bitsPerSample, 34);
-  buf.write('data', 36, 'ascii');
-  buf.writeUInt32LE(dataSize, 40);
+  // Bis 4 GB ein JUNK-Block (wird von Playern übersprungen), danach der ds64-Block mit 64-Bit-Größen.
+  buf.write(big ? 'ds64' : 'JUNK', 12, 'ascii');
+  buf.writeUInt32LE(28, 16);
+  if (big) {
+    buf.writeBigUInt64LE(BigInt(riffSize), 20);
+    buf.writeBigUInt64LE(BigInt(dataBytes), 28);
+    buf.writeBigUInt64LE(BigInt(Math.floor(dataBytes / blockAlign)), 36);
+    buf.writeUInt32LE(0, 44);                   // keine weiteren Tabelleneinträge
+  }
+  writeFmt(buf, 48);
+  buf.write('data', 72, 'ascii');
+  buf.writeUInt32LE(big ? U32 : dataBytes, 76);
   return buf;
 }
 
-class WavWriter {
+/* Schreib-Thread. Als Quelltext eingebettet (eval), damit er auch aus dem gepackten
+   app.asar heraus ohne entpackte Zusatzdateien startet. */
+const WORKER_SOURCE = `
+const fs = require('fs');
+const { parentPort, workerData } = require('worker_threads');
+const buildHeader = ${buildHeader.toString()};
+const { fd, layout, sampleRate, channels, dataOffset } = workerData;
+let written = workerData.dataBytes;
+let sinceHeader = 0;
+let failed = false;
+const headerEvery = sampleRate * channels * 2;     // etwa jede Sekunde Audio
+
+function header() {
+  const buf = buildHeader(layout, sampleRate, channels, written);
+  fs.writeSync(fd, buf, 0, buf.length, 0);
+}
+
+const syncTimer = setInterval(() => {
+  if (failed) return;
+  try { fs.fdatasyncSync(fd); } catch (err) { /* nicht jedes Dateisystem kann das */ }
+}, 10000);
+
+parentPort.on('message', (msg) => {
+  try {
+    if (msg.type === 'write') {
+      if (failed) return;
+      const buf = Buffer.from(msg.data);
+      let done = 0;
+      while (done < buf.length) {
+        done += fs.writeSync(fd, buf, done, buf.length - done, dataOffset + written + done);
+      }
+      written += buf.length;
+      sinceHeader += buf.length;
+      if (sinceHeader >= headerEvery) {
+        header();
+        sinceHeader = 0;
+        parentPort.postMessage({ type: 'progress', written });
+      }
+    } else if (msg.type === 'header') {
+      if (!failed) header();
+      parentPort.postMessage({ type: 'progress', written });
+    } else if (msg.type === 'close') {
+      // Die Datei schließt der Hauptprozess (er hat sie geöffnet).
+      clearInterval(syncTimer);
+      if (!failed) header();
+      try { fs.fsyncSync(fd); } catch (e) { /* egal */ }
+      parentPort.postMessage({ type: 'closed', written });
+    }
+  } catch (err) {
+    failed = true;
+    parentPort.postMessage({ type: 'error', message: err.message, code: err.code || null });
+    if (msg.type === 'close') parentPort.postMessage({ type: 'closed', written });
+  }
+});
+`;
+
+/**
+ * Schreibt eine WAV-Datei fortlaufend. Ereignisse: 'error' ({message, code}), 'slow' (true/false).
+ */
+class WavWriter extends EventEmitter {
   /** @param {{append?:boolean}} [opts] append: bestehende Datei am Ende weiterschreiben */
   constructor(filePath, sampleRate, channels, opts = {}) {
+    super();
     this.filePath = filePath;
     this.sampleRate = sampleRate;
     this.channels = channels;
-    this.dataBytes = 0;
-    if (opts.append) {
-      this.fd = fs.openSync(filePath, 'r+');
-      const blockAlign = channels * 2;
-      const existing = Math.max(0, fs.fstatSync(this.fd).size - HEADER_BYTES);
-      this.dataBytes = existing - (existing % blockAlign);   // angefangenes Frame verwerfen
-      this.updateHeader();
-    } else {
-      this.fd = fs.openSync(filePath, 'w');
-      fs.writeSync(this.fd, buildHeader(sampleRate, channels, 0), 0, HEADER_BYTES, 0);
-    }
-    this._sinceHeaderUpdate = 0;
+    this.dataBytes = 0;            // übergeben (in der Warteschlange oder geschrieben)
+    this.writtenBytes = 0;         // vom Schreib-Thread bestätigt
     this.closed = false;
+    this.failed = false;
+
+    // Datei synchron öffnen: Scheitert das (Ordner nicht beschreibbar …), merkt es der Aufrufer sofort.
+    if (opts.append) {
+      const info = readInfo(filePath);
+      this.layout = info.dataOffset === HEADER_BYTES && info.layout === 'ds64' ? 'ds64' : 'legacy';
+      this.dataOffset = info.dataOffset;
+      const blockAlign = channels * 2;
+      this.dataBytes = info.dataBytes - (info.dataBytes % blockAlign);   // angefangenes Frame verwerfen
+      this.fd = fs.openSync(filePath, 'r+');
+    } else {
+      this.layout = 'ds64';
+      this.dataOffset = HEADER_BYTES;
+      this.fd = fs.openSync(filePath, 'w');
+      const head = buildHeader(this.layout, sampleRate, channels, 0);
+      fs.writeSync(this.fd, head, 0, head.length, 0);
+    }
+    this.writtenBytes = this.dataBytes;
+
+    this._closedPromise = new Promise((resolve) => { this._resolveClosed = resolve; });
+    this.worker = new Worker(WORKER_SOURCE, {
+      eval: true,
+      workerData: {
+        fd: this.fd,
+        layout: this.layout,
+        sampleRate,
+        channels,
+        dataOffset: this.dataOffset,
+        dataBytes: this.dataBytes
+      }
+    });
+    this.worker.on('message', (msg) => this._onMessage(msg));
+    this.worker.on('error', (err) => this._fail({ message: err.message, code: err.code || null }));
+    this.worker.on('exit', () => this._resolveClosed(this.writtenBytes));
+    this._slow = false;
+  }
+
+  _onMessage(msg) {
+    if (msg.type === 'progress' || msg.type === 'closed') this.writtenBytes = msg.written;
+    if (msg.type === 'error') this._fail(msg);
+    if (msg.type === 'closed') {
+      try { fs.closeSync(this.fd); } catch { /* bereits zu */ }
+      this._resolveClosed(this.writtenBytes);
+      this.worker.terminate().catch(() => {});
+    }
+    this._checkSlow();
+  }
+
+  _fail(err) {
+    if (this.failed) return;
+    this.failed = true;
+    this.emit('error', err);
+  }
+
+  _checkSlow() {
+    const slow = this.dataBytes - this.writtenBytes > SLOW_QUEUE_BYTES;
+    if (slow !== this._slow) {
+      this._slow = slow;
+      this.emit('slow', slow);
+    }
   }
 
   /** @param {Buffer} buffer Interleaved Int16LE */
   write(buffer) {
     if (this.closed || !buffer || buffer.length === 0) return;
-    // writeSync darf weniger schreiben als verlangt: dann den Rest nachschieben, sonst
-    // verschieben sich alle folgenden Frames.
-    let done = 0;
-    while (done < buffer.length) {
-      done += fs.writeSync(this.fd, buffer, done, buffer.length - done, HEADER_BYTES + this.dataBytes + done);
-    }
+    // Kopie übergeben: Der Aufrufer liest den Puffer danach noch (Pegel, Wellenform).
+    const copy = new Uint8Array(buffer.length);
+    copy.set(buffer);
+    this.worker.postMessage({ type: 'write', data: copy.buffer }, [copy.buffer]);
     this.dataBytes += buffer.length;
-    this._sinceHeaderUpdate += buffer.length;
-    // Header etwa jede Sekunde aktualisieren, damit die Datei jederzeit gültig ist.
-    if (this._sinceHeaderUpdate >= this.sampleRate * this.channels * 2) {
-      this.updateHeader();
-      this._sinceHeaderUpdate = 0;
-    }
+    if ((this._writes = (this._writes || 0) + 1) % 50 === 0) this._checkSlow();
   }
 
+  /** Header jetzt aktualisieren (z. B. bei Pause), damit die Datei vollständig lesbar ist. */
   updateHeader() {
-    if (this.closed) return;
-    fs.writeSync(this.fd, buildHeader(this.sampleRate, this.channels, this.dataBytes), 0, HEADER_BYTES, 0);
+    if (!this.closed) this.worker.postMessage({ type: 'header' });
   }
 
   get frames() {
@@ -91,37 +231,65 @@ class WavWriter {
     return this.frames / this.sampleRate;
   }
 
+  /** Schließt die Datei; das Versprechen erfüllt sich, wenn alles auf der Platte ist. */
   close() {
-    if (this.closed) return;
-    this.updateHeader();
-    try { fs.fsyncSync(this.fd); } catch { /* egal */ }
-    fs.closeSync(this.fd);
-    this.closed = true;
+    if (!this.closed) {
+      this.closed = true;
+      this.worker.postMessage({ type: 'close' });
+    }
+    return this._closedPromise;
   }
 }
 
-/** Liest Kopfdaten einer WAV-Datei (nur 16-Bit-PCM). */
+/**
+ * Liest Kopfdaten einer WAV-Datei (nur 16-Bit-PCM). Versteht klassisches WAV (44-Byte-Kopf),
+ * WAV mit JUNK-Block und RF64. Die Datenlänge kommt aus der Dateigröße – so lassen sich auch
+ * Dateien lesen, die gerade noch geschrieben werden oder deren Kopf nicht mehr aktuell ist.
+ */
 function readInfo(filePath) {
   const fd = fs.openSync(filePath, 'r');
   try {
-    const head = Buffer.alloc(HEADER_BYTES);
-    fs.readSync(fd, head, 0, HEADER_BYTES, 0);
-    if (head.toString('ascii', 0, 4) !== 'RIFF' || head.toString('ascii', 8, 12) !== 'WAVE') {
+    const head = Buffer.alloc(512);
+    const got = fs.readSync(fd, head, 0, head.length, 0);
+    const kind = head.toString('ascii', 0, 4);
+    if ((kind !== 'RIFF' && kind !== 'RF64') || head.toString('ascii', 8, 12) !== 'WAVE') {
       throw new Error('Keine gültige WAV-Datei.');
     }
-    const channels = head.readUInt16LE(22);
-    const sampleRate = head.readUInt32LE(24);
-    const bitsPerSample = head.readUInt16LE(34);
-    if (bitsPerSample !== 16) throw new Error('Nur 16-Bit-WAV wird unterstützt.');
-    const fileBytes = fs.fstatSync(fd).size;
-    const dataBytes = Math.max(0, fileBytes - HEADER_BYTES);
+    let pos = 12;
+    let fmt = null;
+    let dataOffset = null;
+    let layout = 'legacy';
+    while (pos + 8 <= got) {
+      const id = head.toString('ascii', pos, pos + 4);
+      const size = head.readUInt32LE(pos + 4);
+      if (id === 'JUNK' || id === 'ds64') layout = 'ds64';
+      if (id === 'fmt ') {
+        fmt = {
+          channels: head.readUInt16LE(pos + 10),
+          sampleRate: head.readUInt32LE(pos + 12),
+          bitsPerSample: head.readUInt16LE(pos + 22)
+        };
+      }
+      if (id === 'data') {
+        dataOffset = pos + 8;
+        break;
+      }
+      pos += 8 + size + (size % 2);
+    }
+    if (!fmt || dataOffset == null) throw new Error('WAV-Datei ohne gültigen Kopf.');
+    if (fmt.bitsPerSample !== 16) throw new Error('Nur 16-Bit-WAV wird unterstützt.');
+    const blockAlign = fmt.channels * 2;
+    const raw = Math.max(0, fs.fstatSync(fd).size - dataOffset);
+    const dataBytes = raw - (raw % blockAlign);
     return {
-      channels,
-      sampleRate,
-      bitsPerSample,
+      channels: fmt.channels,
+      sampleRate: fmt.sampleRate,
+      bitsPerSample: 16,
+      dataOffset,
+      layout,
       dataBytes,
-      frames: dataBytes / (channels * 2),
-      duration: dataBytes / (channels * 2) / sampleRate
+      frames: dataBytes / blockAlign,
+      duration: dataBytes / blockAlign / fmt.sampleRate
     };
   } finally {
     fs.closeSync(fd);
@@ -142,7 +310,7 @@ function readFrames(filePath, startFrame, frameCount, info) {
     const fd = fs.openSync(filePath, 'r');
     try {
       // Direkt in den Speicher des Int16Array lesen (WAV ist little endian wie x86/ARM).
-      fs.readSync(fd, Buffer.from(samples.buffer), 0, count * bytesPerFrame, HEADER_BYTES + first * bytesPerFrame);
+      fs.readSync(fd, Buffer.from(samples.buffer), 0, count * bytesPerFrame, meta.dataOffset + first * bytesPerFrame);
     } finally {
       fs.closeSync(fd);
     }
@@ -161,4 +329,4 @@ function readSlice(filePath, startSec, endSec) {
   return readFrames(filePath, startFrame, Math.max(0, endFrame - startFrame), info);
 }
 
-module.exports = { WavWriter, readInfo, readSlice, readFrames, HEADER_BYTES };
+module.exports = { WavWriter, readInfo, readSlice, readFrames, buildHeader, HEADER_BYTES, LEGACY_HEADER_BYTES, MAX_UINT32 };

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Aufnahmesoftware für Gottesdienste mit ChurchTools-Ablaufplan, Abschnitten und Netzwerksteuerung",
   "main": "src/main/main.js",
-  "author": "",
+  "author": "paddepf",
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
@@ -13,7 +13,8 @@
     "dist": "electron-builder --win",
     "publish": "electron-builder --win --publish always",
     "dist:mac": "electron-builder --mac",
-    "publish:mac": "electron-builder --mac --publish always"
+    "publish:mac": "electron-builder --mac --publish always",
+    "test": "node --test"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
@@ -44,7 +45,8 @@
           ]
         }
       ],
-      "artifactName": "${productName}-Setup-${version}.${ext}"
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "icon": "build/icon.png"
     },
     "nsis": {
       "oneClick": false,
@@ -81,7 +83,8 @@
       "extendInfo": {
         "NSMicrophoneUsageDescription": "ChurchRecorder nimmt über den gewählten Audioeingang den Gottesdienst auf.",
         "LSMinimumSystemVersion": "11.0"
-      }
+      },
+      "icon": "build/icon.png"
     },
     "dmg": {
       "title": "ChurchRecorder ${version}",
@@ -103,7 +106,8 @@
       "target": [
         "AppImage"
       ],
-      "category": "AudioVideo"
+      "category": "AudioVideo",
+      "icon": "build/icon.png"
     },
     "publish": [
       {
@@ -111,7 +115,7 @@
         "owner": "paddepf",
         "repo": "church-recorder",
         "private": false,
-        "releaseType": "release"
+        "releaseType": "draft"
       }
     ]
   }

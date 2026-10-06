@@ -17,10 +17,18 @@ getrennt. Es gibt zwei Rollen:
 
 | Rolle | Passwort aus | Rechte |
 |---|---|---|
-| `control` | „Passwort für Steuerung" | mitlesen und steuern |
-| `monitor` | „Passwort nur zum Mitlesen" | nur mitlesen |
+| `control` | „Passwort für Steuerung“ | mitlesen und steuern |
+| `monitor` | „Passwort nur zum Mitlesen“ | nur mitlesen |
 
 Ist kein Monitor-Passwort gesetzt, existiert die Rolle nicht.
+
+- **Browser** (Verbindungen mit `Origin`-Header, also Webseiten) erhalten immer nur die Rolle `monitor`, auch
+  mit dem Steuer-Passwort – eine fremde Webseite soll den Recorder nicht steuern können. Companion und eigene
+  Programme senden keinen `Origin`-Header.
+- Nach **5 Fehlversuchen** von derselben Adresse ist die Anmeldung dort 60 Sekunden gesperrt
+  (Fehler `auth_locked`).
+- Die Rolle `monitor` bekommt den Zustand **ohne Dateipfade und Personennamen** (`wavPath`, `artist`,
+  `service.suggestions` und die Dateinamen in `exports` fehlen).
 
 ```json
 { "type": "auth", "password": "geheim" }
@@ -74,6 +82,8 @@ Wird direkt nach der Anmeldung und bei jeder Änderung gesendet (max. 10×/s).
     "wavPath": "C:\\Aufnahmen\\2026-09-06_0930_Sonntagsgottesdienst.wav",
     "health": {
       "input": "ok",
+      "write": "ok",
+      "writeMessage": null,
       "disk": { "freeBytes": 52000000000, "hoursLeft": 75.2, "level": "ok" }
     }
   }
@@ -82,9 +92,12 @@ Wird direkt nach der Anmeldung und bei jeder Änderung gesendet (max. 10×/s).
 
 `cuts` sind Stellen, die beim MP3-Export ausgelassen werden (`end` ist `null`, solange ein
 Schnitt läuft). `health.input` ist `ok`, `silent` (seit über 20 s kaum Pegel) oder `lost`
-(Eingang ausgefallen, wird neu verbunden); `health.disk.level` ist `ok`, `warn` (unter
+(Eingang ausgefallen, wird neu verbunden); `health.write` ist `ok`, `slow` (Laufwerk kommt nicht
+hinterher, Audio wird gepuffert) oder `error` (Schreibfehler, z. B. Platte voll – Text in `writeMessage`);
+`health.disk.level` ist `ok`, `warn` (unter
 3 Stunden Platz) oder `low` (unter 30 Minuten). `health` ändert sich unabhängig von der
-Aufnahme; der Speicherwert wird alle 30 Sekunden erneuert.
+Aufnahme; der Speicherwert wird alle 30 Sekunden erneuert. Während einer Aufnahme kommt der Zustand
+zusätzlich alle 5 Sekunden, auch ohne Änderung.
 
 `status` ist einer von `idle`, `recording`, `paused`, `stopped`.
 Alle Zeitangaben sind Sekunden seit Aufnahmebeginn.
@@ -114,7 +127,7 @@ Ereignisse: `recording.started`, `recording.stopped`, `export.finished`.
 - `pong` – Antwort auf `ping`
 - `result` – Antwort auf einen Befehl
 - `error` – mit `code` (`auth_failed`, `unauthorized`, `read_only`,
-  `unknown_action`, `unknown_type`, `auth_timeout`, `bad_json`) und `message`.
+  `unknown_action`, `unknown_type`, `auth_timeout`, `auth_locked`, `bad_json`) und `message`.
   Nach `auth_failed` trennt der Recorder die Verbindung nach kurzer Zeit.
 
 ## Nachrichten an den Recorder
@@ -144,8 +157,9 @@ Antwort:
 { "type": "result", "id": 17, "action": "marker.add", "ok": true, "change": "started", "section": { "…": "…" } }
 ```
 
-`record.start`, `record.stop` und `record.toggle` antworten mit `accepted: true`: Der Befehl ist an die
-Audioerfassung übergeben. Ob die Aufnahme tatsächlich läuft, zeigt die nächste `state`-Nachricht.
+`record.start`, `record.stop` und `record.toggle` antworten erst, wenn die Aufnahme tatsächlich läuft bzw.
+beendet ist (`ok: true`). Scheitert der Start am Aufnahmerechner (z. B. Eingang nicht verfügbar) oder kommt
+innerhalb von 8 Sekunden keine Rückmeldung, lautet die Antwort `ok: false` mit `error`.
 
 `change` ist `started` oder `ended`, je nachdem, ob eine Anfangs- oder Endmarke gesetzt wurde.
 

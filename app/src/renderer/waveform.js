@@ -222,12 +222,14 @@
     /** Schnitte: schraffierte rote Flächen mit Rand; offene reichen bis zum Live-Ende. */
     _drawCuts(laneTop, h) {
       const ctx = this.ctx;
-      if (!this._cutPattern) {
+      const rgb = this.colors.cut || '255,59,48';
+      if (!this._cutPattern || this._cutPatternRgb !== rgb) {
+        this._cutPatternRgb = rgb;
         const tile = document.createElement('canvas');
         tile.width = 8;
         tile.height = 8;
         const t = tile.getContext('2d');
-        t.strokeStyle = 'rgba(255,59,48,0.55)';
+        t.strokeStyle = `rgba(${rgb},0.55)`;
         t.lineWidth = 1.5;
         t.beginPath();
         t.moveTo(-2, 10);
@@ -243,11 +245,11 @@
         const x2 = this.timeToX(end);
         if (x2 < 0 || x1 > this.width) return;
         const w = Math.max(2, x2 - x1);
-        ctx.fillStyle = 'rgba(255,59,48,0.14)';
+        ctx.fillStyle = `rgba(${rgb},0.14)`;
         ctx.fillRect(x1, laneTop, w, h - laneTop);
         ctx.fillStyle = this._cutPattern;
         ctx.fillRect(x1, laneTop, w, h - laneTop);
-        ctx.strokeStyle = 'rgba(255,59,48,0.9)';
+        ctx.strokeStyle = `rgba(${rgb},0.9)`;
         ctx.beginPath();
         ctx.moveTo(Math.round(x1) + 0.5, laneTop);
         ctx.lineTo(Math.round(x1) + 0.5, h);
@@ -259,7 +261,7 @@
         if (w > 44) {
           ctx.font = '12px system-ui, "Segoe UI", sans-serif';
           ctx.textBaseline = 'middle';
-          ctx.fillStyle = 'rgba(255,120,110,1)';
+          ctx.fillStyle = this.colors.cutText || '#FF8A80';
           ctx.fillText('✂ Schnitt', x1 + 6, laneTop + 12);
         }
       });
@@ -618,6 +620,12 @@
       });
 
       window.addEventListener('resize', () => this.resize());
+      // Wird das Fenster auf einen Monitor mit anderer Pixeldichte gezogen, neu aufbauen (sonst unscharf).
+      const watchDpr = () => {
+        const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+        mq.addEventListener('change', () => { this.resize(); watchDpr(); }, { once: true });
+      };
+      watchDpr();
     }
   }
 

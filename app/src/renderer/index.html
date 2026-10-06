@@ -35,7 +35,7 @@
         <span class="dot"></span>
         <span id="record-label">Neue Aufnahme starten</span>
       </button>
-      <button id="btn-continue" class="secondary" hidden title="Die beendete Aufnahme an ihrem Ende fortsetzen">Fortsetzen</button>
+      <button id="btn-continue" class="secondary" hidden title="Neue Audioaufnahme an das Ende der angezeigten, beendeten Aufnahme anhängen (gleiche Datei, gleiche Abschnitte)">An Aufnahme anhängen</button>
       <button id="btn-pause" class="secondary" disabled title="Pausieren">Pause</button>
       <button id="btn-stop" class="secondary" disabled title="Aufnahme beenden">Beenden</button>
     </div>
@@ -183,6 +183,15 @@
             <input id="set-ct-services" type="text" />
             <small>Namen der Dienste in der ChurchTools-Dienstplanung, durch Komma getrennt. Die dort eingetragenen Personen erscheinen beim Bearbeiten eines Abschnitts als Vorschlag zum Anklicken.</small>
           </label>
+          <div class="field">
+            <span>Kalender für die Terminauswahl</span>
+            <div class="row">
+              <button id="btn-ct-calendars" class="secondary" type="button">Kalender laden</button>
+              <span id="ct-calendars-info" class="inline-result"></span>
+            </div>
+            <div id="ct-calendars" class="calendar-list"></div>
+            <small>Ohne Auswahl werden die Termine aller Kalender angeboten.</small>
+          </div>
           <label class="check"><input type="checkbox" id="set-ct-auto" /> Beim Start den heutigen Gottesdienst laden</label>
           <button id="btn-ct-test" class="secondary">Verbindung prüfen</button>
           <span id="ct-test-result" class="inline-result"></span>
@@ -213,10 +222,10 @@
             <input id="set-net-port" type="number" min="1024" max="65535" />
           </label>
           <label>Passwort für Steuerung (Companion)
-            <input id="set-net-pass" type="text" />
+            <input id="set-net-pass" type="password" autocomplete="off" />
           </label>
           <label>Passwort nur zum Mitlesen (Dashboard, optional)
-            <input id="set-monitor-pass" type="text" />
+            <input id="set-monitor-pass" type="password" autocomplete="off" />
           </label>
           <div id="net-info" class="inline-result"></div>
         </fieldset>
