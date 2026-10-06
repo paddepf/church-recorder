@@ -83,9 +83,12 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   zählt als Ablaufplan: Beim Entfernen eines gesetzten Abschnitts geht er zurück in den Plan, bei einer neuen
   Aufnahme werden die Plan-Punkte wieder offen (`manual` entfällt).
 - Meldet ChurchTools für `/agenda` einen 404 (`err.status`) oder liefert keine Punkte, nutzt `ct:agenda` die
+  Vorlage, deren Name zum Titel des Termins passt (`RoleLogic.templateForTitle`: alle Wörter des Vorlagennamens
+  stehen als ganze Wörter im Titel, längster Name gewinnt; „Bibelstunde“ → Vorlage „Bibelstunde“), sonst die
   Standardvorlage aus `agendaTemplates`/`defaultTemplateId` (siehe „Vorlagen“ unten; Vorgabe: Einleitung,
-  Kinderbeitrag, Predigt, Abschluss) und meldet `usedDefaults`. Der Termin wird dabei trotzdem gesetzt. `session:service` (ohne
-  ChurchTools) trägt die Standardpunkte ein, wenn noch keine Abschnitte existieren.
+  Kinderbeitrag, Predigt, Abschluss), und meldet `usedDefaults` und `templateName`. Der Termin wird dabei trotzdem gesetzt. `session:service` (ohne
+  ChurchTools) trägt dieselbe Vorlage ein, wenn noch keine Abschnitte existieren. Ein vorhandener ChurchTools-Ablaufplan
+  hat immer Vorrang.
 - Ablaufplan-Kachel: Punkt hinzufügen (`section:add`), entfernen (`section:delete`), umsortieren per Drag in der
   Liste (`section:reorder`, setzt `order` der offenen Punkte neu). Dieselbe Drag-Quelle (`text/marker-id`) dient
   weiter zum Ablegen auf der Wellenform, das Ziel unterscheidet.
@@ -96,11 +99,11 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - Dienstplanung: `churchtools.eventServices(eventId, wanted)` liest `GET /api/events/{id}?include=eventServices`,
   Dienstnamen über `GET /api/services`, Personennamen aus `es.person`, `es.name` (wenn ungleich Dienstname) oder
   per `GET /api/persons/{id}`; Filter: Dienstname enthält ein Wort aus Einstellung `artistServices`
-  (Standard `Leitung, Predigt`). Ergebnis in `session.service.suggestions` (`{role,name}`), im Editor
-  (`editSection`) als Chips; passender Dienst zuerst (Wortvergleich, damit „Einleitung“ nicht zu „Leitung“ passt).
+  (Standard `Leitung, Predigt, Geschichte`; Dienste aus `RoleLogic.ALIASES` werden immer mitgelesen). Ergebnis in `session.service.suggestions` (`{role,name}`), im Editor
+  (`editSection`) als Chips; passender Dienst zuerst (Wortvergleich: „Gebetsleitung“ passt nicht zu „Einleitung“; „Leitung“ → „Einleitung“ gilt nur über `ALIASES`).
   **Automatisch eintragen:** `Session.setAgenda` ruft `_applySuggestions()`: für Punkte ohne `artist` kommen die
   Namen aus `service.suggestions`, deren Dienst zum Punktnamen passt (`src/shared/roles.js`, `RoleLogic`:
-  ganze Wörter, reine Zahlen zählen nicht; "Predigt 2" → Punkt "Predigt"; mehrere Treffer mit Komma). Dieselbe
+  ganze Wörter, reine Zahlen zählen nicht; feste Zuordnung `ALIASES`: Dienst „Geschichte“ → Punkt „Kinderbeitrag“, Dienst „Leitung“ → Punkte „Einleitung“ und „Abschluss“; "Predigt 2" → Punkt "Predigt"; mehrere Treffer mit Komma). Dieselbe
   Regel sortiert die Chips im Editor. `setAgenda` gibt die Anzahl zurück (`autoFilled` in der Antwort von
   `ct:agenda`). Reihenfolge der Quellen: Ablaufplan-Person vor Dienstplanung.
   **Die genaue Antwortform von ChurchTools wurde nicht gegen eine echte Instanz geprüft** (nur mit nachgebauten

@@ -10,6 +10,7 @@ const { NetServer } = require('./netserver');
 const { Updater } = require('./updater');
 const churchtools = require('./churchtools');
 const mp3 = require('./mp3');
+const RoleLogic = require('../shared/roles');
 
 let win = null;
 const session = new Session();
@@ -705,17 +706,17 @@ function findTemplate(key) {
   return list.find((t) => t.id === settings.get('defaultTemplateId')) || list[0] || null;
 }
 
+/** Vorlage zum Titel eines Gottesdienstes (siehe `RoleLogic.templateForTitle`), sonst die Standardvorlage. */
+function templateForTitle(title) {
+  return RoleLogic.templateForTitle(templates(), title) || findTemplate();
+}
+
 /** Programmpunkte einer Vorlage (leere Einträge entfallen). */
 function templateItems(tpl) {
   return (tpl && Array.isArray(tpl.items) ? tpl.items : [])
     .map((t) => String(t || '').trim())
     .filter(Boolean)
     .map((title) => ({ id: null, title }));
-}
-
-/** Standard-Programmpunkte: die Standardvorlage aus den Einstellungen. */
-function defaultAgendaItems() {
-  return templateItems(findTemplate());
 }
 
 ipcMain.handle('agenda:applyTemplate', (_e, { templateId } = {}) => {
@@ -739,6 +740,10 @@ ipcMain.handle('ct:agenda', async (_e, { eventId, name, date } = {}) => {
 
     // Personen aus der Dienstplanung (Leitung, Predigt …) als Interpret-Vorschläge; Fehler stören nicht.
     const wanted = String(settings.get('artistServices') || '').split(',').map((x) => x.trim()).filter(Boolean);
+    // Dienste mit fester Zuordnung (z. B. „Geschichte“ → Kinderbeitrag, „Leitung“ → Einleitung/Abschluss) werden immer mitgelesen.
+    Object.keys(RoleLogic.ALIASES).forEach((w) => {
+      if (!wanted.some((x) => RoleLogic.words(x).includes(w))) wanted.push(w);
+    });
     let suggestions = [];
     let suggestionError = null;
     try {
@@ -748,9 +753,11 @@ ipcMain.handle('ct:agenda', async (_e, { eventId, name, date } = {}) => {
     }
     session.setService({ id: eventId, name: name || plan.name || 'Gottesdienst', date, suggestions });
     const usedDefaults = plan.items.length === 0;
-    const items = usedDefaults ? defaultAgendaItems() : plan.items;
+    // Ohne Ablaufplan: die Vorlage, die zum Titel passt (sonst die Standardvorlage).
+    const tpl = usedDefaults ? templateForTitle(session.service.name) : null;
+    const items = usedDefaults ? templateItems(tpl) : plan.items;
     const autoFilled = session.setAgenda(items, usedDefaults ? 'plan' : 'churchtools');
-    return ok({ items, count: items.length, usedDefaults, suggestions, suggestionError, wanted, autoFilled });
+    return ok({ items, count: items.length, usedDefaults, templateName: tpl ? tpl.name : null, suggestions, suggestionError, wanted, autoFilled });
   } catch (err) { return fail(err); }
 });
 
@@ -759,7 +766,7 @@ ipcMain.handle('ct:agenda', async (_e, { eventId, name, date } = {}) => {
 ipcMain.handle('session:service', (_e, service) => {
   session.setService(service);
   // Ohne ChurchTools gibt es keinen Ablaufplan: Standardpunkte anbieten, solange noch nichts da ist.
-  if (session.sections.length === 0) session.setAgenda(defaultAgendaItems(), 'plan');
+  if (session.sections.length === 0) session.setAgenda(templateItems(templateForTitle(session.service.name)), 'plan');
   return ok({ state: session.snapshot() });
 });
 

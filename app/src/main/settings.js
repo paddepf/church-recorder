@@ -30,7 +30,7 @@ const DEFAULTS = {
   churchToolsToken: '',         // verschlüsselt abgelegt (siehe unten)
   churchToolsCalendarIds: [],   // leer = alle
   autoLoadTodaysService: true,
-  artistServices: 'Leitung, Predigt',   // Dienste der ChurchTools-Dienstplanung, deren Personen als Interpret vorgeschlagen werden
+  artistServices: 'Leitung, Predigt, Geschichte',   // Dienste der ChurchTools-Dienstplanung, deren Personen als Interpret vorgeschlagen werden
 
   // Netzwerk
   networkEnabled: true,

@@ -124,7 +124,7 @@ exportiert werden.
   Sind mehrere Dienste passend (z. B. „Predigt“ und „Predigt 2“), stehen alle Namen mit Komma dort. Eine
   zuständige Person aus dem Ablaufplan hat Vorrang, und jeder Eintrag lässt sich ändern. Die übrigen Personen
   bleiben als Vorschläge zum Anklicken; passende stehen zuerst und haben einen grünen Rand. Welche Dienste gelesen werden, steht unter **Einstellungen → ChurchTools →
-  Dienste für Interpret-Vorschläge** (Standard: `Leitung, Predigt`, durch Komma getrennt; der Dienstname muss
+  Dienste für Interpret-Vorschläge** (Standard: `Leitung, Predigt, Geschichte`, durch Komma getrennt; der Dienst „Geschichte“ gehört fest zum Ablaufpunkt „Kinderbeitrag“, „Leitung“ fest zu „Einleitung“ und „Abschluss“; diese Dienste werden immer gelesen; der Dienstname muss
   das Wort enthalten, „Leitung“ findet also auch „Gebetsleitung“).
 - Beim Wählen des Termins meldet die App kurz, welche Personen gefunden wurden – oder dass niemand
   eingetragen ist bzw. die Dienstplanung nicht gelesen werden konnte.
@@ -169,6 +169,13 @@ Unter **Einstellungen → Vorlagen für Programmpunkte** lassen sich beliebig vi
 Umsortieren), neue Vorlage mit „Neu“, und eine als Standard festlegen. Im Ablaufplan lädt das Auswahlfeld
 **„Vorlage laden …“** jederzeit eine andere Vorlage; die offenen Punkte werden dabei (nach Rückfrage)
 ersetzt, bereits gesetzte Abschnitte bleiben.
+
+**Passende Vorlage automatisch:** Fehlt der Ablaufplan, nimmt die App nicht blind die Standardvorlage,
+sondern die Vorlage, deren **Name zum Titel des Gottesdienstes passt** – ein Termin „Bibelstunde“ (oder
+„Bibelstunde im Gemeindehaus“) lädt die Vorlage „Bibelstunde“. Das gilt für jede selbst angelegte Vorlage:
+alle Wörter des Vorlagennamens müssen als ganze Wörter im Titel vorkommen (Groß-/Kleinschreibung egal), bei
+mehreren Treffern gewinnt der längere Name. Ohne Treffer gilt die Standardvorlage. Hat ChurchTools einen
+Ablaufplan, bleibt dieser maßgeblich.
 
 In der Kachel **Ablaufplan** lässt sich die Liste jederzeit anpassen:
 - **Hinzufügen:** unten Namen eintippen, Enter oder „+“.

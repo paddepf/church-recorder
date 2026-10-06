@@ -1508,7 +1508,7 @@
     });
     if (!res.ok) return toast('warn', 'Ablaufplan nicht geladen: ' + res.error);
     if (res.usedDefaults) {
-      toast('info', `${service.name}: In ChurchTools ist kein Ablaufplan gepflegt – ${res.count} Standardpunkte eingetragen.`, 9000);
+      toast('info', `${service.name}: In ChurchTools ist kein Ablaufplan gepflegt – Vorlage „${res.templateName || 'Standard'}“ mit ${res.count} Punkten eingetragen.`, 9000);
     } else {
       toast('success', `${service.name}: ${res.count} Ablaufpunkte übernommen.`);
     }
