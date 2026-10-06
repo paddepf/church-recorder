@@ -239,6 +239,12 @@ in der Mitte: rot für Fehler, gelb für Warnungen. Sie bleiben mindestens 15 bz
 sich per Klick schließen. Kleine Hinweise erscheinen dezent unten rechts und verschwinden von selbst. Bestätigungen
 für das, was man ohnehin sieht, gibt es nicht.
 
+### Laufzeit des aktuellen Abschnitts
+
+Unter dem Timer (und im Mini-Fenster rechts in der Karte des laufenden Abschnitts) steht, **wie lange der aktuelle
+Abschnitt schon läuft** – als `2:20`, ab einer Stunde `1:04:00`. Die Anzeige läuft mit der Aufnahme mit und
+verschwindet, wenn kein Abschnitt aktiv ist (z. B. in der Pause zwischen zwei Punkten).
+
 ### Mini-Fenster
 
 Wird nebenher am PC gearbeitet, verkleinert **„Mini-Fenster“** (rechts oben) die App auf ein kleines

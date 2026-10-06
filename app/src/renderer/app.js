@@ -154,6 +154,19 @@
     }
   }
 
+  /** Zeigt, wie lange der aktuelle Abschnitt schon läuft (m:ss, ab einer Stunde h:mm:ss). */
+  function updateSectionElapsed() {
+    const el = $('current-elapsed');
+    const start = state.sectionStart;
+    el.hidden = start == null;
+    if (start == null) return;
+    const t = Math.max(0, Math.floor((state.duration || 0) - start));
+    const h = Math.floor(t / 3600);
+    const m = Math.floor((t % 3600) / 60);
+    const s = String(t % 60).padStart(2, '0');
+    el.textContent = h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+  }
+
   async function updateBadges(info) {
     const net = await window.api.net.status();
     if (net.ok) {
@@ -283,6 +296,9 @@
     artistEl.textContent = curSection ? (curSection.artist || 'Interpret ergänzen') : '';
     artistEl.classList.toggle('unset', Boolean(curSection) && !curSection.artist);
     $('current-item').disabled = !curSection;
+    // Laufzeit des aktuellen Abschnitts (tickt mit den Pegelmeldungen weiter)
+    state.sectionStart = curSection && cur.open !== false ? cur.start : null;
+    updateSectionElapsed();
     if (curSection) $('current-item').style.setProperty('--hue', window.sectionHue(curSection));
     else $('current-item').style.removeProperty('--hue');
     $('current-item').dataset.live = curSection ? 'true' : 'false';
@@ -1183,6 +1199,7 @@
       $('clip').dataset.on = String(Boolean(levels.clip));
       state.duration = levels.duration;
       $('timecode').textContent = longTime(levels.duration);
+      updateSectionElapsed();
       wave.update({ duration: levels.duration, peaks: state.peaks });
     });
 
