@@ -160,11 +160,19 @@
     const start = state.sectionStart;
     el.hidden = start == null;
     if (start == null) return;
-    const t = Math.max(0, Math.floor((state.duration || 0) - start));
+    el.textContent = fmtLength((state.duration || 0) - start);
+    // Der laufende Abschnitt in der Liste zählt mit
+    const live = document.querySelector('#marker-list .dur[data-live]');
+    if (live) live.textContent = fmtLength((state.duration || 0) - Number(live.dataset.start));
+  }
+
+  /** Länge als m:ss, ab einer Stunde h:mm:ss. */
+  function fmtLength(seconds) {
+    const t = Math.max(0, Math.floor(seconds || 0));
     const h = Math.floor(t / 3600);
     const m = Math.floor((t % 3600) / 60);
     const s = String(t % 60).padStart(2, '0');
-    el.textContent = h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+    return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
   }
 
   async function updateBadges(info) {
@@ -662,10 +670,19 @@
       li.className = 'item' + (state.selectedSectionId === x.id ? ' selected' : '');
       li.dataset.hue = '';
       li.style.setProperty('--hue', window.sectionHue(x));
-      li.innerHTML = `<span class="time"></span><span class="label"></span>
+      li.innerHTML = `<span class="time"></span><span class="label"></span><span class="dur" title="Laufzeit des Abschnitts"></span>
         <button class="mini" data-rename title="Name und Interpret bearbeiten" aria-label="Name und Interpret bearbeiten">✎</button>
         <button class="mini" data-remove title="Abschnitt entfernen (Ablaufpunkte gehen zurück in den Ablaufplan)" aria-label="Abschnitt entfernen">×</button>`;
       li.querySelector('.time').textContent = `${fmt(x.start)} – ${x.end != null ? fmt(x.end) : 'läuft'}`;
+      const dur = li.querySelector('.dur');
+      if (x.end != null) {
+        dur.textContent = fmtLength(x.end - x.start);
+      } else {
+        // läuft noch: zählt mit den Pegelmeldungen weiter (updateSectionElapsed)
+        dur.dataset.live = 'true';
+        dur.dataset.start = String(x.start);
+        dur.textContent = fmtLength((state.duration || 0) - x.start);
+      }
       li.querySelector('.label').textContent = x.label;
       li.dataset.id = x.id;
       li.tabIndex = 0;

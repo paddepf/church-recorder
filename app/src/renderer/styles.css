@@ -824,3 +824,13 @@ body.compact .nb-name[hidden] { display: none; }
 .ci-elapsed[hidden] { display: none; }
 body.compact .ci-elapsed { margin-left: 0; font-size: 20px; }
 body.compact .ci-elapsed::before { content: none; }
+
+/* Laufzeit je Abschnitt in der Liste */
+.item .dur { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 15px; color: var(--text); white-space: nowrap; margin-left: 4px; }
+.item .dur[data-live] { color: var(--tally-text); }
+.item .time { white-space: nowrap; }
+@media (max-width: 1180px) {
+  .item .time { font-size: 12px; }
+  .item .dur { font-size: 14px; margin-left: 2px; }
+  #marker-list .item { gap: 6px; padding-left: 10px; padding-right: 8px; }
+}

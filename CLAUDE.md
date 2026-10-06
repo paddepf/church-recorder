@@ -265,7 +265,8 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Die Wellenform baut ihre Zeichenfläche bei jeder Größenänderung neu auf (`ResizeObserver`) und beim Umschalten explizit
   (`applyCompact` → `wave.resize()`): Sonst kommt das Fenster-Ereignis vor der Umstellung der Ansicht und alles wirkt gestreckt.
   Die Laufzeit des aktuellen Abschnitts (`#current-elapsed`, `updateSectionElapsed`) tickt mit den `levels`-Meldungen aus
-  `state.duration - state.sectionStart` und steht in beiden Ansichten in der Karte `#current-item`.
+  `state.duration - state.sectionStart` und steht in beiden Ansichten in der Karte `#current-item`; die Liste der Abschnitte zeigt je Abschnitt `.dur`
+  (`fmtLength`; beim laufenden mit `data-live`, von `updateSectionElapsed` mitgezählt).
   Dialoge passen nicht hinein: `openModal`, `confirmDialog` und `?` schalten vorher auf groß zurück.
   Kürzel Strg+Umschalt+M im Renderer, auf dem Mac Cmd+Umschalt+M über das Menü „Fenster“.
 - Zeitangaben (Marken, Listen, Zeitleiste der Wellenform) nutzen dieselbe

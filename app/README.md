@@ -243,7 +243,8 @@ für das, was man ohnehin sieht, gibt es nicht.
 
 Unter dem Timer (und im Mini-Fenster rechts in der Karte des laufenden Abschnitts) steht, **wie lange der aktuelle
 Abschnitt schon läuft** – als `2:20`, ab einer Stunde `1:04:00`. Die Anzeige läuft mit der Aufnahme mit und
-verschwindet, wenn kein Abschnitt aktiv ist (z. B. in der Pause zwischen zwei Punkten).
+verschwindet, wenn kein Abschnitt aktiv ist (z. B. in der Pause zwischen zwei Punkten). Auch in der Kachel
+**Abschnitte** steht hinter jedem Abschnitt seine **Laufzeit** (bei einem laufenden zählt sie mit).
 
 ### Mini-Fenster
 
