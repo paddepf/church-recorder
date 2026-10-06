@@ -42,7 +42,9 @@ const DEFAULTS = {
   autoUpdateCheck: true,
 
   // UI
-  theme: 'dark'                 // 'dark' | 'light' | 'system'
+  theme: 'dark',                // 'dark' | 'light' | 'system'
+  compactOnTop: true,           // Mini-Fenster bleibt über anderen Programmen
+  compactBounds: null           // zuletzt benutzte Lage des Mini-Fensters ({ x, y, width, height })
 };
 
 let cache = null;

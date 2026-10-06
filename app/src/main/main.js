@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, systemPreferences, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, screen, systemPreferences, powerSaveBlocker } = require('electron');
 
 const settings = require('./settings');
 const { Session, slug, dateStamp } = require('./session');
@@ -268,6 +268,7 @@ function setupApplicationMenu() {
       submenu: [
         // Ohne Tastenkürzel: Cmd+M gehört "Abschnitt starten / beenden".
         { label: 'Minimieren', click: () => win?.minimize() },
+        { label: 'Mini-Fenster ein/aus', accelerator: 'Cmd+Shift+M', click: () => setCompact(!compact) },
         { role: 'zoom', label: 'Zoomen' },
         { type: 'separator' },
         { role: 'togglefullscreen', label: 'Vollbild' }
@@ -307,12 +308,81 @@ function setupLiveReload() {
   });
 }
 
+/* ------------------------------------------------------------- Mini-Fenster */
+
+// Kleines Fenster mit den nötigsten Knöpfen, damit nebenher am PC gearbeitet werden kann. Es ist dasselbe
+// Fenster, nur verkleinert (die Oberfläche blendet den Rest per CSS aus): Die Audioerfassung läuft in der
+// Oberfläche und darf dafür nicht neu geladen werden.
+const NORMAL_MIN = { width: 1024, height: 680 };
+const COMPACT_MIN = { width: 400, height: 250 };
+const COMPACT_DEFAULT = { width: 480, height: 290 };
+let compact = null;            // Lage des großen Fensters ({ bounds, maximized }), solange das Mini-Fenster aktiv ist
+
+/** Zuletzt benutzte Lage des Mini-Fensters, wenn sie noch auf einem Bildschirm liegt; sonst unten rechts. */
+function compactBounds() {
+  const saved = settings.get('compactBounds');
+  if (saved && [saved.x, saved.y, saved.width, saved.height].every(Number.isFinite)) {
+    const visible = screen.getAllDisplays().some(({ workArea: a }) =>
+      saved.x < a.x + a.width - 60 && saved.x + saved.width > a.x + 60
+      && saved.y >= a.y - 10 && saved.y < a.y + a.height - 60);
+    if (visible) {
+      return {
+        x: saved.x,
+        y: saved.y,
+        width: Math.max(saved.width, COMPACT_MIN.width),
+        height: Math.max(saved.height, COMPACT_MIN.height)
+      };
+    }
+  }
+  const a = screen.getDisplayMatching(win.getBounds()).workArea;
+  return {
+    x: a.x + a.width - COMPACT_DEFAULT.width - 16,
+    y: a.y + a.height - COMPACT_DEFAULT.height - 16,
+    ...COMPACT_DEFAULT
+  };
+}
+
+const compactOnTop = () => settings.get('compactOnTop') !== false;
+
+/** Das Mini-Fenster bleibt (abschaltbar) über anderen Programmen, das große nie. */
+function applyOnTop() {
+  if (!win || win.isDestroyed()) return;
+  win.setAlwaysOnTop(Boolean(compact) && compactOnTop(), 'floating');
+}
+
+/** Schaltet zwischen großem Fenster und Mini-Fenster um; die Oberfläche erfährt es über 'compact'. */
+function setCompact(on) {
+  if (!win || win.isDestroyed()) return false;
+  if (on && !compact) {
+    if (win.isFullScreen()) {
+      // Im Vollbild lässt sich die Größe nicht ändern: erst verlassen, dann verkleinern.
+      win.once('leave-full-screen', () => setCompact(true));
+      win.setFullScreen(false);
+      return false;
+    }
+    compact = { bounds: win.getNormalBounds(), maximized: win.isMaximized() };
+    if (compact.maximized) win.unmaximize();
+    win.setMinimumSize(COMPACT_MIN.width, COMPACT_MIN.height);
+    win.setBounds(compactBounds());
+  } else if (!on && compact) {
+    settings.save({ compactBounds: win.getBounds() });
+    const prev = compact;
+    compact = null;
+    win.setMinimumSize(NORMAL_MIN.width, NORMAL_MIN.height);
+    win.setBounds(prev.bounds);
+    if (prev.maximized) win.maximize();
+  }
+  applyOnTop();
+  send('compact', { on: Boolean(compact), onTop: compactOnTop() });
+  return Boolean(compact);
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1360,
     height: 880,
-    minWidth: 1024,
-    minHeight: 680,
+    minWidth: NORMAL_MIN.width,
+    minHeight: NORMAL_MIN.height,
     backgroundColor: '#101419',
     show: false,
     autoHideMenuBar: process.platform !== 'darwin',
@@ -349,6 +419,7 @@ function createWindow() {
 
   win.on('close', (e) => {
     if (guardClose(e, () => { if (win && !win.isDestroyed()) win.close(); })) return;
+    if (compact) settings.save({ compactBounds: win.getBounds() });
     session.flushSave();
     net.stop();
   });
@@ -535,8 +606,19 @@ ipcMain.handle('app:info', () => ok({
   platform: process.platform,
   recordingsDir: settings.get('recordingsDir'),
   update: updater.status(),
-  network: net.statusInfo()
+  network: net.statusInfo(),
+  compact: Boolean(compact),
+  compactOnTop: compactOnTop()
 }));
+
+ipcMain.handle('window:compact', (_e, { on, onTop } = {}) => {
+  if (typeof onTop === 'boolean') {
+    settings.save({ compactOnTop: onTop });
+    applyOnTop();
+  }
+  if (typeof on === 'boolean') setCompact(on);
+  return ok({ on: Boolean(compact), onTop: compactOnTop() });
+});
 
 /** Freier Platz auf dem Laufwerk der Aufnahmen und was das in Aufnahmestunden bedeutet. */
 ipcMain.handle('disk:free', () => {

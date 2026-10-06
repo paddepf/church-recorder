@@ -9,7 +9,9 @@ contextBridge.exposeInMainWorld('api', {
     info: () => invoke('app:info'),
     diskFree: () => invoke('disk:free'),
     openRecordingsFolder: () => invoke('folder:open'),
-    reveal: (filePath) => invoke('file:reveal', { filePath })
+    reveal: (filePath) => invoke('file:reveal', { filePath }),
+    setCompact: (on) => invoke('window:compact', { on }),
+    setCompactOnTop: (onTop) => invoke('window:compact', { onTop })
   },
 
   settings: {
@@ -102,7 +104,7 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   on: (channel, handler) => {
-    const allowed = ['state', 'levels', 'toast', 'command', 'menu', 'health',
+    const allowed = ['state', 'levels', 'toast', 'command', 'menu', 'health', 'compact',
       'network-status', 'update-status', 'export-progress'];
     if (!allowed.includes(channel)) return () => {};
     const listener = (_event, payload) => handler(payload);

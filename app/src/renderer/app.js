@@ -69,6 +69,7 @@
   async function init() {
     const info = await window.api.app.info();
     const cfg = await window.api.settings.get();
+    applyCompact(info.compact, info.compactOnTop);
     state.settings = cfg.settings;
     state.sampleRate = state.settings.sampleRate || 48000;
     applyTheme(state.settings.theme);
@@ -959,6 +960,8 @@
     $('btn-settings').addEventListener('click', () => openModal('modal-settings'));
     $('btn-library').addEventListener('click', openLibrary);
     $('btn-service').addEventListener('click', openServicePicker);
+    $('btn-compact').addEventListener('click', () => toggleCompact());
+    $('chk-ontop').addEventListener('change', () => window.api.app.setCompactOnTop($('chk-ontop').checked));
     $('btn-open-folder').addEventListener('click', () => window.api.app.openRecordingsFolder());
 
     document.querySelectorAll('[data-close]').forEach((b) =>
@@ -971,6 +974,8 @@
   }
 
   function openModal(id) {
+    // Dialoge passen nicht ins Mini-Fenster: vorher auf das große Fenster umschalten.
+    if (state.compact) toggleCompact(false);
     $(id).hidden = false;
     // Fokus in den Dialog setzen (Tastaturbedienung, Bildschirmleser)
     setTimeout(() => $(id).querySelector('input:not([type=hidden]), select, button:not(.close)')?.focus(), 0);
@@ -982,12 +987,28 @@
     }
   }
 
+  /* ----------------------------------------------------------- Mini-Fenster */
+
+  /** Mini-Fenster (nur Timer, Pegel, Aufnahme- und Abschnittsknöpfe) oder große Ansicht. */
+  function applyCompact(on, onTop) {
+    state.compact = Boolean(on);
+    document.body.classList.toggle('compact', state.compact);
+    $('btn-compact').textContent = state.compact ? 'Großes Fenster' : 'Mini-Fenster';
+    if (typeof onTop === 'boolean') $('chk-ontop').checked = onTop;
+  }
+
+  /** Die Fenstergröße ändert der Hauptprozess; die Ansicht folgt über das Ereignis 'compact'. */
+  function toggleCompact(on = !state.compact) {
+    window.api.app.setCompact(on);
+  }
+
   /** Ja/Nein-Abfrage; Abbrechen ist vorausgewählt. */
   function confirmDialog(title, text, okLabel = 'OK') {
     const modal = $('modal-confirm');
     $('confirm-title').textContent = title;
     $('confirm-text').textContent = text;
     $('confirm-ok').textContent = okLabel;
+    if (state.compact) toggleCompact(false);
     modal.hidden = false;
     $('confirm-cancel').focus();
 
@@ -1055,6 +1076,12 @@
       // Gehaltene Tasten nicht wiederholen: sonst starten und beenden sich Abschnitte im Wechsel.
       if (e.repeat) return;
 
+      // Mini-Fenster: Strg+Umschalt+M (auf dem Mac Cmd+Umschalt+M über das Menü)
+      if (e.ctrlKey && !e.metaKey && e.shiftKey && e.key.toLowerCase() === 'm') {
+        e.preventDefault();
+        toggleCompact();
+        return;
+      }
       if (e.ctrlKey && e.key.toLowerCase() === 'r') {
         e.preventDefault();
         if (isLive()) stopRecording(); else startRecording();
@@ -1086,6 +1113,7 @@
       }
       if (e.key === '?') {
         e.preventDefault();
+        if (state.compact) toggleCompact(false);
         $('modal-keys').hidden = !$('modal-keys').hidden;
         return;
       }
@@ -1141,6 +1169,8 @@
       if (action === 'marker' && !$('btn-marker').disabled) $('btn-marker').click();
       if (action === 'next-item' && !$('btn-next-item').disabled) $('btn-next-item').click();
     });
+
+    window.api.on('compact', ({ on, onTop }) => applyCompact(on, onTop));
 
     window.api.on('network-status', (info) => {
       $('net-badge').dataset.on = info.running ? 'true' : 'false';
@@ -1241,6 +1271,7 @@
       { keys: ['Leertaste'], text: 'Mithören / Abspielen', main: true },
       { keys: ['?'], text: 'Alle Kürzel anzeigen' },
       { keys: [mod, 'Umschalt', 'Z'], text: 'Wiederholen' },
+      { keys: [mod, 'Umschalt', 'M'], text: 'Mini-Fenster ein/aus' },
       { keys: ['F2'], text: 'Gewählten Abschnitt bearbeiten' },
       { keys: ['Klick'], text: 'In die Wellenform: Hörcursor setzen' },
       { keys: ['Doppelklick'], text: 'Auf eine Marke: Name/Interpret direkt bearbeiten' },
@@ -1258,6 +1289,7 @@
     const mod = platform === 'darwin' ? 'Cmd' : 'Strg';
     $('btn-record').title = `Neue Aufnahme starten (${mod}+R)`;
     $('btn-stop').title = `Aufnahme beenden (${mod}+R)`;
+    $('btn-compact').title = `Kleines Fenster mit den nötigsten Knöpfen, z. B. wenn nebenher am PC gearbeitet wird (${mod}+Umschalt+M)`;
   }
 
   function renderShortcuts(platform) {

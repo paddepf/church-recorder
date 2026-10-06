@@ -226,6 +226,13 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Ortszeit umgerechnet (`withLocalTime`).
 
 ### Oberfläche
+- **Mini-Fenster** (`setCompact` in `main.js`, IPC `window:compact`, Ereignis `compact`): dasselbe Fenster,
+  nur verkleinert (Mindestgröße 400×250, Standard 480×290 unten rechts, Lage in `compactBounds`), wahlweise
+  immer im Vordergrund (`compactOnTop`). Bewusst kein zweites Fenster und kein Neuladen: Die Audioerfassung
+  läuft in der Oberfläche. Die Ansicht blendet per `body.compact` alles außer Kopfzeile, Transport und den
+  Knöpfen M/N aus; die Wellenform bleibt in 1000 px Breite außerhalb des Fensters (sonst Zoom 0 bei Breite 0).
+  Dialoge passen nicht hinein: `openModal`, `confirmDialog` und `?` schalten vorher auf groß zurück.
+  Kürzel Strg+Umschalt+M im Renderer, auf dem Mac Cmd+Umschalt+M über das Menü „Fenster“.
 - Zeitangaben (Marken, Listen, Zeitleiste der Wellenform) nutzen dieselbe
   Schrift wie der große Timer: `var(--sans)` mit `font-variant-numeric: tabular-nums`.
   Keine Monospace-Schrift verwenden (`--mono` gibt es nicht mehr).

@@ -651,3 +651,55 @@ label small { color: var(--muted); font-size: 11px; }
   canvas.wave { height: 120px; }
   .meters { gap: 4px; }
 }
+
+/* ---------------------------------------------------------- Mini-Fenster
+   body.compact: nur Kopfzeile, Timer, Pegel, Aufnahme- und Abschnittsknöpfe. Die Wellenform bleibt in
+   voller Breite außerhalb des Fensters, damit Zoom und Ansicht beim Zurückschalten stimmen. */
+
+.compact-only { display: none; }
+.ontop { color: var(--muted); font-size: 13px; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
+.ontop input { width: 16px; height: 16px; accent-color: var(--plan); cursor: pointer; }
+
+body.compact { display: flex; flex-direction: column; }
+body.compact .compact-only { display: flex; }
+body.compact .panels,
+body.compact .keybar { display: none; }
+
+body.compact .topbar { padding: 6px 10px; gap: 8px; }
+body.compact .topbar button { font-size: 13px; padding: 5px 10px; }
+body.compact .top-actions { gap: 8px; flex-shrink: 0; }
+body.compact .top-actions > :not(#btn-compact):not(.compact-only):not(#disk-badge) { display: none; }
+body.compact #disk-badge[data-level="ok"] { display: none; }
+body.compact .service { min-width: 0; flex: 1; }
+body.compact .service-name { padding: 4px 6px; max-width: 100%; min-width: 0; }
+body.compact #service-name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.compact .service-date { display: none; }
+body.compact .badge { font-size: 12px; padding: 3px 8px; }
+
+body.compact .audio-warning { padding: 4px 8px; font-size: 12px; }
+
+body.compact .transport {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "clock meters" "controls controls";
+  gap: 8px 14px;
+  padding: 8px 10px;
+}
+body.compact .clock { grid-area: clock; align-items: flex-start; min-width: 0; }
+body.compact .timecode { font-size: 34px; }
+body.compact .current-item { font-size: 13px; margin-top: 2px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.compact .meters { grid-area: meters; width: 150px; gap: 4px; }
+body.compact .bar { height: 9px; }
+body.compact .meter-label { font-size: 11px; }
+body.compact .clip { font-size: 11px; }
+body.compact .transport-controls { grid-area: controls; gap: 6px; }
+body.compact .transport-controls button { font-size: 14px; padding: 8px 12px; }
+body.compact .transport-controls button.record { flex: 1; justify-content: center; }
+
+body.compact .wave-section { padding: 0 10px 8px; background: var(--panel); }
+body.compact .wave-toolbar { padding-bottom: 0; gap: 6px; }
+body.compact .wave-toolbar > :not(#btn-marker):not(#btn-next-item) { display: none; }
+body.compact .wave-toolbar button { font-size: 14px; padding: 8px 12px; flex: 1; }
+body.compact canvas.wave { position: fixed; left: -10000px; top: 0; width: 1000px; }
+
+body.compact .toasts { left: 8px; right: 8px; bottom: 8px; max-width: none; }
+body.compact .toast { font-size: 13px; padding: 6px 10px; }

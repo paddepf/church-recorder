@@ -205,12 +205,23 @@ Meldung während der Aufnahme).
 | `Strg`/`Cmd` + `Z` | Rückgängig; `Umschalt` + `Strg`/`Cmd` + `Z` oder `Strg` + `Y`: Wiederholen |
 | `F2` | Gewählten Abschnitt bearbeiten (Name und Interpret) |
 | `?` | Alle Tastenkürzel anzeigen (nochmal `?` oder `Esc` schließt) |
+| `Strg` + `Umschalt` + `M` (macOS: `Cmd` + `Umschalt` + `M`) | Mini-Fenster ein/aus |
 | `Esc` | Offenen Dialog schließen |
 | `Leertaste` | Abspielen/Pause; während der Aufnahme: Mithören ab dem Hörcursor |
 | Mausrad | auf der Wellenform scrollen |
 | `Strg` + Mausrad oder `Umschalt` + Mausrad | zoomen |
 
 Gehaltene Tasten wiederholen nicht (sonst würden sich z. B. Abschnitte im Wechsel starten und beenden).
+
+### Mini-Fenster
+
+Wird nebenher am PC gearbeitet, verkleinert **„Mini-Fenster“** (rechts oben) die App auf ein kleines
+Fenster mit Gottesdienstname, Timer, Pegel, aktuellem Abschnitt und den Knöpfen für Aufnahme, Pause,
+Beenden, „Abschnitt starten“ und „Nächster Ablaufpunkt“. Die Tastenkürzel gelten weiter. Es liegt beim
+ersten Mal unten rechts und merkt sich danach Lage und Größe. Mit **„Immer oben“** bleibt es über
+anderen Programmen (Voreinstellung, abschaltbar). **„Großes Fenster“** stellt die vorherige Größe
+wieder her. Öffnet sich ein Dialog (z. B. Rückfrage beim Start, Einstellungen, `?`), schaltet die App
+selbst auf das große Fenster um. Die Aufnahme läuft beim Umschalten unverändert weiter.
 
 ### Kalender, Beenden, Bedienung per Tastatur
 
