@@ -620,6 +620,15 @@
       });
 
       window.addEventListener('resize', () => this.resize());
+      // Auch jede andere Größenänderung der Zeichenfläche (z. B. Umschalten Mini-Fenster ↔ großes Fenster, bei dem das
+      // Fenster-Ereignis vor der Umstellung der Ansicht kommt) baut die Zeichenfläche neu auf – sonst wirkt alles gestreckt.
+      if (typeof ResizeObserver === 'function') {
+        let last = '';
+        new ResizeObserver(() => {
+          const size = `${cv.clientWidth}x${cv.clientHeight}`;
+          if (size !== last) { last = size; this.resize(); }
+        }).observe(cv);
+      }
       // Wird das Fenster auf einen Monitor mit anderer Pixeldichte gezogen, neu aufbauen (sonst unscharf).
       const watchDpr = () => {
         const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);

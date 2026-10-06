@@ -315,12 +315,26 @@ function setupLiveReload() {
 // Fenster, nur verkleinert (die Oberfläche blendet den Rest per CSS aus): Die Audioerfassung läuft in der
 // Oberfläche und darf dafür nicht neu geladen werden.
 const NORMAL_MIN = { width: 1024, height: 680 };
-const COMPACT_MIN = { width: 400, height: 310 };
-const COMPACT_DEFAULT = { width: 480, height: 340 };
+// Größen des Mini-Fensters als Inhaltsgröße (ohne Titelleiste und Rahmen, die je System verschieden sind).
+// 266 px Höhe genügen für alle Zeilen; erscheint der rote Warnbalken, scrollt der Inhalt.
+const COMPACT_MIN = { width: 400, height: 266 };
+const COMPACT_DEFAULT = { width: 480, height: 270 };
 let compact = null;            // Lage des großen Fensters ({ bounds, maximized }), solange das Mini-Fenster aktiv ist
+
+/** Platz für Titelleiste und Rahmen (Fenstergröße minus Inhaltsgröße). */
+function frameSize() {
+  const [w, h] = win.getSize();
+  const [cw, ch] = win.getContentSize();
+  return { width: w - cw, height: h - ch };
+}
 
 /** Zuletzt benutzte Lage des Mini-Fensters, wenn sie noch auf einem Bildschirm liegt; sonst unten rechts. */
 function compactBounds() {
+  const frame = frameSize();
+  const minW = COMPACT_MIN.width + frame.width;
+  const minH = COMPACT_MIN.height + frame.height;
+  const defW = COMPACT_DEFAULT.width + frame.width;
+  const defH = COMPACT_DEFAULT.height + frame.height;
   const saved = settings.get('compactBounds');
   if (saved && [saved.x, saved.y, saved.width, saved.height].every(Number.isFinite)) {
     const visible = screen.getAllDisplays().some(({ workArea: a }) =>
@@ -330,16 +344,17 @@ function compactBounds() {
       return {
         x: saved.x,
         y: saved.y,
-        width: Math.max(saved.width, COMPACT_MIN.width),
-        height: Math.max(saved.height, COMPACT_MIN.height)
+        width: Math.max(saved.width, minW),
+        height: Math.max(saved.height, minH)
       };
     }
   }
   const a = screen.getDisplayMatching(win.getBounds()).workArea;
   return {
-    x: a.x + a.width - COMPACT_DEFAULT.width - 16,
-    y: a.y + a.height - COMPACT_DEFAULT.height - 16,
-    ...COMPACT_DEFAULT
+    x: a.x + a.width - defW - 16,
+    y: a.y + a.height - defH - 16,
+    width: defW,
+    height: defH
   };
 }
 
@@ -363,7 +378,8 @@ function setCompact(on) {
     }
     compact = { bounds: win.getNormalBounds(), maximized: win.isMaximized() };
     if (compact.maximized) win.unmaximize();
-    win.setMinimumSize(COMPACT_MIN.width, COMPACT_MIN.height);
+    const frame = frameSize();
+    win.setMinimumSize(COMPACT_MIN.width + frame.width, COMPACT_MIN.height + frame.height);
     win.setBounds(compactBounds());
   } else if (!on && compact) {
     settings.save({ compactBounds: win.getBounds() });

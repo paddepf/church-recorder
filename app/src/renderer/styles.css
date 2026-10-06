@@ -623,10 +623,42 @@ label small { color: var(--muted); font-size: 11px; }
   font-size: 13px;
   box-shadow: 0 8px 24px var(--shadow);
 }
-.toast[data-level="error"] { border-left-color: var(--tally); }
-.toast[data-level="warn"] { border-left-color: var(--amber); }
 .toast[data-level="info"] { border-left-color: var(--plan); }
 .toast[data-level="success"] { border-left-color: var(--manual); }
+
+/* Fehler und Warnungen: groß, farbig, oben in der Mitte – müssen auffallen */
+.alerts {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(640px, calc(100vw - 32px));
+  display: grid;
+  gap: 10px;
+  z-index: 95;
+  pointer-events: none;
+}
+.alert {
+  pointer-events: auto;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  border-radius: var(--radius);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, .5);
+  animation: alert-in 220ms ease-out;
+}
+.alert::before { content: "⚠"; font-size: 26px; line-height: 1; }
+.alert .msg { flex: 1; }
+.alert::after { content: "×"; font-size: 24px; line-height: 1; opacity: .75; }
+.alert[data-level="error"] { background: var(--tally); color: #fff; }
+.alert[data-level="warn"] { background: var(--amber); color: #1a1200; }
+@keyframes alert-in { from { opacity: 0; transform: translateY(-14px) scale(.97); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .alert { animation: none; } }
 
 @media (max-width: 1180px) {
   .topbar { gap: 8px; padding-left: 14px; padding-right: 14px; }
@@ -676,7 +708,7 @@ label small { color: var(--muted); font-size: 11px; }
 .ontop { color: var(--muted); font-size: 13px; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
 .ontop input { width: 16px; height: 16px; accent-color: var(--plan); cursor: pointer; }
 
-body.compact { display: flex; flex-direction: column; }
+body.compact { display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; }
 body.compact .compact-only { display: flex; }
 body.compact .panels,
 body.compact .keybar { display: none; }
@@ -738,10 +770,45 @@ body.compact .transport-controls button { font-size: 14px; padding: 8px 12px; }
 body.compact .transport-controls button.record { flex: 1; justify-content: center; }
 
 body.compact .wave-section { padding: 0 10px 8px; background: var(--panel); }
-body.compact .wave-toolbar { padding-bottom: 0; gap: 6px; }
+body.compact .wave-toolbar { padding-bottom: 0; gap: 6px; align-items: stretch; }
 body.compact .wave-toolbar > :not(#btn-marker):not(#btn-next-item) { display: none; }
 body.compact .wave-toolbar button { font-size: 14px; padding: 8px 12px; flex: 1; }
 body.compact canvas.wave { position: fixed; left: -10000px; top: 0; width: 1000px; }
 
+body.compact .alerts { top: 6px; width: calc(100vw - 16px); }
+body.compact .alert { padding: 10px 12px; font-size: 14px; gap: 10px; }
+body.compact .alert::before { font-size: 20px; }
 body.compact .toasts { left: 8px; right: 8px; bottom: 8px; max-width: none; }
 body.compact .toast { font-size: 13px; padding: 6px 10px; }
+
+/* Mini-Fenster nach dem Beenden (body.review): keine Aufnahmeknöpfe, dafür der MP3-Export */
+.compact-export { display: none; }
+body.compact.review .compact-export {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 10px 8px;
+  background: var(--panel);
+}
+body.compact.review .transport-controls,
+body.compact.review .wave-toolbar,
+body.compact.review .meters,
+body.compact.review .current-item { display: none; }
+body.compact.review .wave-section { padding: 0; }
+body.compact.review .transport { grid-template-areas: "clock meters"; padding-bottom: 4px; }
+.ce-summary { font-size: 15px; color: var(--muted); }
+.compact-export > button.primary { padding: 12px 14px; font-size: 16px; }
+.compact-export .progress { margin: 0; width: 100%; }
+.ce-result { font-size: 13px; color: var(--muted); }
+.ce-result:empty { display: none; }
+.ce-result .mini-link { margin-left: 4px; }
+.compact-export > button.ghost { align-self: flex-start; font-size: 13px; padding: 4px 8px; }
+
+/* „Nächster Ablaufpunkt“ nennt den Namen des Punktes */
+.nb-name { margin-left: 8px; color: var(--text); font-weight: 600; max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; display: inline-block; }
+.nb-name[hidden] { display: none; }
+.nb-name::before { content: "→ "; font-weight: 400; color: var(--muted); }
+body.compact #btn-next-item { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 5px 10px; min-width: 0; line-height: 1.25; }
+body.compact .nb-label { font-size: 12px; color: var(--muted); }
+body.compact .nb-name { margin: 0; max-width: 100%; font-size: 14px; display: block; }
+body.compact .nb-name[hidden] { display: none; }

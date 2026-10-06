@@ -25,8 +25,8 @@ async function withSession(fn) {
 const labels = (s) => s.placedSections().map((x) => `${x.label}:${x.start}-${x.end}`).join(' | ');
 
 test('Abschnitte starten, beenden, N und Rückgängig', () => withSession(async (s) => {
-  s.setAgenda([{ id: null, title: 'A' }, { id: null, title: 'B' }], 'plan');
   s.start({ sampleRate: 48000, channels: 2 });
+  s.setAgenda([{ id: null, title: 'A' }, { id: null, title: 'B' }], 'plan');   // erst nach dem Start: kein Punkt beginnt von selbst
   s.pushAudio(silence(5));
   s.toggleSection({});
   s.pushAudio(silence(5));
@@ -40,14 +40,45 @@ test('Abschnitte starten, beenden, N und Rückgängig', () => withSession(async 
 }));
 
 test('Ablegen in eine Lücke füllt sie genau', () => withSession(async (s) => {
-  s.setAgenda([{ id: null, title: 'Lied' }], 'plan');
   s.start({ sampleRate: 48000, channels: 2 });
+  s.setAgenda([{ id: null, title: 'Lied' }], 'plan');
   s.pushAudio(silence(60));
   s.startSection({ time: 10, label: 'A' }); s.endSection(20);
   s.startSection({ time: 40, label: 'B' }); s.endSection(50);
   const id = s.pendingSections()[0].id;
   assert.equal(s.placePending(id, 30).ok, true);
   assert.equal(labels(s), 'A:10-20 | Lied:20-40 | B:40-50');
+}));
+
+test('Beim Start beginnt der erste Ablaufpunkt, ohne Punkte passiert nichts', () => withSession(async (s) => {
+  s.setAgenda([{ id: null, title: 'Einleitung' }, { id: null, title: 'Predigt' }], 'plan');
+  assert.equal(s.start({ sampleRate: 8000, channels: 2 }).ok, true);
+  assert.equal(s.currentSegment().label, 'Einleitung');
+  assert.equal(s.currentSegment().start, 0);
+  assert.deepEqual(s.pendingSections().map((x) => x.label), ['Predigt']);
+  s.stop();
+  await s.whenWritten();
+  // Neue Aufnahme nach der beendeten: wieder mit dem ersten Punkt
+  assert.equal(s.start({ sampleRate: 8000, channels: 2 }).ok, true);
+  assert.equal(s.currentSegment().label, 'Einleitung');
+  s.stop();
+  await s.whenWritten();
+}));
+
+test('Punkt abschließen lässt eine Lücke bis zum nächsten Ablaufpunkt', () => withSession(async (s) => {
+  s.setAgenda([{ id: null, title: 'Einleitung' }, { id: null, title: 'Predigt' }], 'plan');
+  s.start({ sampleRate: 48000, channels: 2 });         // Einleitung beginnt bei 0
+  s.pushAudio(silence(10));
+  s.toggleSection({});                                  // M: Einleitung endet bei 10
+  assert.equal(s.currentSegment(), null);
+  s.pushAudio(silence(20));                             // 20 s Pause ohne aktiven Punkt
+  s.startNextPending();                                 // N: Predigt beginnt bei 30
+  assert.equal(labels(s), 'Einleitung:0-10 | Predigt:30-null');
+}));
+
+test('Ohne Ablaufpunkte läuft zu Beginn kein Abschnitt', () => withSession(async (s) => {
+  assert.equal(s.start({ sampleRate: 8000, channels: 2 }).ok, true);
+  assert.equal(s.currentSegment(), null);
 }));
 
 test('Schnitte: umschalten, verschmelzen, beim Stop schließen', () => withSession(async (s) => {

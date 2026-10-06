@@ -661,6 +661,9 @@ class Session extends EventEmitter {
     this._bucketFrames = 0;
     this.levels = { l: 0, r: 0, clip: false };
 
+    // Der erste offene Ablaufpunkt beginnt gleich mit der Aufnahme (ohne Punkte passiert nichts).
+    if (!this.openSection()) this.startNextPending(0);
+
     this._startAutosave();
     this._changed({ undoable: false });
     this._resetUndo();

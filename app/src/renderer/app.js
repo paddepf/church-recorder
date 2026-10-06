@@ -40,12 +40,28 @@
 
   /* ------------------------------------------------------------- Hilfsmittel */
 
+  /**
+   * Meldung. Fehler und Warnungen erscheinen groß und farbig oben in der Mitte und bleiben länger stehen
+   * (Klick schließt); Hinweise bleiben klein unten rechts. Dieselbe Meldung nie doppelt, höchstens drei je Ort.
+   */
   function toast(level, message, timeout = 6000) {
+    const alert = level === 'error' || level === 'warn';
     const el = document.createElement('div');
-    el.className = 'toast';
+    el.className = alert ? 'alert' : 'toast';
     el.dataset.level = level;
-    el.textContent = message;
-    $('toasts').appendChild(el);
+    const text = document.createElement('span');
+    text.className = 'msg';
+    text.textContent = message;
+    el.appendChild(text);
+    if (alert) {
+      el.title = 'Klicken zum Schließen';
+      el.addEventListener('click', () => el.remove());
+      timeout = Math.max(timeout, level === 'error' ? 30000 : 15000);
+    }
+    const box = $(alert ? 'alerts' : 'toasts');
+    [...box.children].filter((c) => c.textContent === message).forEach((c) => c.remove());
+    while (box.children.length >= 3) box.firstElementChild.remove();
+    box.appendChild(el);
     setTimeout(() => el.remove(), timeout);
   }
 
@@ -89,7 +105,6 @@
       onCutMoveEnd: async (id, edge, time) => { await window.api.cut.moveEdge(id, edge, time); },
       onCutRemove: async (id) => {
         await window.api.cut.remove(id);
-        toast('info', 'Schnitt entfernt.', 2500);
       },
       onRenameSection: (id, focus, r) => {
         const cv = $('wave').getBoundingClientRect();
@@ -216,6 +231,8 @@
     state.duration = session.duration || 0;
 
     document.body.dataset.status = session.status;
+    // Nach dem Beenden zeigt das Mini-Fenster statt der Aufnahmeknöpfe den MP3-Export.
+    document.body.classList.toggle('review', session.status === 'stopped' && Boolean(session.wavPath));
     $('service-name').textContent = session.service?.name || 'Kein Gottesdienst gewählt';
     $('service-date').textContent = session.service?.date || '';
 
@@ -232,8 +249,20 @@
     $('btn-pause').textContent = paused ? 'Fortsetzen' : 'Pause';
     $('btn-stop').disabled = !(rec || paused);
     $('btn-marker').disabled = !(rec || paused);
-    $('btn-marker').textContent = session.currentSegment ? 'Abschnitt beenden' : 'Abschnitt starten';
+    // Läuft ein Abschnitt, schließt der Knopf ihn ab: die Aufnahme läuft ohne aktiven Punkt weiter (Pause zwischen den
+    // Punkten), bis „Nächster Ablaufpunkt“ den nächsten beginnt.
+    $('btn-marker').textContent = session.currentSegment ? 'Abschnitt abschließen' : 'Abschnitt starten';
+    $('btn-marker').title = session.currentSegment
+      ? 'Laufenden Abschnitt abschließen (M): Die Aufnahme läuft weiter, die Pause gehört zu keinem Abschnitt – „Nächster Ablaufpunkt“ (N) beginnt den nächsten.'
+      : 'Eigenen Abschnitt an der aktuellen Stelle beginnen (M). Den nächsten Punkt aus dem Ablaufplan beginnt „Nächster Ablaufpunkt“ (N).';
     $('btn-next-item').disabled = !(rec || paused) || ((session.pending || []).length === 0 && !session.currentSegment);
+    // Zeigt, was „Nächster Ablaufpunkt“ gleich beginnt (der erste offene Punkt nach der Reihenfolge des Ablaufplans).
+    const nextPoint = (session.pending || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0))[0];
+    const nextText = !(rec || paused) ? '' : (nextPoint ? nextPoint.label : (session.currentSegment ? 'Abschnitt abschließen' : ''));
+    $('next-name').textContent = nextText;
+    $('next-name').hidden = !nextText;
+    $('btn-next-item').title = 'Laufenden Abschnitt beenden und den nächsten Ablaufpunkt beginnen (N)' +
+      (nextPoint ? ` – nächster: ${nextPoint.label}` : '');
     $('btn-play').disabled = !((stopped && session.wavPath) || rec || paused);
     updatePlayButton();
 
@@ -247,7 +276,7 @@
     const cur = live ? session.currentSegment : null;
     const curSection = cur ? (session.sections || []).find((y) => y.id === cur.markerId) : null;
     $('current-name').textContent = live
-      ? (cur?.label || 'Kein Abschnitt')
+      ? (cur?.label || ((session.pending || []).length ? 'Zwischen den Punkten' : 'Kein Abschnitt'))
       : (stopped ? 'Aufnahme beendet' : 'Bereit');
     const artistEl = $('current-artist');
     artistEl.hidden = !curSection;
@@ -294,15 +323,10 @@
     try {
       // Eine angezeigte, beendete Aufnahme würde sonst aus der Ansicht verschwinden. Per Fernsteuerung
       // nicht nachfragen (niemand am PC); die Datei bleibt ohnehin gespeichert.
-      if (opts.remote && state.session?.status === 'stopped' && state.session.wavPath) {
-        toast('info', 'Neue Aufnahme per Fernsteuerung gestartet – die vorherige ist gespeichert und unter „Aufnahmen“ zu finden.', 8000);
-      } else if (state.session?.status === 'stopped' && state.session.wavPath) {
-        const sections = (state.session.sections || []).filter((x) => x.start != null).length;
+      if (!opts.remote && state.session?.status === 'stopped' && state.session.wavPath) {
         const go = await confirmDialog(
           'Neue Aufnahme starten?',
-          `Die angezeigte Aufnahme (${longTime(state.session.duration || 0)}, ${sections} Abschnitte) ist als Datei gespeichert ` +
-          'und lässt sich über „Aufnahmen“ jederzeit wieder öffnen. Die neue Aufnahme beginnt mit leerer Wellenform, ' +
-          'die gesetzten Abschnitte werden zurückgesetzt. Noch nicht exportierte MP3-Abschnitte bitte vorher speichern.',
+          'Die bisherige Aufnahme bleibt unter „Aufnahmen“ gespeichert. Abschnitte werden zurückgesetzt.',
           'Neue Aufnahme starten'
         );
         if (!go) return;
@@ -346,8 +370,7 @@
       monitor.pause();
       state.cursorT = null;
       wave.update({ playhead: null });
-      $('export-result').textContent = '';
-      toast('success', `Aufnahme läuft – ${result.deviceLabel || 'Eingang'} bei ${Math.round(result.sampleRate / 1000)} kHz.`);
+      setExportResult('');
     } catch (err) {
       toast('error', err.message);
       if (opts.remote) window.api.reportRemoteResult({ kind: 'start', ok: false, error: err.message });
@@ -483,8 +506,7 @@
       state.cursorT = null;
       wave.update({ playhead: null });
       $('player').pause();
-      $('export-result').textContent = '';
-      toast('success', 'Aufnahme wird fortgesetzt.');
+      setExportResult('');
     } catch (err) {
       toast('error', err.message);
     } finally {
@@ -504,7 +526,6 @@
       if (opts.remote) window.api.reportRemoteResult({ kind: 'stop', ok: false, error: res.error });
       return toast('error', res.error);
     }
-    toast('success', 'Aufnahme beendet und gespeichert.');
     state.cursorT = null;
     wave.update({ playhead: res.duration || 0 });
     wave.follow = false;
@@ -804,9 +825,7 @@
 
       const mark = row.querySelector('.done');
       if (done) {
-        const sig = (list) => (list || []).map((c) => `${c.start.toFixed(1)}-${c.end.toFixed(1)}`).join(',');
-        const changed = Math.abs(done.start - seg.start) > 0.05 || Math.abs(done.end - seg.end) > 0.05
-          || sig(done.cuts) !== sig(seg.cuts);
+        const changed = exportChanged(done, seg);
         mark.textContent = changed ? '✓ geändert seit Export' : '✓ gesichert';
         mark.classList.toggle('stale', changed);
         mark.title = done.file;
@@ -826,6 +845,7 @@
     const n = $('export-list').querySelectorAll('input:checked').length;
     $('btn-export').disabled = !canExport || n === 0;
     $('btn-export').textContent = n > 1 ? `${n} Ausgewählte als MP3 speichern` : 'Ausgewählte als MP3 speichern';
+    updateCompactExport();
   }
 
   /** Zeigt, wohin exportiert wird (Unterordner des Export-Oberordners). */
@@ -966,6 +986,8 @@
     });
     $('btn-all-keys').addEventListener('click', () => openModal('modal-keys'));
     $('btn-export').addEventListener('click', exportSelected);
+    $('ce-export').addEventListener('click', exportFromCompact);
+    $('ce-new').addEventListener('click', () => $('btn-record').click());
     $('export-all').addEventListener('click', () => setExportChecks(true));
     $('export-none').addEventListener('click', () => setExportChecks(false));
 
@@ -1012,6 +1034,7 @@
   function applyCompact(on, onTop) {
     state.compact = Boolean(on);
     document.body.classList.toggle('compact', state.compact);
+    if (wave) wave.resize();           // Zeichenfläche passt sich an die neue Ansicht an (sonst gestreckt)
     $('btn-compact').textContent = state.compact ? 'Großes Fenster' : 'Mini-Fenster';
     if (typeof onTop === 'boolean') $('chk-ontop').checked = onTop;
   }
@@ -1055,12 +1078,12 @@
 
   async function undoEdit() {
     const res = await window.api.edit.undo();
-    toast(res.ok ? 'info' : 'warn', res.ok ? 'Rückgängig gemacht.' : res.error, 2500);
+    if (!res.ok) toast('warn', res.error, 3000);
   }
 
   async function redoEdit() {
     const res = await window.api.edit.redo();
-    toast(res.ok ? 'info' : 'warn', res.ok ? 'Wiederholt.' : res.error, 2500);
+    if (!res.ok) toast('warn', res.error, 3000);
   }
 
   /** Taste X: während der Aufnahme einen Schnitt beginnen bzw. beenden (die Stelle fehlt dann im MP3). */
@@ -1072,8 +1095,7 @@
     }
     const res = await window.api.cut.toggle(null);
     if (!res.ok) return toast('warn', res.error);
-    const text = { started: 'Schnitt beginnt – X beendet ihn.', ended: 'Schnitt beendet.', discarded: 'Schnitt zu kurz – verworfen.' }[res.change];
-    toast(res.change === 'started' ? 'warn' : 'info', text, 3000);
+    if (res.change === 'discarded') toast('info', 'Schnitt zu kurz – verworfen.', 3000);
   }
 
   function bindShortcuts() {
@@ -1215,11 +1237,10 @@
     });
 
     window.api.on('export-progress', ({ progress, index, total }) => {
-      const bar = $('export-progress');
-      bar.hidden = false;
-      if (total && progress < 1) $('export-result').textContent = `MP3 ${index} von ${total} wird erstellt …`;
-      bar.querySelector('i').style.width = Math.round(progress * 100) + '%';
-      if (progress >= 1) setTimeout(() => { bar.hidden = true; }, 800);
+      const bars = [$('export-progress'), $('ce-progress')];
+      bars.forEach((bar) => { bar.hidden = false; bar.querySelector('i').style.width = Math.round(progress * 100) + '%'; });
+      if (total && progress < 1) setExportResult(`MP3 ${index} von ${total} wird erstellt …`);
+      if (progress >= 1) setTimeout(() => { bars.forEach((bar) => { bar.hidden = true; }); }, 800);
     });
   }
 
@@ -1234,6 +1255,78 @@
     updateExportButton();
   }
 
+  /** Wurde der Abschnitt seit dem Export verändert (Zeitraum oder Schnitte)? */
+  function exportChanged(done, seg) {
+    const sig = (list) => (list || []).map((c) => `${c.start.toFixed(1)}-${c.end.toFixed(1)}`).join(',');
+    return Math.abs(done.start - seg.start) > 0.05 || Math.abs(done.end - seg.end) > 0.05
+      || sig(done.cuts) !== sig(seg.cuts);
+  }
+
+  /** Abschnitte, die noch nicht (oder nicht mehr in dieser Form) als MP3 gesichert sind. */
+  function unsavedSegments() {
+    const exports = state.session?.exports || {};
+    return (state.session?.segments || [])
+      .filter((s) => s.markerId && !s.open && (!exports[s.id] || exportChanged(exports[s.id], s)));
+  }
+
+  /** Ergebniszeile des Exports (große Ansicht und Mini-Fenster); mit `revealFile` samt Link „Im Ordner zeigen“. */
+  function setExportResult(text, revealFile) {
+    ['export-result', 'ce-result'].forEach((id) => {
+      const el = $(id);
+      el.textContent = text;
+      if (!revealFile) return;
+      el.appendChild(document.createTextNode(' '));
+      const link = document.createElement('button');
+      link.type = 'button';
+      link.className = 'mini-link';
+      link.textContent = 'Im Ordner zeigen';
+      link.addEventListener('click', () => window.api.app.reveal(revealFile));
+      el.appendChild(link);
+    });
+  }
+
+  /** Mini-Fenster nach dem Beenden: Zusammenfassung und ein Knopf für den Export. */
+  function updateCompactExport() {
+    const session = state.session;
+    const segments = session?.segments || [];
+    const real = segments.filter((s) => s.markerId && !s.open);
+    const unsaved = unsavedSegments();
+    const checked = real.filter((s) => state.exportChecked.has(s.id)).length;
+    const full = segments.find((s) => !s.markerId);
+    const word = (n) => `${n} ${n === 1 ? 'Abschnitt' : 'Abschnitte'}`;
+    let summary;
+    let label;
+    if (real.length === 0) {
+      summary = 'Keine Abschnitte gesetzt.';
+      label = 'Gesamte Aufnahme als MP3 speichern';
+    } else if (unsaved.length === 0) {
+      summary = `${word(real.length)} – alles gesichert ✓`;
+      label = null;                          // nichts mehr zu tun: kein Knopf
+    } else {
+      summary = `${word(real.length)} – ${unsaved.length} noch nicht gesichert`;
+      label = `${word(checked || unsaved.length)} als MP3 speichern`;
+    }
+    $('ce-summary').textContent = summary;
+    $('ce-export').hidden = label == null;
+    if (label != null) $('ce-export').textContent = label;
+    $('ce-export').disabled = state.exporting || (real.length === 0 && !full);
+  }
+
+  /** Knopf im Mini-Fenster: angehakte Abschnitte, sonst die noch nicht gesicherten (ohne Abschnitte: die ganze Aufnahme). */
+  function exportFromCompact() {
+    const session = state.session;
+    const segments = session?.segments || [];
+    const real = segments.filter((s) => s.markerId && !s.open);
+    const unsaved = unsavedSegments();
+    const checked = real.filter((s) => state.exportChecked.has(s.id));
+    let pick;
+    if (real.length === 0) pick = segments.filter((s) => !s.markerId);
+    else pick = checked.length ? checked : unsaved;
+    if (pick.length === 0) return;
+    state.exportChecked = new Set(pick.map((s) => s.id));
+    exportSelected();
+  }
+
   /** Speichert alle angehakten Abschnitte nacheinander als MP3. */
   async function exportSelected() {
     const items = (state.session?.segments || [])
@@ -1243,13 +1336,13 @@
 
     state.exporting = true;            // verhindert einen zweiten, parallelen Export
     $('btn-export').disabled = true;
-    $('export-result').textContent = `MP3 1 von ${items.length} wird erstellt …`;
+    setExportResult(`MP3 1 von ${items.length} wird erstellt …`);
     try {
       const res = await window.api.exportBatch(items);
       if (res.canceled) {
-        $('export-result').textContent = '';
+        setExportResult('');
       } else if (!res.ok) {
-        $('export-result').textContent = '';
+        setExportResult('');
         toast('error', res.error);
       } else {
         // Gesicherte Abschnitte sind danach nicht mehr vorausgewählt.
@@ -1258,16 +1351,12 @@
         });
         const n = res.files.length;
         if (n > 0) {
-          $('export-result').innerHTML = `${n} von ${items.length} MP3-Dateien gespeichert. <button type="button" class="mini-link" data-reveal>Im Ordner zeigen</button>`;
-          $('export-result').querySelector('[data-reveal]').addEventListener('click',
-            () => window.api.app.reveal(res.files[0]));
+          setExportResult(`${n} von ${items.length} MP3-Dateien gespeichert.`, res.files[0]);
         } else {
-          $('export-result').textContent = 'Keine MP3-Datei gespeichert.';
+          setExportResult('Keine MP3-Datei gespeichert.');
         }
         if (res.failed.length) {
           toast('error', `Nicht exportiert: ${res.failed.map((f) => `${f.label} (${f.error})`).join('; ')}`, 12000);
-        } else {
-          toast('success', n === 1 ? 'Die MP3 wurde gespeichert.' : `${n} MP3-Dateien wurden gespeichert.`);
         }
       }
     } finally {
@@ -1505,9 +1594,9 @@
         chooseService(services[0], true);
       } else if (services.length > 1) {
         const next = pickCurrentOrNext(services);
-        toast('info', `${services.length} Termine heute – gewählt: ${next.name} (${next.time}). Über den Namen oben lässt sich ein anderer wählen.`, 9000);
+        toast('info', `${services.length} Termine heute – gewählt: ${next.name} (${next.time}).`, 6000);
         chooseService(next, true);
-      } else toast('info', 'Heute ist kein Termin in ChurchTools – über den Namen oben lassen sich frühere oder kommende wählen.', 9000);
+      }
       return;
     }
     list.innerHTML = '';
@@ -1526,24 +1615,9 @@
       date: service.date
     });
     if (!res.ok) return toast('warn', 'Ablaufplan nicht geladen: ' + res.error);
-    if (res.usedDefaults) {
-      toast('info', `${service.name}: In ChurchTools ist kein Ablaufplan gepflegt – Vorlage „${res.templateName || 'Standard'}“ mit ${res.count} Punkten eingetragen.`, 9000);
-    } else {
-      toast('success', `${service.name}: ${res.count} Ablaufpunkte übernommen.`);
-    }
-    if (res.info) toast('info', `Infotext des Termins: „${res.info}“ – beim Predigt-Abschnitt ergänzt.`, 9000);
-    // Interpret-Vorschläge aus der Dienstplanung (Leitung, Predigt …)
-    if ((res.wanted || []).length) {
-      if (res.suggestionError) {
-        toast('warn', `Dienstplanung nicht gelesen: ${res.suggestionError}`, 8000);
-      } else if ((res.suggestions || []).length) {
-        const text = res.suggestions.map((x) => `${x.role}: ${x.name}`).join(' · ');
-        const auto = res.autoFilled ? ` · ${res.autoFilled} Punkt${res.autoFilled === 1 ? '' : 'e'} automatisch zugeordnet` : '';
-        toast('info', `Aus der Dienstplanung – ${text}${auto}`, 9000);
-      } else {
-        toast('info', `In der Dienstplanung ist für „${res.wanted.join(', ')}“ niemand eingetragen.`, 7000);
-      }
-    }
+    // Nur Ungewöhnliches melden; die übernommenen Punkte, der Infotext und die Interpreten stehen in den Listen.
+    if (res.usedDefaults) toast('info', `Kein Ablaufplan in ChurchTools – Vorlage „${res.templateName || 'Standard'}“ geladen.`, 5000);
+    if (res.suggestionError) toast('warn', `Dienstplanung nicht gelesen: ${res.suggestionError}`, 8000);
   }
 
   $('btn-manual-service')?.addEventListener('click', async () => {
@@ -1763,7 +1837,7 @@
       if (!go) return;
     }
     const res = await window.api.agenda.applyTemplate(id);
-    toast(res.ok ? 'success' : 'error', res.ok ? `Vorlage „${res.name}“: ${res.count} Punkte eingetragen.` : res.error, 4000);
+    if (!res.ok) toast('error', res.error, 4000);
   }
 
   function readDefaultAgenda() {
@@ -1892,7 +1966,6 @@
     applySettingsToForm();
     if (!keepOpen) {
       $('modal-settings').hidden = true;
-      toast('success', 'Einstellungen gespeichert.');
     }
   }
 

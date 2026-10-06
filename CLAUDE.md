@@ -43,6 +43,9 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   `start`/`end`; `start == null` = offener Ablaufpunkt, `end == null` = läuft
   gerade). Es läuft höchstens einer. Jeder Abschnitt hat eine feste `color`
   (Index, wird beim Anlegen vergeben; Farbtöne in `waveform.js`).
+- Pausen zwischen Punkten: **M** auf einem laufenden Abschnitt („Abschnitt abschließen“) lässt die Aufnahme ohne aktiven
+  Abschnitt weiterlaufen, bis **N** den nächsten beginnt (`startNextPending` beginnt bei fehlendem offenem Abschnitt
+  einfach an der Live-Stelle). Oberfläche: „Zwischen den Punkten“, wenn noch Punkte offen sind.
 - **M** (`section.toggle`) beginnt bzw. beendet einen Abschnitt, **N**
   beendet den laufenden und beginnt den nächsten Ablaufpunkt. Marken werden
   sofort gesetzt, benannt wird danach (✎, Doppelklick, F2).
@@ -64,6 +67,8 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   (`started`/`ended`). Nicht `action` überschreiben (kollidiert mit der Antwort).
 
 ### Aufnahme, Fortsetzen, Schutz
+- **Beim Start beginnt der erste offene Ablaufpunkt von selbst** (`Session.start` ruft `startNextPending(0)`; ohne Punkte
+  passiert nichts; gilt nicht beim Anhängen mit „Fortsetzen“ und nicht beim Fortsetzen aus der Pause).
 - „Neue Aufnahme starten“ fragt nach, wenn eine beendete Aufnahme angezeigt wird,
   und setzt deren Abschnitte zurück (Ablaufpunkte werden wieder offen). Dateinamen
   werden nie überschrieben (`_freeBasePath` hängt `_2`, `_3` an).
@@ -109,6 +114,15 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   **Die genaue Antwortform von ChurchTools wurde nicht gegen eine echte Instanz geprüft** (nur mit nachgebauten
   Antworten); bei Abweichungen die echte Antwort ansehen und `eventServices` anpassen. Fehler beim Lesen stören
   den Termin-Import nicht (Hinweis per Toast, `suggestionError`).
+
+### Meldungen (Toasts)
+- Nur melden, was Aufmerksamkeit braucht: Fehler, Warnungen (Speicher, Eingang, Schreiben, Dienstplanung) und
+  Hinweise, die sonst unsichtbar wären (z. B. Vorlage statt Ablaufplan, mehrere Termine heute). Bestätigungen, die
+  man schon sieht (Aufnahme läuft/beendet, gespeichert, Rückgängig, Vorlage geladen, Schnitt entfernt), gibt es nicht.
+  `toast()` zeigt dieselbe Meldung nicht doppelt und höchstens drei je Ort. **Fehler und Warnungen** (`error`/`warn`)
+  erscheinen groß und farbig oben in der Mitte (`#alerts`, rot bzw. gelb, mit ⚠), bleiben mindestens 30 s (Fehler) bzw.
+  15 s (Warnung) stehen und lassen sich per Klick schließen; Hinweise (`info`/`success`) klein unten rechts. Neue
+  Meldungen daran messen.
 
 ### Infotext des Termins als Predigttitel
 - `churchtools.eventServices` liefert zusätzlich `info` (`eventInfoText`: erste Zeile aus `description`, sonst
@@ -239,11 +253,17 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 
 ### Oberfläche
 - **Mini-Fenster** (`setCompact` in `main.js`, IPC `window:compact`, Ereignis `compact`): dasselbe Fenster,
-  nur verkleinert (Mindestgröße 400×310, Standard 480×340 unten rechts, Lage in `compactBounds`), wahlweise
+  nur verkleinert (Mindestgröße 400×266, Standard 480×270 unten rechts – jeweils Inhaltsgröße, Titelleiste/Rahmen kommen über `frameSize()` dazu, Lage in `compactBounds`), wahlweise
   immer im Vordergrund (`compactOnTop`). Bewusst kein zweites Fenster und kein Neuladen: Die Audioerfassung
   läuft in der Oberfläche. Die Ansicht blendet per `body.compact` alles außer Kopfzeile, Transport und den
   Knöpfen M/N aus; der laufende Abschnitt (`#current-item`, ein Button mit `#current-name`/`#current-artist`) steht groß
   mit Interpret im Mini-Fenster und öffnet per Klick `editSection` (Anker = Button; auch im großen Fenster nutzbar); die Wellenform bleibt in 1000 px Breite außerhalb des Fensters (sonst Zoom 0 bei Breite 0).
+  Nach dem Beenden (`body.review`) ersetzt die Karte `#compact-export` Aufnahme- und Abschnittsknöpfe: Zusammenfassung,
+  ein Export-Knopf (`exportFromCompact` → `exportSelected`, wählt angehakte, sonst ungesicherte bzw. seit dem Export geänderte; ohne Abschnitte die ganze
+  Aufnahme; ist alles gesichert, entfällt der Knopf) und „Neue Aufnahme“; Ergebnis und Fortschritt spiegelt `setExportResult` in beide Ansichten.
+  Der Knopf „Nächster Ablaufpunkt“ zeigt den Namen des ersten offenen Punkts (`#next-name`, nach `order` sortiert).
+  Die Wellenform baut ihre Zeichenfläche bei jeder Größenänderung neu auf (`ResizeObserver`) und beim Umschalten explizit
+  (`applyCompact` → `wave.resize()`): Sonst kommt das Fenster-Ereignis vor der Umstellung der Ansicht und alles wirkt gestreckt.
   Dialoge passen nicht hinein: `openModal`, `confirmDialog` und `?` schalten vorher auf groß zurück.
   Kürzel Strg+Umschalt+M im Renderer, auf dem Mac Cmd+Umschalt+M über das Menü „Fenster“.
 - Zeitangaben (Marken, Listen, Zeitleiste der Wellenform) nutzen dieselbe

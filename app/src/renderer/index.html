@@ -60,7 +60,7 @@
   <section class="wave-section">
     <div class="wave-toolbar">
       <button id="btn-marker" class="secondary" disabled title="Abschnitt an der aktuellen Stelle beginnen bzw. beenden (M) – Namen danach per Doppelklick oder ✎ ändern">Abschnitt starten</button>
-      <button id="btn-next-item" class="secondary" disabled title="Laufenden Abschnitt beenden und den nächsten Ablaufpunkt beginnen (N)">Nächster Ablaufpunkt</button>
+      <button id="btn-next-item" class="secondary" disabled title="Laufenden Abschnitt beenden und den nächsten Ablaufpunkt beginnen (N)"><span class="nb-label">Nächster Ablaufpunkt</span><span id="next-name" class="nb-name" hidden></span></button>
       <div class="spacer"></div>
       <button id="btn-play" class="secondary" disabled title="Abspielen bzw. während der Aufnahme ab dem Cursor mithören (Leertaste)">Abspielen</button>
       <label class="follow"><input type="checkbox" id="chk-follow" checked /> Ansicht folgt</label>
@@ -70,6 +70,14 @@
       </div>
     </div>
     <canvas id="wave" class="wave"></canvas>
+  </section>
+
+  <section id="compact-export" class="compact-export" aria-label="Export">
+    <div id="ce-summary" class="ce-summary"></div>
+    <button id="ce-export" class="primary">Als MP3 speichern</button>
+    <div id="ce-progress" class="progress" hidden><i></i></div>
+    <div id="ce-result" class="ce-result"></div>
+    <button id="ce-new" class="ghost">Neue Aufnahme</button>
   </section>
 
   <section class="panels">
@@ -114,6 +122,7 @@
     <button id="btn-all-keys" class="mini-link" title="Alle Kürzel anzeigen (?)">alle Kürzel (?)</button>
   </footer>
 
+  <div id="alerts" class="alerts" role="alert" aria-live="assertive"></div>
   <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
   <audio id="player" preload="none"></audio>
 

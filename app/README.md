@@ -77,14 +77,19 @@ Windows erzeugen. Der mitgelieferte Workflow erledigt beides auf GitHub.
    ein Termin eingetragen, wird er beim Start automatisch geladen. Die
    Programmpunkte erscheinen links als offene Punkte.
 2. **Neue Aufnahme starten.** Die Wellenform wächst mit, die Pegelanzeige zeigt den
-   Eingang, der obere Fensterrand leuchtet rot.
+   Eingang, der obere Fensterrand leuchtet rot. **Der erste Punkt des Ablaufplans beginnt dabei
+   automatisch** (bei Sekunde 0); ohne Ablaufpunkte läuft zunächst kein Abschnitt.
 3. Jeder Abschnitt besteht aus zwei Marken: Anfang und Ende. „Abschnitt starten“
-   (Taste **M**) setzt die Anfangsmarke, derselbe Knopf („Abschnitt beenden“,
+   (Taste **M**) setzt die Anfangsmarke, derselbe Knopf („Abschnitt abschließen“,
    wieder **M**) die Endmarke. Beginnt ein Programmpunkt des Ablaufplans, auf
    „Nächster Ablaufpunkt“ drücken (Taste **N**) oder den Punkt in der Liste anklicken:
    Ein laufender Abschnitt endet dabei an derselben Stelle. Die Marke wird sofort
    gesetzt, benannt wird danach direkt im Feld (siehe unten). Jeder Abschnitt hat
    eine eigene dezente Farbe in Wellenform und Liste.
+   **Pausen zwischen zwei Punkten:** Ist nach einem Punkt eine längere Pause (Ansage, Umbau, Stille), die in keinem
+   der beiden Abschnitte landen soll, zuerst **„Abschnitt abschließen“** (`M`) drücken: Die Aufnahme läuft ohne aktiven
+   Abschnitt weiter („Zwischen den Punkten“), bis **„Nächster Ablaufpunkt“** (`N`) den nächsten beginnt. Ohne
+   Zwischenschritt beginnt der nächste Punkt nahtlos da, wo der vorige endet.
 4. Marken sitzen selten sofort richtig. Sie lassen sich jederzeit – auch während
    der Aufnahme – am Fähnchen auf der Wellenform verschieben; mit der
    Leertaste lässt sich dabei in die Aufnahme hineinhören. Nach „Beenden“ werden noch
@@ -126,8 +131,9 @@ exportiert werden.
   bleiben als Vorschläge zum Anklicken; passende stehen zuerst und haben einen grünen Rand. Welche Dienste gelesen werden, steht unter **Einstellungen → ChurchTools →
   Dienste für Interpret-Vorschläge** (Standard: `Leitung, Predigt, Geschichte`, durch Komma getrennt; der Dienst „Geschichte“ gehört fest zum Ablaufpunkt „Kinderbeitrag“, „Leitung“ fest zu „Einleitung“ und „Abschluss“; diese Dienste werden immer gelesen; der Dienstname muss
   das Wort enthalten, „Leitung“ findet also auch „Gebetsleitung“).
-- Beim Wählen des Termins meldet die App kurz, welche Personen gefunden wurden – oder dass niemand
-  eingetragen ist bzw. die Dienstplanung nicht gelesen werden konnte.
+- Beim Wählen des Termins meldet die App nur Ungewöhnliches: dass kein Ablaufplan vorlag (und welche Vorlage
+  geladen wurde) oder dass die Dienstplanung nicht gelesen werden konnte. Eingetragene Punkte, Interpreten und
+  Infotext stehen direkt in den Listen.
 
 ### Name und Interpret direkt bearbeiten
 
@@ -173,8 +179,8 @@ ersetzt, bereits gesetzte Abschnitte bleiben.
 **Infotext als Predigttitel:** Trägt der Termin in ChurchTools einen Infotext (z. B. bei der Bibelstunde
 „Kolosser 2,6-7 Verwurzelt in Christus“), hängt die App ihn beim Laden an den Abschnitt „Predigt“ an – er heißt
 dann „Predigt: Kolosser 2,6-7 Verwurzelt in Christus“ und landet so auch im Dateinamen und im MP3-Titel. Nur die
-erste Zeile wird genommen; der Name lässt sich jederzeit wie gewohnt ändern. Ein Hinweis beim Laden nennt den
-übernommenen Text.
+erste Zeile wird genommen; der Name lässt sich jederzeit wie gewohnt ändern. Der Text steht dann im Namen des
+Abschnitts.
 
 **Passende Vorlage automatisch:** Fehlt der Ablaufplan, nimmt die App nicht blind die Standardvorlage,
 sondern die Vorlage, deren **Name zum Titel des Gottesdienstes passt** – ein Termin „Bibelstunde“ (oder
@@ -226,15 +232,27 @@ Meldung während der Aufnahme).
 
 Gehaltene Tasten wiederholen nicht (sonst würden sich z. B. Abschnitte im Wechsel starten und beenden).
 
+### Meldungen
+
+**Fehler und Warnungen** (z. B. Platte voll, Eingang ausgefallen, wenig Speicher) erscheinen groß und farbig oben
+in der Mitte: rot für Fehler, gelb für Warnungen. Sie bleiben mindestens 15 bzw. 30 Sekunden stehen und lassen
+sich per Klick schließen. Kleine Hinweise erscheinen dezent unten rechts und verschwinden von selbst. Bestätigungen
+für das, was man ohnehin sieht, gibt es nicht.
+
 ### Mini-Fenster
 
 Wird nebenher am PC gearbeitet, verkleinert **„Mini-Fenster“** (rechts oben) die App auf ein kleines
 Fenster mit Gottesdienstname, Timer, Pegel, dem **laufenden Abschnitt groß mit Interpret** und den Knöpfen für Aufnahme, Pause,
-Beenden, „Abschnitt starten“ und „Nächster Ablaufpunkt“. Ein Klick auf den laufenden Abschnitt (oder ✎) öffnet
+Beenden, „Abschnitt starten“ und „Nächster Ablaufpunkt“ (der Knopf nennt den Namen des Punktes, der als Nächstes
+beginnt – „→ Predigt“; ist keiner mehr offen, steht dort „→ Abschnitt abschließen“). Ein Klick auf den laufenden Abschnitt (oder ✎) öffnet
 direkt die Eingabe für Name und Interpret samt Vorschlägen aus der Dienstplanung (Klick auf den Interpret
 setzt den Cursor gleich dorthin); das geht auch im großen Fenster unter dem Timer. Die Tastenkürzel gelten weiter. Es liegt beim
 ersten Mal unten rechts und merkt sich danach Lage und Größe. Mit **„Immer oben“** bleibt es über
-anderen Programmen (Voreinstellung, abschaltbar). **„Großes Fenster“** stellt die vorherige Größe
+anderen Programmen (Voreinstellung, abschaltbar). **Nach dem Beenden** der Aufnahme verschwinden die Aufnahmeknöpfe;
+stattdessen zeigt das Mini-Fenster, wie viele Abschnitte noch nicht gesichert sind, und einen Knopf **„… als MP3
+speichern“** (angehakte bzw. noch nicht gesicherte oder seit dem Export geänderte Abschnitte, ohne Abschnitte die gesamte
+Aufnahme; ist alles gesichert, steht dort „alles gesichert ✓“ und der Knopf entfällt), dazu Fortschritt
+und „Im Ordner zeigen“. „Neue Aufnahme“ darunter beginnt die nächste. **„Großes Fenster“** stellt die vorherige Größe
 wieder her. Öffnet sich ein Dialog (z. B. Rückfrage beim Start, Einstellungen, `?`), schaltet die App
 selbst auf das große Fenster um. Die Aufnahme läuft beim Umschalten unverändert weiter.
 
