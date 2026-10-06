@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
-const { WavWriter, readInfo, readSlice } = require('./wav');
+const { WavWriter, readInfo, readSlice, writeCues } = require('./wav');
 const settings = require('./settings');
 const SectionLogic = require('../shared/sections');
 const RoleLogic = require('../shared/roles');
@@ -655,6 +655,7 @@ class Session extends EventEmitter {
     this.startedAt = new Date().toISOString();
     this.status = 'recording';
     this.finalized = false;
+    this._cueKey = null;
     this.peaks = [];
     this._restoredDuration = 0;
     this._bucketAcc = 0;
@@ -689,6 +690,33 @@ class Session extends EventEmitter {
       .map((x) => ({ ...x, start: null, end: null }));
   }
 
+  /**
+   * Trägt die Abschnitte als Cue-Marker in die WAV ein (nur bei beendeter, vollständig geschriebener Aufnahme;
+   * läuft wieder, wenn sich die Abschnitte ändern). Fehler stören nicht: Die Session-Datei bleibt maßgeblich.
+   */
+  _syncCues() {
+    if (this.status !== 'stopped' || this.writing || !this.wavPath) return;
+    const rate = this.sampleRate;
+    const points = this.sections
+      .filter((x) => x.start != null)
+      .slice()
+      .sort((a, b) => a.start - b.start)
+      .map((x) => ({
+        frame: x.start * rate,
+        length: x.end != null ? (x.end - x.start) * rate : 0,
+        label: x.artist ? `${x.label} (${x.artist})` : x.label
+      }));
+    const key = JSON.stringify(points);
+    if (key === this._cueKey) return;
+    try {
+      if (!fs.existsSync(this.wavPath)) return;
+      writeCues(this.wavPath, points);
+      this._cueKey = key;
+    } catch (err) {
+      console.error('Cue-Marker konnten nicht in die WAV geschrieben werden:', err.message);
+    }
+  }
+
   /** Setzt die beendete Aufnahme fort: neue Audiodaten werden an die WAV-Datei angehängt. */
   continueRecording() {
     if (this.status !== 'stopped') return { ok: false, error: 'Es gibt keine beendete Aufnahme zum Fortsetzen.' };
@@ -699,6 +727,7 @@ class Session extends EventEmitter {
     this.sampleRate = info.sampleRate;
     this.channels = info.channels;
     this.writer = new WavWriter(this.wavPath, this.sampleRate, this.channels, { append: true });
+    this._cueKey = null;
     this._attachWriter(this.writer);
     this.status = 'recording';
     this.finalized = false;
@@ -754,7 +783,7 @@ class Session extends EventEmitter {
     this._closing = this.writer ? this.writer.close() : null;
     if (this._closing) {
       this.writing = true;
-      this._closing.finally(() => { this.writing = false; });
+      this._closing.finally(() => { this.writing = false; this._syncCues(); });
     }
     this.status = 'stopped';
     this.finalized = true;
@@ -860,6 +889,7 @@ class Session extends EventEmitter {
       fs.renameSync(target + '.tmp', target);
       this._dirty = false;
       this._lastSave = Date.now();
+      this._syncCues();
     } catch (err) {
       console.error('Session konnte nicht gespeichert werden:', err);
       this.emit('error-notice', 'Die Session-Datei konnte nicht gespeichert werden.');

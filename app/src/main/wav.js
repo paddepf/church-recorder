@@ -10,6 +10,8 @@
  * - Neue Dateien reservieren Platz für einen "ds64"-Block. Überschreitet die Aufnahme 4 GB
  *   (gut 6 Stunden bei 48 kHz Stereo), wird die Datei im laufenden Betrieb zu RF64 – der
  *   Erweiterung des WAV-Formats für große Dateien. Es bleibt eine einzige Datei.
+ * - Nach dem Beenden hängt `writeCues` die Abschnitte als Cue-Marker (`cue `, `LIST`/`adtl`) hinter den
+ *   `data`-Block. `readInfo` erkennt das und rechnet die Audiolänge dann aus dem Kopf statt aus der Dateigröße.
  */
 
 const fs = require('fs');
@@ -155,6 +157,8 @@ class WavWriter extends EventEmitter {
       const blockAlign = channels * 2;
       this.dataBytes = info.dataBytes - (info.dataBytes % blockAlign);   // angefangenes Frame verwerfen
       this.fd = fs.openSync(filePath, 'r+');
+      // Cue-Marker hinter den Audiodaten fallen weg: Neue Daten überschreiben sie, beim Beenden kommen sie neu dazu.
+      try { fs.ftruncateSync(this.fd, this.dataOffset + this.dataBytes); } catch { /* nicht kritisch */ }
     } else {
       this.layout = 'ds64';
       this.dataOffset = HEADER_BYTES;
@@ -259,6 +263,7 @@ function readInfo(filePath) {
     let fmt = null;
     let dataOffset = null;
     let layout = 'legacy';
+    let headerData = 0;
     while (pos + 8 <= got) {
       const id = head.toString('ascii', pos, pos + 4);
       const size = head.readUInt32LE(pos + 4);
@@ -272,6 +277,7 @@ function readInfo(filePath) {
       }
       if (id === 'data') {
         dataOffset = pos + 8;
+        headerData = size;
         break;
       }
       pos += 8 + size + (size % 2);
@@ -279,7 +285,15 @@ function readInfo(filePath) {
     if (!fmt || dataOffset == null) throw new Error('WAV-Datei ohne gültigen Kopf.');
     if (fmt.bitsPerSample !== 16) throw new Error('Nur 16-Bit-WAV wird unterstützt.');
     const blockAlign = fmt.channels * 2;
-    const raw = Math.max(0, fs.fstatSync(fd).size - dataOffset);
+    const fileSize = fs.fstatSync(fd).size;
+    let raw = Math.max(0, fileSize - dataOffset);
+    // Hängen Cue-Marker hinter den Audiodaten, gilt die Länge aus dem Kopf (sonst zählten sie als Audio).
+    if (kind === 'RIFF' && headerData > 0 && headerData < MAX_UINT32 && dataOffset + headerData + 8 <= fileSize) {
+      const tail = Buffer.alloc(4);
+      fs.readSync(fd, tail, 0, 4, dataOffset + headerData);
+      const tailId = tail.toString('ascii');
+      if (tailId === 'cue ' || tailId === 'LIST') raw = headerData;
+    }
     const dataBytes = raw - (raw % blockAlign);
     return {
       channels: fmt.channels,
@@ -291,6 +305,78 @@ function readInfo(filePath) {
       frames: dataBytes / blockAlign,
       duration: dataBytes / blockAlign / fmt.sampleRate
     };
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/**
+ * Schreibt Cue-Marker hinter den data-Block (ersetzt vorhandene). Marker anderer Programme bleiben
+ * dabei nicht erhalten – die Datei gehört dieser App. RF64-Dateien (über 4 GB) bekommen keine.
+ * @param {{frame:number, label:string, length?:number}[]} points Startpunkt (Frame), Name, optional Länge (Frames)
+ * @returns {boolean} false, wenn die Datei keine Marker aufnehmen kann
+ */
+function writeCues(filePath, points) {
+  const info = readInfo(filePath);
+  const fd = fs.openSync(filePath, 'r+');
+  try {
+    const kind = Buffer.alloc(4);
+    fs.readSync(fd, kind, 0, 4, 0);
+    if (kind.toString('ascii') !== 'RIFF') return false;
+    const dataEnd = info.dataOffset + info.dataBytes;
+
+    const chunks = [];
+    if (points.length > 0) {
+      const cue = Buffer.alloc(12 + points.length * 24);
+      cue.write('cue ', 0, 'ascii');
+      cue.writeUInt32LE(4 + points.length * 24, 4);
+      cue.writeUInt32LE(points.length, 8);
+      const adtl = [Buffer.from('adtl', 'ascii')];
+      points.forEach((pt, i) => {
+        const id = i + 1;
+        const frame = Math.max(0, Math.min(Math.round(pt.frame), info.frames));
+        const at = 12 + i * 24;
+        cue.writeUInt32LE(id, at);              // dwName
+        cue.writeUInt32LE(frame, at + 4);       // dwPosition
+        cue.write('data', at + 8, 'ascii');     // fccChunk
+        cue.writeUInt32LE(0, at + 12);          // dwChunkStart
+        cue.writeUInt32LE(0, at + 16);          // dwBlockStart
+        cue.writeUInt32LE(frame, at + 20);      // dwSampleOffset
+        const text = Buffer.concat([Buffer.from(String(pt.label || ''), 'latin1'), Buffer.from([0])]);
+        const labl = Buffer.alloc(8 + 4 + text.length + (text.length % 2));
+        labl.write('labl', 0, 'ascii');
+        labl.writeUInt32LE(4 + text.length, 4);
+        labl.writeUInt32LE(id, 8);
+        text.copy(labl, 12);
+        adtl.push(labl);
+        if (pt.length > 0) {                    // Bereich (Region), z. B. in Reaper
+          const ltxt = Buffer.alloc(8 + 20);
+          ltxt.write('ltxt', 0, 'ascii');
+          ltxt.writeUInt32LE(20, 4);
+          ltxt.writeUInt32LE(id, 8);
+          ltxt.writeUInt32LE(Math.min(Math.round(pt.length), info.frames - frame), 12);
+          ltxt.write('rgn ', 16, 'ascii');
+          adtl.push(ltxt);
+        }
+      });
+      const body = Buffer.concat(adtl);
+      const list = Buffer.alloc(8);
+      list.write('LIST', 0, 'ascii');
+      list.writeUInt32LE(body.length, 4);
+      chunks.push(cue, list, body);
+    }
+
+    const tail = Buffer.concat(chunks);
+    if (dataEnd + tail.length - 8 > MAX_UINT32) return false;
+    fs.ftruncateSync(fd, dataEnd);
+    if (tail.length > 0) fs.writeSync(fd, tail, 0, tail.length, dataEnd);
+    const sizes = Buffer.alloc(4);
+    sizes.writeUInt32LE(dataEnd + tail.length - 8, 0);
+    fs.writeSync(fd, sizes, 0, 4, 4);                                  // RIFF-Größe
+    sizes.writeUInt32LE(Math.min(info.dataBytes, MAX_UINT32 - 1), 0);
+    fs.writeSync(fd, sizes, 0, 4, info.dataOffset - 4);                // data-Größe
+    try { fs.fdatasyncSync(fd); } catch { /* nicht jedes Dateisystem kann das */ }
+    return true;
   } finally {
     fs.closeSync(fd);
   }
@@ -329,4 +415,4 @@ function readSlice(filePath, startSec, endSec) {
   return readFrames(filePath, startFrame, Math.max(0, endFrame - startFrame), info);
 }
 
-module.exports = { WavWriter, readInfo, readSlice, readFrames, buildHeader, HEADER_BYTES, LEGACY_HEADER_BYTES, MAX_UINT32 };
+module.exports = { WavWriter, readInfo, writeCues, readSlice, readFrames, buildHeader, HEADER_BYTES, LEGACY_HEADER_BYTES, MAX_UINT32 };

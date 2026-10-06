@@ -63,3 +63,39 @@ test('Schreibfehler des Threads werden als Ereignis gemeldet, nur einmal', async
   assert.equal(w.failed, true);
   await w.close();
 });
+
+test('Cue-Marker hinter den Audiodaten: Länge bleibt, Anhängen entfernt sie, neu schreiben ersetzt sie', async () => {
+  const p = path.join(tmpDir(), 'cue.wav');
+  const w = new wav.WavWriter(p, 48000, 2);
+  w.write(tone(2));
+  await w.close();
+  const dataBytes = wav.readInfo(p).dataBytes;
+
+  assert.equal(wav.writeCues(p, [
+    { frame: 48000, label: 'Predigt (Müller)', length: 48000 },
+    { frame: 0, label: 'Einleitung' }
+  ]), true);
+  let info = wav.readInfo(p);
+  assert.equal(info.dataBytes, dataBytes);
+  assert.equal(info.duration, 2);
+  const buf = fs.readFileSync(p);
+  assert.equal(buf.readUInt32LE(4), buf.length - 8);
+  assert.ok(buf.includes(Buffer.from('cue ')) && buf.includes(Buffer.from('adtl')));
+  assert.ok(buf.includes(Buffer.from('Predigt (M\xfcller)', 'latin1')));
+  assert.equal(wav.readFrames(p, 0, 10).samples.length, 20);
+
+  // Neu schreiben ersetzt, leere Liste entfernt
+  wav.writeCues(p, [{ frame: 100, label: 'x' }]);
+  assert.equal(wav.readInfo(p).dataBytes, dataBytes);
+  wav.writeCues(p, []);
+  assert.equal(fs.statSync(p).size, wav.HEADER_BYTES + dataBytes);
+
+  // Anhängen schneidet die Marker ab und hängt die Daten direkt an die Audiodaten
+  wav.writeCues(p, [{ frame: 0, label: 'a' }]);
+  const w2 = new wav.WavWriter(p, 48000, 2, { append: true });
+  w2.write(tone(1));
+  await w2.close();
+  info = wav.readInfo(p);
+  assert.equal(info.duration, 3);
+  assert.equal(fs.statSync(p).size, wav.HEADER_BYTES + info.dataBytes);
+});

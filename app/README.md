@@ -4,7 +4,7 @@ Aufnahmeprogramm für Gottesdienste. Nimmt eine Stereospur des Audioeingangs auf
 gliedert sie über Abschnitte mit verschiebbarer Anfangs- und Endmarke in die Programmpunkte des Ablaufplans und
 speichert einen ausgewählten Abschnitt – zum Beispiel die Predigt – als MP3.
 
-- Durchgehende, verlustfreie WAV-Masteraufnahme; Abschnitte sind nur Metadaten
+- Durchgehende, verlustfreie WAV-Masteraufnahme; Abschnitte sind Metadaten (Session-Datei, nach dem Beenden zusätzlich als Cue-Marker in der WAV, lesbar in Audacity, Reaper u. a.)
 - Ablaufplan aus ChurchTools, Punkte per Drag-and-Drop auf die Wellenform
 - Netzwerkschnittstelle für ein eigenes Monitoring-Dashboard
 - Fernsteuerung über Bitfocus Companion
@@ -364,7 +364,7 @@ in `build/entitlements.mac.plist`.
 src/main/        Hauptprozess
   main.js        Fenster, IPC, Verdrahtung
   session.js     Zustand, Abschnitte, Aufnahme/Fortsetzen, Autosave
-  wav.js         WAV/RF64 schreiben (eigener Thread) und lesen
+  wav.js         WAV/RF64 schreiben (eigener Thread), lesen, Cue-Marker (Abschnitte) eintragen
   mp3.js         MP3-Export eines Abschnitts
   id3.js         ID3-Tags (Titel, Interpret, Album, Jahr)
   churchtools.js ChurchTools-API

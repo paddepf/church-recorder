@@ -164,6 +164,13 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - **RF64:** Neue Dateien haben 80 Byte Kopf mit `JUNK`-Block; ab 4 GB wird daraus `RF64`/`ds64`. `readInfo`
   liest Chunks und liefert `dataOffset` (44 bei alten Dateien, 80 bei neuen); alte Dateien werden beim Anhängen
   weiter im alten Format geschrieben (gedeckelt).
+- **Cue-Marker in der WAV:** Nach dem Beenden (und bei jeder späteren Änderung der Abschnitte, über `save()`)
+  schreibt `Session._syncCues` die Abschnitte per `wav.writeCues` hinter den `data`-Block: `cue `-Chunk plus
+  `LIST/adtl` mit `labl` (Name, bei Interpret „Name (Interpret)“, Latin-1) und `ltxt` (Region mit Länge). Die Session-Datei
+  bleibt maßgeblich. `readInfo` erkennt nachgestellte `cue `/`LIST`-Chunks und nimmt dann die Datenlänge aus dem Kopf
+  statt der Dateigröße (sonst zählten sie als Audio). `WavWriter` mit `append` schneidet sie ab (`ftruncate`), beim
+  erneuten Beenden kommen sie neu. RF64-Dateien (> 4 GB) bekommen keine Marker. Bei Aufnahmen, die nie beendet
+  wurden (Absturz), gibt es keine.
 - Beim Beenden gibt die Erfassung den angefangenen Block ab (`capture.flush()` vor `record.stop`).
 - **Beenden-Rückfrage asynchron** (`confirmAndFinishRecording`, `guardClose`): blockiert den Hauptprozess nicht.
 - **Fernbefehle mit echter Antwort:** `record.start/stop/toggle` warten auf `recording-started/-stopped`
