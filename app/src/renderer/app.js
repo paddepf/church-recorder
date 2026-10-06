@@ -242,9 +242,21 @@
       if ($('player').getAttribute('src') !== url) $('player').setAttribute('src', url);
     }
 
-    $('current-item').textContent = rec || paused
-      ? (session.currentSegment?.label || 'Kein Abschnitt')
+    // Laufender Abschnitt mit Interpret; ein Klick darauf bearbeitet beides (besonders im Mini-Fenster nützlich).
+    const live = rec || paused;
+    const cur = live ? session.currentSegment : null;
+    const curSection = cur ? (session.sections || []).find((y) => y.id === cur.markerId) : null;
+    $('current-name').textContent = live
+      ? (cur?.label || 'Kein Abschnitt')
       : (stopped ? 'Aufnahme beendet' : 'Bereit');
+    const artistEl = $('current-artist');
+    artistEl.hidden = !curSection;
+    artistEl.textContent = curSection ? (curSection.artist || 'Interpret ergänzen') : '';
+    artistEl.classList.toggle('unset', Boolean(curSection) && !curSection.artist);
+    $('current-item').disabled = !curSection;
+    if (curSection) $('current-item').style.setProperty('--hue', window.sectionHue(curSection));
+    else $('current-item').style.removeProperty('--hue');
+    $('current-item').dataset.live = curSection ? 'true' : 'false';
 
     if (!rec) $('timecode').textContent = longTime(session.duration || 0);
 
@@ -961,6 +973,13 @@
     $('btn-library').addEventListener('click', openLibrary);
     $('btn-service').addEventListener('click', openServicePicker);
     $('btn-compact').addEventListener('click', () => toggleCompact());
+    $('current-item').addEventListener('click', (e) => {
+      const cur = state.session?.currentSegment;
+      if (!cur) return;
+      const r = $('current-item').getBoundingClientRect();
+      editSection(cur.markerId, e.target.closest('#current-artist') ? 'artist' : 'name',
+        { left: r.left, top: r.top, width: r.width, height: r.height });
+    });
     $('chk-ontop').addEventListener('change', () => window.api.app.setCompactOnTop($('chk-ontop').checked));
     $('btn-open-folder').addEventListener('click', () => window.api.app.openRecordingsFolder());
 

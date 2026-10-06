@@ -229,8 +229,10 @@ Gehaltene Tasten wiederholen nicht (sonst würden sich z. B. Abschnitte im Wechs
 ### Mini-Fenster
 
 Wird nebenher am PC gearbeitet, verkleinert **„Mini-Fenster“** (rechts oben) die App auf ein kleines
-Fenster mit Gottesdienstname, Timer, Pegel, aktuellem Abschnitt und den Knöpfen für Aufnahme, Pause,
-Beenden, „Abschnitt starten“ und „Nächster Ablaufpunkt“. Die Tastenkürzel gelten weiter. Es liegt beim
+Fenster mit Gottesdienstname, Timer, Pegel, dem **laufenden Abschnitt groß mit Interpret** und den Knöpfen für Aufnahme, Pause,
+Beenden, „Abschnitt starten“ und „Nächster Ablaufpunkt“. Ein Klick auf den laufenden Abschnitt (oder ✎) öffnet
+direkt die Eingabe für Name und Interpret samt Vorschlägen aus der Dienstplanung (Klick auf den Interpret
+setzt den Cursor gleich dorthin); das geht auch im großen Fenster unter dem Timer. Die Tastenkürzel gelten weiter. Es liegt beim
 ersten Mal unten rechts und merkt sich danach Lage und Größe. Mit **„Immer oben“** bleibt es über
 anderen Programmen (Voreinstellung, abschaltbar). **„Großes Fenster“** stellt die vorherige Größe
 wieder her. Öffnet sich ein Dialog (z. B. Rückfrage beim Start, Einstellungen, `?`), schaltet die App

@@ -244,7 +244,23 @@ body[data-status="recording"] button.record .dot {
   line-height: 1;
 }
 body[data-status="recording"] .timecode { color: var(--tally-text); }
-.current-item { color: var(--muted); margin-top: 8px; font-size: 17px; }
+.current-item {
+  color: var(--muted);
+  margin-top: 8px;
+  font-size: 17px;
+  background: transparent;
+  border: none;
+  padding: 2px 6px;
+  text-align: center;
+}
+.current-item:disabled { opacity: 1; cursor: default; }
+.current-item[data-live="true"] { cursor: pointer; color: var(--text); }
+.current-item[data-live="true"]:hover { background: var(--panel-2); }
+.ci-text { display: inline; }
+.ci-artist { color: var(--muted); }
+.ci-artist::before { content: " · "; }
+.ci-artist.unset { font-style: italic; opacity: .7; }
+.ci-edit { display: none; }
 
 .meters { display: grid; gap: 7px; width: 280px; }
 .meter { display: flex; align-items: center; gap: 8px; }
@@ -680,13 +696,39 @@ body.compact .audio-warning { padding: 4px 8px; font-size: 12px; }
 
 body.compact .transport {
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: "clock meters" "controls controls";
+  grid-template-areas: "clock meters" "current current" "controls controls";
+  align-content: start;
   gap: 8px 14px;
   padding: 8px 10px;
 }
-body.compact .clock { grid-area: clock; align-items: flex-start; min-width: 0; }
+body.compact .clock { display: contents; }
+body.compact .timecode { grid-area: clock; }
 body.compact .timecode { font-size: 34px; }
-body.compact .current-item { font-size: 13px; margin-top: 2px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Laufender Abschnitt groß: Name und Interpret, Klick bearbeitet beides */
+body.compact .current-item {
+  grid-area: current;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 10px;
+  text-align: left;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-left: 4px solid hsl(var(--hue, 0), 55%, 62%);
+  border-radius: var(--radius);
+  font-size: 18px;
+  font-weight: 600;
+}
+body.compact .current-item:not([data-live="true"]) { border-left-color: var(--line); color: var(--muted); font-weight: 400; }
+body.compact .ci-text { display: flex; flex-direction: column; align-items: flex-start; flex: 1; min-width: 0; text-align: left; }
+body.compact .ci-text > * { max-width: 100%; }
+body.compact .ci-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; }
+body.compact .ci-artist { font-size: 14px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3; }
+body.compact .ci-artist::before { content: none; }
+body.compact .ci-edit { display: block; color: var(--muted); font-size: 16px; font-weight: 400; }
+body.compact .current-item[data-live="true"]:hover .ci-edit { color: var(--text); }
 body.compact .meters { grid-area: meters; width: 150px; gap: 4px; }
 body.compact .bar { height: 9px; }
 body.compact .meter-label { font-size: 11px; }

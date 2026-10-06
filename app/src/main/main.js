@@ -315,8 +315,8 @@ function setupLiveReload() {
 // Fenster, nur verkleinert (die Oberfläche blendet den Rest per CSS aus): Die Audioerfassung läuft in der
 // Oberfläche und darf dafür nicht neu geladen werden.
 const NORMAL_MIN = { width: 1024, height: 680 };
-const COMPACT_MIN = { width: 400, height: 250 };
-const COMPACT_DEFAULT = { width: 480, height: 290 };
+const COMPACT_MIN = { width: 400, height: 310 };
+const COMPACT_DEFAULT = { width: 480, height: 340 };
 let compact = null;            // Lage des großen Fensters ({ bounds, maximized }), solange das Mini-Fenster aktiv ist
 
 /** Zuletzt benutzte Lage des Mini-Fensters, wenn sie noch auf einem Bildschirm liegt; sonst unten rechts. */
