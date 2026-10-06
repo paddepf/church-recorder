@@ -163,3 +163,17 @@ test('Fortsetzen hängt an dieselbe Datei an', () => withSession(async (s) => {
   const { readInfo } = require(src('main/wav'));
   assert.equal(readInfo(s.wavPath).duration, 5);
 }));
+
+test('Punkt vor dem Start hineingezogen läuft ab 0:00 offen mit', () => withSession(async (s) => {
+  s.setAgenda([{ id: null, title: 'A' }, { id: null, title: 'B' }], 'plan');
+  const a = s.sections.find((x) => x.label === 'A');
+  assert.equal(s.placePending(a.id, 7).ok, true);
+  assert.equal(a.start, 0);
+  assert.equal(a.end, null);
+  assert.equal(s.placePending(s.sections.find((x) => x.label === 'B').id, 0).ok, false);
+  s.start({ sampleRate: 48000, channels: 2 });
+  assert.equal(s.openSection(), a);
+  s.pushAudio(silence(3));
+  s.startNextPending(s.duration);
+  assert.equal(labels(s), 'A:0-3 | B:3-null');
+}));

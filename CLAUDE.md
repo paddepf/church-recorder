@@ -57,6 +57,9 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   sie genau, hinter dem letzten beginnt er an der Ablagestelle, mitten in einem
   Abschnitt kürzt er diesen. Ein Klick auf den Punkt im Ablaufplan (nur während der Aufnahme) und N (`startPending`) setzen dagegen
   immer an der Live-Stelle.
+- **Vor dem ersten Start** (`status` `idle`) beginnt ein hineingezogener Ablaufpunkt bei 0 und bleibt offen (`end == null`),
+  statt als 0:00–0:00 zu enden; `Session.start` sieht den offenen Abschnitt und beginnt keinen weiteren. Vorab lässt
+  sich nur ein Punkt beginnen (`startPending`, Fehlermeldung beim zweiten).
 - Alte Sessions mit `markers` (Version 1) werden in `loadFromFile` zu Abschnitten
   migriert (`migrateSections`). Session-Datei ist jetzt `version: 2`.
 - Der Export kennt zusätzlich immer „Gesamte Aufnahme“ (`seg_full`). Der

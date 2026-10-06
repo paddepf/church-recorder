@@ -474,8 +474,14 @@ class Session extends EventEmitter {
   startPending(id, time) {
     const x = this.sections.find((y) => y.id === id && y.start == null);
     if (!x) return { ok: false, error: 'Ablaufpunkt nicht gefunden.' };
-    const t = Math.max(0, time == null ? this.duration : time);
     const live = this.status === 'recording' || this.status === 'paused';
+    // Vor der ersten Aufnahme gibt es noch keine Zeitachse: Der Punkt beginnt bei 0 und läuft offen mit,
+    // sobald die Aufnahme startet (sonst stünde er als 0:00–0:00 da und der Start übersähe ihn).
+    const waiting = this.status === 'idle';
+    const t = waiting ? 0 : Math.max(0, time == null ? this.duration : time);
+    if (waiting && this.placedSections().some((o) => o !== x)) {
+      return { ok: false, error: 'Vor dem Start der Aufnahme lässt sich nur ein Punkt vorab beginnen.' };
+    }
     const open = this.openSection();
     const placed = this.placedSections().filter((o) => o !== x);
 
@@ -497,7 +503,7 @@ class Session extends EventEmitter {
       // Bis zum nächsten Abschnitt, höchstens die geplante Dauer.
       x.end = x.plannedDuration ? Math.min(t + x.plannedDuration, next.start) : next.start;
       x.end = Math.max(x.end, t + MIN_SECTION);
-    } else if (!live) {
+    } else if (!live && !waiting) {
       const planned = x.plannedDuration ? t + x.plannedDuration : this.duration;
       x.end = Math.min(Math.max(planned, t + MIN_SECTION), Math.max(this.duration, t + MIN_SECTION));
     }
