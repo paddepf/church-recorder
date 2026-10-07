@@ -579,6 +579,20 @@ fieldset {
   margin: 0;
 }
 legend { color: var(--muted); font-size: 12px; padding: 0 6px; }
+fieldset[hidden] { display: none; }
+
+/* Einstellungen: Bereiche links, Inhalt rechts */
+.modal-card.settings { width: min(900px, 100%); height: min(660px, 100%); }
+.settings-layout { display: flex; flex: 1; min-height: 0; }
+.settings-nav { display: flex; flex-direction: column; gap: 2px; padding: 12px; width: 190px; flex-shrink: 0; border-right: 1px solid var(--line); }
+.settings-nav button { text-align: left; background: transparent; border-color: transparent; color: var(--muted); padding: 8px 12px; }
+.settings-nav button:hover { background: var(--panel-2); color: var(--text); }
+.settings-nav button[aria-selected="true"] { background: var(--raised); color: var(--text); font-weight: 600; border-color: var(--line); }
+.settings-layout .modal-body { flex: 1; min-width: 0; align-content: start; }
+@media (max-width: 700px) {
+  .settings-layout { flex-direction: column; }
+  .settings-nav { flex-direction: row; flex-wrap: wrap; width: auto; border-right: none; border-bottom: 1px solid var(--line); }
+}
 label { display: grid; gap: 5px; font-size: 13px; }
 label.check { display: flex; align-items: center; gap: 8px; }
 label.check input { width: auto; }

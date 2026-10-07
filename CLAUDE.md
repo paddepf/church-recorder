@@ -158,6 +158,9 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - Fernstart (`record.start` von Companion) startet ohne Rückfrage (`remote: true`); `record.toggle` beendet auch
   eine pausierte Aufnahme. Startbefehle setzen den Status lokal sofort auf `recording`, damit ein Doppeldruck die
   laufende Erfassung nicht beendet. Gehaltene Tasten (`e.repeat`) werden ignoriert.
+- Einstellungen: Reiter links (Audio · Ablage & Export · ChurchTools · Vorlagen · Netzwerk · Programm), rechts nur die
+  Gruppen des Reiters (`fieldset[data-tab]`, `showSettingsTab`; beim Öffnen immer zuletzt gewählter Reiter). Neue Felder in
+  die passende Gruppe setzen; gelesen/gespeichert wird unabhängig von der Sichtbarkeit.
 - Der Netzwerkstatus steht nicht in der Kopfzeile (zu unwichtig), sondern nur in den Einstellungen unter „Netzwerk“
   (`#net-info`: Port, verbundene Clients).
 - Einstellungen speichern startet die Netzwerkschnittstelle nur bei geänderten Werten neu. `settings:chooseFolder`

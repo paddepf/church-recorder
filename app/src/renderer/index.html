@@ -136,13 +136,22 @@
 
   <!-- Einstellungen -->
   <div id="modal-settings" class="modal" hidden>
-    <div class="modal-card">
+    <div class="modal-card settings">
       <div class="modal-head">
         <h2>Einstellungen</h2>
         <button class="icon close" data-close>×</button>
       </div>
+      <div class="settings-layout">
+      <nav class="settings-nav" role="tablist" aria-label="Bereiche">
+        <button type="button" data-tab="audio" aria-selected="true">Audio</button>
+        <button type="button" data-tab="ablage" aria-selected="false">Ablage &amp; Export</button>
+        <button type="button" data-tab="churchtools" aria-selected="false">ChurchTools</button>
+        <button type="button" data-tab="vorlagen" aria-selected="false">Vorlagen</button>
+        <button type="button" data-tab="netzwerk" aria-selected="false">Netzwerk</button>
+        <button type="button" data-tab="programm" aria-selected="false">Programm</button>
+      </nav>
       <div class="modal-body">
-        <fieldset>
+        <fieldset data-tab="audio">
           <legend>Audio</legend>
           <label>Eingang (Aufnahme)
             <select id="set-device" class="select"></select>
@@ -158,8 +167,8 @@
           </label>
         </fieldset>
 
-        <fieldset>
-          <legend>Ablage</legend>
+        <fieldset data-tab="ablage">
+          <legend>Ordner</legend>
           <label>Ordner für Aufnahmen
             <span class="row">
               <input id="set-dir" type="text" readonly />
@@ -175,6 +184,10 @@
             </span>
             <small>Darin entsteht je Gottesdienst ein Unterordner „Datum_Gottesdienstname“, die MP3-Dateien werden ohne Rückfrage dort abgelegt.</small>
           </label>
+        </fieldset>
+
+        <fieldset data-tab="ablage">
+          <legend>MP3-Export</legend>
           <label>Dateiname
             <input id="set-pattern" type="text" placeholder="{interpret}_{abschnitt}_{gottesdienst}_{datum}" />
             <small>Platzhalter: {interpret}, {abschnitt}, {gottesdienst}, {datum}, {zeit}</small>
@@ -193,7 +206,7 @@
           </label>
         </fieldset>
 
-        <fieldset>
+        <fieldset data-tab="churchtools">
           <legend>ChurchTools</legend>
           <label>Adresse
             <input id="set-ct-url" type="text" placeholder="https://meinegemeinde.church.tools" />
@@ -220,7 +233,7 @@
           <span id="ct-test-result" class="inline-result"></span>
         </fieldset>
 
-        <fieldset>
+        <fieldset data-tab="vorlagen">
           <legend>Vorlagen für Programmpunkte</legend>
           <small>Die Standardvorlage wird eingetragen, wenn für einen Termin in ChurchTools kein Ablaufplan gepflegt ist oder ohne ChurchTools aufgenommen wird. Andere Vorlagen lassen sich in der Kachel „Ablaufplan“ laden.</small>
           <label>Vorlage
@@ -238,7 +251,7 @@
           <button id="btn-default-agenda-add" class="secondary">Punkt hinzufügen</button>
         </fieldset>
 
-        <fieldset>
+        <fieldset data-tab="netzwerk">
           <legend>Netzwerk</legend>
           <label class="check"><input type="checkbox" id="set-net-on" /> Netzwerkschnittstelle aktiv</label>
           <label>Port
@@ -253,7 +266,7 @@
           <div id="net-info" class="inline-result"></div>
         </fieldset>
 
-        <fieldset>
+        <fieldset data-tab="programm">
           <legend>Programm</legend>
           <label>Erscheinungsbild
             <select id="set-theme" class="select">
@@ -266,6 +279,7 @@
           <div id="version-info" class="inline-result"></div>
           <button id="btn-check-update" class="secondary">Jetzt nach Update suchen</button>
         </fieldset>
+      </div>
       </div>
       <div class="modal-foot">
         <button id="btn-save-settings" class="primary">Einstellungen speichern</button>

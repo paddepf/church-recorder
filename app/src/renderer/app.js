@@ -1075,6 +1075,9 @@
     $('export-none').addEventListener('click', () => setExportChecks(false));
 
     $('btn-settings').addEventListener('click', () => openModal('modal-settings'));
+    document.querySelectorAll('#modal-settings .settings-nav button').forEach((b) => {
+      b.addEventListener('click', () => showSettingsTab(b.dataset.tab));
+    });
     $('btn-library').addEventListener('click', openLibrary);
     $('btn-service').addEventListener('click', openServicePicker);
     $('btn-plan-service').addEventListener('click', openServicePicker);
@@ -1112,7 +1115,20 @@
       // Ohne Speichern geschlossene Änderungen verwerfen: immer die gespeicherten Werte zeigen.
       applySettingsToForm();
       refreshDevices();
+      showSettingsTab(settingsTab);
     }
+  }
+
+  /** Bereiche des Einstellungsdialogs: nur die Gruppen des gewählten Reiters sind sichtbar. */
+  let settingsTab = 'audio';
+  function showSettingsTab(tab) {
+    settingsTab = tab;
+    document.querySelectorAll('#modal-settings fieldset[data-tab]').forEach((f) => { f.hidden = f.dataset.tab !== tab; });
+    document.querySelectorAll('#modal-settings .settings-nav button').forEach((b) => {
+      b.setAttribute('aria-selected', String(b.dataset.tab === tab));
+    });
+    const body = document.querySelector('#modal-settings .modal-body');
+    if (body) body.scrollTop = 0;
   }
 
   /* ----------------------------------------------------------- Mini-Fenster */

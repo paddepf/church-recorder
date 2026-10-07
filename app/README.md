@@ -55,6 +55,8 @@ Windows erzeugen. Der mitgelieferte Workflow erledigt beides auf GitHub.
 
 ## Einrichtung beim ersten Start
 
+Die Einstellungen sind in Reiter gegliedert (links: Audio, Ablage & Export, ChurchTools, Vorlagen, Netzwerk, Programm).
+
 1. **Einstellungen → Audio:** Eingang, Ausgang (fürs Mithören) und Abtastrate wählen. Die Auswahl wird
    gespeichert und beim nächsten Start wiederverwendet.
 2. **Einstellungen → Ablage:** Ordner für die Aufnahmen festlegen. Rechne mit
