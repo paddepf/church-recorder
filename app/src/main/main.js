@@ -1,5 +1,11 @@
 'use strict';
 
+// Technik-Test der Mehrspuraufnahme statt der App (siehe multitrack/probe.js).
+if (process.env.EBBTON_MT_PROBE) {
+  require('./multitrack/probe').run();
+  return;
+}
+
 const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu, screen, systemPreferences, powerSaveBlocker } = require('electron');

@@ -27,9 +27,9 @@ const SLOW_QUEUE_BYTES = 32 * 1024 * 1024;   // so viel ungeschriebenes Audio gi
  * Baut den Dateikopf.
  * layout 'ds64': 80 Byte mit Platz für RF64 (wird ab 4 GB benutzt); 'legacy': klassische 44 Byte.
  * Wird auch im Schreib-Thread verwendet (als Quelltext übergeben) – daher ohne äußere Abhängigkeiten.
+ * bitsPerSample: 16 (Stereoaufnahme) oder 24 (Mehrspur).
  */
-function buildHeader(layout, sampleRate, channels, dataBytes) {
-  const bitsPerSample = 16;
+function buildHeader(layout, sampleRate, channels, dataBytes, bitsPerSample = 16) {
   const byteRate = (sampleRate * channels * bitsPerSample) / 8;
   const blockAlign = (channels * bitsPerSample) / 8;
   const U32 = 0xFFFFFFFF;

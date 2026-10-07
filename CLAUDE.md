@@ -429,6 +429,39 @@ Der Ordnername des lokalen Klons ist egal.
 - Paket: `npm install && npm run package` im Ordner `companion-module/` → `ebbton-<version>.tgz`, in Companion über
   „Import module package“. Die `.tgz` wird nicht eingecheckt.
 
+### Mehrspuraufnahme (Oktober 2026, Branch `mehrspur`, im Aufbau)
+- Ziel: Schalter „Stereo | Mehrspur“ in der Kopfzeile; im Mehrspur-Modus alle 32 Kanäle des M32 über die DN32-USB-Karte
+  (ASIO) aufnehmen, Kanalnamen/-farben per OSC vom Pult, später über die USB-Ausgänge zurückspielen (virtueller
+  Soundcheck, Nachmischen). **Mehrspur ersetzt Stereo:** Für Mehrspur stellt der Nutzer am Pult die Kartenausgänge auf
+  Kanal 1–32 um, die Matrix (sonst auf 1–2) fehlt dann. Kein eigener Stereo-Mix, kein MP3-Export im Mehrspur-Modus.
+  Routing-Erkennung per OSC soll warnen, wenn Schalter und Pult nicht zusammenpassen. Eingangsquellen am Pult schaltet
+  Ebbton **nicht** um (Gefahr: keine Mikros im Gottesdienst). Nur Windows; auf dem Mac nur Simulation bzw. CoreAudio.
+- Festlegungen: 32 Mono-WAVs, 24 Bit, Rate des Treibers, Ordner pro Aufnahme, Dateinamen nach Pultnamen; alle Kanäle
+  scharf, einzeln abwählbar; Abschnitte laufen mit; eigener Ordner für Mehrspur-Aufnahmen; Raster mit 32
+  Kanalstreifen ohne Wellenform. Kirchen-PC: Samsung PM981a NVMe 512 GB, etwa 16,6 GB je Stunde bei 32 Kanälen.
+- Reihenfolge: 1 Technik-Test (erledigt) → 2 Anbindung an die Session → 3 OSC/Routing mit Pult-Simulator →
+  4 Oberfläche → 5 Zurückspielen → 6 Test am Pult, erst dann Merge in `main`.
+- **Audio über `audify`** (MIT, RtAudio; N-API, also ohne Neubau für Electron; Windows-Builds mit ASIO). audify meldet
+  Überläufe des Treibers nicht (Status im Callback wird ignoriert) und verwirft Blöcke mit abweichender Framezahl
+  still. Deshalb eigene Aussetzererkennung in `engine.js`: 1 s ohne Block → `stall`, nach 3 s Gerät neu öffnen
+  (wiederholt, neues RtAudio-Objekt, Gerät per Name), danach `gap` mit Stelle und Länge; zusätzlich Fehlbetrag
+  gegen die Uhr über ein 5-s-Fenster (> 0,25 s → `gap`), damit Uhrendrift und verspätete Blöcke nicht zählen.
+  Lücken werden nicht mit Stille aufgefüllt. Format vom Gerät: Int32, die oberen 3 Bytes ergeben 24 Bit.
+- Puffer: unter ASIO `frameSize` 0 (= Einstellung im Treiber-Panel), sonst 512 (CoreAudio nähme sonst 15 Frames).
+  Der Strom wird mit Ausgängen geöffnet, wenn das Gerät welche hat: ASIO erlaubt meist nur einen Strom je Gerät, das
+  Zurückspielen muss über denselben laufen.
+- **Eigener Prozess** (`utilityProcess`, `host.js`/`manager.js`): Erfassung und Schreiben laufen nicht im Hauptprozess
+  (32 Kanäle ≈ 6 MB/s) und nicht in der Oberfläche. Schreiben: je Spur 0,5 s sammeln, dann ein asynchrones `pwrite`
+  (Thread-Pool von Node), Kopf alle 2 s, `fdatasync` alle 10 s; Dateien werden mit `wx` angelegt (nie überschreiben),
+  scheitert eine, werden die übrigen wieder gelöscht. `wav.buildHeader` hat dafür `bitsPerSample` bekommen (Standard 16).
+- Technik-Test `EBBTON_MT_PROBE` (`probe.js`, ganz oben in `main.js` abgezweigt, siehe `app/README.md`): läuft auch mit
+  der installierten App. Geprüft auf dem Mac (Oktober 2026): Simulation und echtes Mikrofon (CoreAudio), jeweils in
+  Entwicklung und gepackt (`electron-builder --mac dir`); audify wird von electron-builder entpackt
+  (`app.asar.unpacked`), Quellcode/`vendor` (17 MB) über `build.files` ausgeschlossen. **Noch nicht geprüft:** Windows mit
+  ASIO (erst mit ASIO4ALL/FlexASIO ohne Pult, dann DN32-USB mit 32 Kanälen) und der Windows-Build im Release-Workflow.
+  Der CI-Test „audify lädt“ prüft auf dem Windows-Runner, dass die ASIO-Schnittstelle vorhanden ist.
+- Gerätenamen von CoreAudio kommen bei Sonderzeichen verstümmelt an (audify); für ASIO („DN32-USB“) unerheblich.
+
 ### Entfernt: Mitschrift
 Die lokale Transkription (whisper.cpp, Mitschrift-Panel, Einstellungen) wurde
 bewusst wieder ausgebaut, weil sie keinen Mehrwert brachte. Nicht neu einbauen,

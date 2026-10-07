@@ -411,6 +411,13 @@ src/main/        Hauptprozess
   netserver.js   WebSocket-Schnittstelle
   updater.js     Updates über GitHub Releases
   settings.js    Einstellungen, Token-Verschlüsselung
+  multitrack/    Mehrspuraufnahme (im Aufbau, Branch `mehrspur`)
+    engine.js    Gerät öffnen (audify/ASIO), Pegel, Aussetzer erkennen, Gerät neu öffnen
+    writer.js    eine 24-Bit-Mono-WAV je Spur
+    simulator.js nachgebautes 32-Kanal-Pult für Entwicklung und Tests
+    host.js      Einstieg des eigenen Mehrspur-Prozesses (Electron utilityProcess)
+    manager.js   Hauptprozess-Seite: startet den Prozess, Befehle und Ereignisse
+    probe.js     Technik-Test (siehe unten)
 src/shared/      Von Hauptprozess und Oberfläche gemeinsam genutzt
   sections.js    Regeln für Abschnitte (Verschieben ohne Überlappung)
   roles.js       Zuordnung Dienst (ChurchTools) zu Programmpunkt
@@ -430,6 +437,26 @@ zu **RF64**, der WAV-Erweiterung für große Dateien – es bleibt eine Datei, d
 Programme (Audacity, VLC, Reaper …) öffnen. Der Hauptprozess
 berechnet Pegel und Wellenform-Spitzenwerte und führt die einzige gültige
 Version des Zustands – Oberfläche, Netzwerk und Companion sehen alle dasselbe.
+
+### Mehrspuraufnahme (im Aufbau)
+
+Für Aufnahmen aller 32 Kanäle des Midas M32 (DN32-USB-Karte, ASIO) entsteht ein eigener Aufnahmeweg:
+Ein eigener Prozess öffnet das Gerät über `audify` (RtAudio; unter Windows ASIO) und schreibt je
+Kanal eine 24-Bit-Mono-WAV. Noch nicht in der Oberfläche; bisher gibt es nur den **Technik-Test**,
+der statt der App läuft und Gerät, Prozess und Schreiben prüft – auch mit der installierten App:
+
+```
+EBBTON_MT_PROBE=list      Geräte auflisten
+EBBTON_MT_PROBE=auto      Gerät mit den meisten Eingängen 10 s aufnehmen
+EBBTON_MT_PROBE=<id>      dieses Gerät aufnehmen
+EBBTON_MT_PROBE=simulate  simuliertes 32-Kanal-Pult aufnehmen
+EBBTON_MT_SECONDS=30      Dauer ändern
+```
+
+Windows (Eingabeaufforderung): `set EBBTON_MT_PROBE=auto` und danach
+`"%LOCALAPPDATA%\Programs\Ebbton\Ebbton.exe"` bzw. im Ordner `app/` `npx electron .`;
+macOS/Entwicklung: `EBBTON_MT_PROBE=auto npx electron .`. Ergebnis als Dialog und in
+`logs/mt-probe.log` im Einstellungsordner; die Testaufnahme bleibt im Temp-Ordner (Pfad im Protokoll).
 
 Tests: `npm test` im Ordner `app/` (Node-Testrunner, ohne Electron). Sie liegen in `test/` und
 laufen bei jedem Push automatisch auf Windows und macOS (`.github/workflows/test.yml`).
