@@ -55,7 +55,12 @@ contextBridge.exposeInMainWorld('api', {
     /** Geräte für die Mehrspuraufnahme (unter Windows ASIO); simulate: nachgebautes 32-Kanal-Pult. */
     devices: (simulate) => invoke('multitrack:devices', { simulate }),
     /** Abhören vor dem Start: {active, info: {device, inputs, sampleRate …}, error, stalled}. */
-    state: () => invoke('multitrack:state')
+    state: () => invoke('multitrack:state'),
+    /** Beendete Mehrspuraufnahme zum Pult zurückspielen (Sekunden; loop: {start, end} oder null). */
+    play: (start, loop) => invoke('multitrack:play', { start, loop }),
+    seek: (seconds) => invoke('multitrack:seek', { seconds }),
+    loop: (loop) => invoke('multitrack:loop', { loop }),
+    stopPlayback: () => invoke('multitrack:stopPlay')
   },
 
   mixer: {
@@ -128,7 +133,7 @@ contextBridge.exposeInMainWorld('api', {
 
   on: (channel, handler) => {
     const allowed = ['state', 'levels', 'toast', 'command', 'menu', 'health', 'compact',
-      'network-status', 'update-status', 'export-progress', 'mixer', 'multitrack', 'track-levels'];
+      'network-status', 'update-status', 'export-progress', 'mixer', 'multitrack', 'track-levels', 'multitrack-play'];
     if (!allowed.includes(channel)) return () => {};
     const listener = (_event, payload) => handler(payload);
     ipcRenderer.on(channel, listener);

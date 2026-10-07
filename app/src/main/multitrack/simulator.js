@@ -44,6 +44,9 @@ class SimulatedAudio {
     this.nChannels = input.nChannels;
     this.firstChannel = input.firstChannel || 0;
     this.inputCallback = inputCallback;
+    this.frameOutputCallback = output ? frameOutputCallback : null;
+    this.outChannels = output ? output.nChannels : 0;
+    this.outQueue = [];
     this.errorCallback = errorCallback;
     this.open = true;
     this.frame = 0;
@@ -68,6 +71,12 @@ class SimulatedAudio {
     while (this._sent < due) {
       this._sent++;
       this.inputCallback && this.inputCallback(this._block());
+      // Ausgabe im selben Takt verbrauchen (wie das Gerät); leere Warteschlange = Stille.
+      if (this.outChannels && this.outQueue.length) {
+        const block = this.outQueue.shift();
+        if (this.captureOutput) this.captureOutput.push(block);
+        this.frameOutputCallback && this.frameOutputCallback();
+      }
     }
   }
 
@@ -106,8 +115,13 @@ class SimulatedAudio {
 
   isStreamOpen() { return this.open; }
   isStreamRunning() { return this.running; }
-  write() {}
-  clearOutputQueue() {}
+  /** Ausgabeblock einreihen (wie audify: genau frameSize × Ausgänge × 4 Byte). */
+  write(buf) {
+    if (buf.length !== this.frameSize * this.outChannels * 4) throw new Error('Simulation: falsche Blockgröße');
+    this.outQueue.push(Buffer.from(buf));
+  }
+
+  clearOutputQueue() { this.outQueue = []; }
 }
 
 module.exports = { SimulatedAudio, SIM_DEVICE_ID };

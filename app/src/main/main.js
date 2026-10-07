@@ -170,7 +170,7 @@ async function continueMultitrack() {
 
 multitrack.on('levels', (l) => {
   session.pushTrackLevels(l);
-  send('track-levels', { peaks: l.peaks, clips: l.clips });   // Kanalpegel, auch beim Abhören vor dem Start
+  send('track-levels', { peaks: l.peaks, clips: l.clips, play: l.play });   // Kanalpegel (auch vor dem Start), Abspielposition
 });
 
 /* Abhören: Im Mehrspur-Modus ist das Gerät auch ohne Aufnahme offen, damit die Kanalpegel schon vor dem Start
@@ -275,6 +275,11 @@ multitrack.on('reopen', ({ ok: reopened, error }) => {
   if (!reopened) console.warn('Mehrspur: Gerät neu öffnen fehlgeschlagen:', error);
 });
 multitrack.on('device-error', ({ message }) => toast('error', `Mehrspur: ${message}`));
+multitrack.on('playback', (p) => {
+  send('multitrack-play', p);
+  // Zu Ende gespielt: im Stereo-Modus braucht niemand mehr das Gerät.
+  if (!p.playing && settings.get('recordingMode') !== 'multitrack') updateMonitor();
+});
 multitrack.on('device-warning', ({ message }) => console.warn('Mehrspur:', message));
 multitrack.on('exit', ({ code, wasRecording }) => {
   console.error('Mehrspur-Prozess beendet, Code', code);
@@ -1167,6 +1172,36 @@ ipcMain.handle('mixer:forget', () => {
 });
 ipcMain.handle('mixer:simulateRouting', (_e, { kind } = {}) => (mixer.simulateRouting(kind) ? ok() : fail('Kein simuliertes Pult.')));
 ipcMain.handle('multitrack:state', () => ok({ monitor: monitorState }));
+
+/* Zurückspielen einer beendeten Mehrspuraufnahme über die Ausgänge (virtueller Soundcheck, Nachmischen). */
+ipcMain.handle('multitrack:play', async (_e, { start = 0, loop = null } = {}) => {
+  try {
+    if (session.mode !== 'multitrack' || session.status !== 'stopped') return fail('Abspielen gibt es nur für eine beendete Mehrspuraufnahme.');
+    await session.whenWritten();
+    const files = session.trackFiles();
+    const missing = files.filter((t) => !fs.existsSync(t.file));
+    if (missing.length) return fail(`Spurdateien fehlen (${missing.length}).`);
+    // Gerät mit der Abtastrate der Aufnahme öffnen (bleibt offen; im Stereo-Modus schließt es nach dem Abspielen wieder).
+    const { device, simulate } = await multitrackDevice();
+    const info = await multitrack.monitor({ simulate, deviceId: device.id, sampleRate: session.sampleRate });
+    monitorState = { active: true, info, error: null, stalled: false };
+    sendMultitrack();
+    return ok({ play: await multitrack.play({ tracks: files, start, loop }) });
+  } catch (err) { return fail(err); }
+});
+ipcMain.handle('multitrack:seek', async (_e, { seconds } = {}) => {
+  try { return ok({ play: await multitrack.seek(seconds) }); } catch (err) { return fail(err); }
+});
+ipcMain.handle('multitrack:loop', async (_e, { loop } = {}) => {
+  try { return ok({ play: await multitrack.setLoop(loop || null) }); } catch (err) { return fail(err); }
+});
+ipcMain.handle('multitrack:stopPlay', async () => {
+  try {
+    const play = await multitrack.stopPlayback();
+    await updateMonitor();                    // im Stereo-Modus das Gerät wieder freigeben
+    return ok({ play });
+  } catch (err) { return fail(err); }
+});
 ipcMain.handle('multitrack:devices', async (_e, { simulate } = {}) => {
   try { return ok(await multitrack.devices({ simulate: Boolean(simulate) })); } catch (err) { return fail(err); }
 });
@@ -1395,6 +1430,7 @@ ipcMain.handle('session:open', (_e, { path: p }) => {
     if (session.status === 'recording' || session.status === 'paused') {
       return fail('Während einer laufenden Aufnahme kann keine andere Session geöffnet werden.');
     }
+    multitrack.stopPlayback().catch(() => {});
     return ok({ state: session.loadFromFile(p) });
   } catch (err) { return fail(err); }
 });
@@ -1408,6 +1444,7 @@ ipcMain.handle('session:new', () => {
   if (session.status === 'recording' || session.status === 'paused') {
     return fail('Es läuft noch eine Aufnahme.');
   }
+  multitrack.stopPlayback().catch(() => {});
   session.reset();
   session.emit('state', session.snapshot());
   return ok({ state: session.snapshot() });

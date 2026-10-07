@@ -440,7 +440,7 @@ Der Ordnername des lokalen Klons ist egal.
   scharf, einzeln abwählbar; Abschnitte laufen mit; eigener Ordner für Mehrspur-Aufnahmen. Kanalübersicht als
   Bereich „Kanäle“ an der Stelle des Exports; die Wellenform (Abschnitte!) bleibt, sie zeigt den lautesten Kanal. Kirchen-PC: Samsung PM981a NVMe 512 GB, etwa 16,6 GB je Stunde bei 32 Kanälen.
 - Reihenfolge: 1 Technik-Test (erledigt) → 2 Anbindung an die Session (erledigt) → 3 OSC/Routing mit Pult-Simulator (erledigt) →
-  4 Oberfläche (erledigt) → 5 Zurückspielen → 6 Test am Pult, erst dann Merge in `main`.
+  4 Oberfläche (erledigt) → 5 Zurückspielen (erledigt) → 6 Test am Pult, erst dann Merge in `main`.
 - **Audio über `audify`** (MIT, RtAudio; N-API, also ohne Neubau für Electron; Windows-Builds mit ASIO). audify meldet
   Überläufe des Treibers nicht (Status im Callback wird ignoriert) und verwirft Blöcke mit abweichender Framezahl
   still. Deshalb eigene Aussetzererkennung in `engine.js`: 1 s ohne Block → `stall`, nach 3 s Gerät neu öffnen
@@ -512,6 +512,20 @@ Der Ordnername des lokalen Klons ist egal.
   `hasAudio(session)`. (Der damalige Test hatte den versteckten Knopf per Skript geklickt.)
 - Geprüft (Mac, Simulator, echte App per DevTools-Protokoll): Kanalwahl, Aufnahme, Sperren, Stummwarnung, Neuladen
   der Oberfläche während der Aufnahme (Aufnahme läuft ungestört weiter), Beenden, Umschalten, Gerät im Stereo-Modus frei.
+- **Zurückspielen (Schritt 5):** `player.js` liest die Spuren (0,5-s-Zwischenspeicher je Spur) und baut Ausgabeblöcke
+  (Int32, alle Ausgänge, Spur auf Kanal k → Ausgang k, Kanäle ohne Spur still) mit Springen und Schleife (nahtlos).
+  `engine.play()` nur bei offenem Gerät und ohne Aufnahme; den Takt gibt das Gerät vor: audify ruft nach jedem
+  verbrauchten Block `frameOutputCallback`, dann wird nachgelegt (etwa 150 ms Vorlauf, `PLAY_AHEAD_SECONDS`); leere
+  Warteschlange = Stille. Position = Anfang des gerade laufenden Blocks. `start()` beendet das Abspielen. Der Simulator
+  verbraucht Ausgabeblöcke im Eingangstakt (`captureOutput` für Tests: lückenlos, richtige Reihenfolge, richtiger Ausgang).
+- Hauptprozess `multitrack:play/seek/loop/stopPlay`: öffnet das Gerät mit der Rate der Aufnahme (`monitor` mit
+  `sampleRate`); im Stereo-Modus wird es nach dem Ende bzw. Stopp per `updateMonitor()` wieder freigegeben (gemessen).
+  Laden einer anderen Session oder „Neu“ beendet das Abspielen; die Oberfläche stoppt es auch vor einem Stereo-Start
+  (bevor die Erfassung den Eingang öffnet). Oberfläche: „Zum Pult abspielen“/„Stopp“ (`toggleMultitrackPlayback`),
+  Wellenform-Klick/Abschnitt-Klick springen (`setPlayhead`), „Schleife“ (`#chk-loop`, `playbackLoop`: gewählter
+  Abschnitt, sonst ganze Aufnahme), Position im Kanal-Bereich, einmaliger Hinweis auf die Quelle am Pult.
+- Eingangsquellen am Pult schaltet Ebbton weiterhin nicht um. **Ungeprüft:** echte Ausgabe über ASIO/DN32 (Latenz,
+  ob audify bei ASIO die Ausgabe sauber taktet) – erst am Pult.
 - **Mischpult per OSC (Schritt 3, `src/main/mixer/`):** nur lesend, UDP 10023, eigenes kleines OSC (`osc.js`, keine
   Abhängigkeit). `client.js` liest `/ch/NN/config/name|color` und `/config/routing/CARD/1-8 … 25-32`, meldet sich mit
   `/xremote` an (alle 8 s erneuern, Änderungen am Pult kommen sofort), Lebenszeichen per `/xinfo`; 12 s ohne Antwort

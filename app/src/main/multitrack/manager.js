@@ -91,6 +91,23 @@ class MultitrackManager extends EventEmitter {
     return this.child ? this._call('unmonitor') : Promise.resolve(true);
   }
 
+  /** Zurückspielen über die Ausgänge (siehe engine.play). */
+  play(opts) {
+    return this._call('play', opts);
+  }
+
+  seek(seconds) {
+    return this._call('seek', { seconds });
+  }
+
+  setLoop(loop) {
+    return this._call('loop', { loop });
+  }
+
+  stopPlayback() {
+    return this.child ? this._call('stopPlayback') : Promise.resolve({ playing: false });
+  }
+
   pause() {
     return this._call('pause');
   }

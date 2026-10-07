@@ -18,12 +18,13 @@
  *   Uhrendrift und verspätete Blöcke nicht zählen), folgt ebenfalls 'gap'.
  *
  * Ereignisse: 'levels' ({peaks, clips, buckets, seconds}), 'stall' ({at, recording}), 'gap' ({at, seconds, recording}), 'reopen' ({ok, error}),
- * 'device-error' / 'device-warning' ({type, message}), 'write-error', 'slow'.
+ * 'device-error' / 'device-warning' ({type, message}), 'write-error', 'slow', 'playback' (playInfo()).
  */
 
 const { EventEmitter } = require('events');
 const { MultiWavWriter } = require('./writer');
 const { SimulatedAudio, SIM_DEVICE_ID } = require('./simulator');
+const { Player } = require('./player');
 
 const FORMAT_SINT32 = 0x8;
 const LEVEL_EVERY_MS = 50;
@@ -34,6 +35,7 @@ const GAP_MIN_SECONDS = 0.25;
 const DRIFT_WINDOW_MS = 5000;
 const CLIP = 2147483647 * 0.999;   // etwa -0,01 dBFS
 const DEFAULT_FRAME_SIZE = 512;
+const PLAY_AHEAD_SECONDS = 0.15;  // so viel Audio liegt beim Abspielen in der Ausgabe bereit
 const BUCKET_MS = 50;              // Wellenform: ein Spitzenwert je 50 ms (wie PEAK_BUCKET_MS der Session)
 const ERROR_DEBUG_WARNING = 1;     // RtAudioErrorType: 0 WARNING, 1 DEBUG_WARNING, ab 2 Fehler
 
@@ -158,6 +160,7 @@ class MultitrackEngine extends EventEmitter {
    */
   start(o) {
     if (this.running) throw new Error('Mehrspuraufnahme läuft bereits.');
+    this.stopPlayback();                  // Aufnehmen hat Vorrang vor dem Zurückspielen
     const wasOpen = this.opened;
     this.open(o);
     try {
@@ -190,7 +193,7 @@ class MultitrackEngine extends EventEmitter {
     // ASIO: 0 = Puffergröße aus dem Treiber-Panel. Andere Schnittstellen nähmen sonst winzige Puffer (CoreAudio: 15 Frames).
     const frameSize = this.opts.frameSize || (process.platform === 'win32' ? 0 : DEFAULT_FRAME_SIZE);
     const actual = b.openStream(output, input, FORMAT_SINT32, this.opts.sampleRate, frameSize, 'Ebbton',
-      (buf) => this._onInput(buf), null, 0,
+      (buf) => this._onInput(buf), output ? () => this._onFrameOut() : null, 0,
       (type, message) => {
         this.emit(type > ERROR_DEBUG_WARNING ? 'device-error' : 'device-warning', { type, message });
       });
@@ -261,7 +264,8 @@ class MultitrackEngine extends EventEmitter {
       peaks: Array.from(this.peaks, (p) => Math.round((p / 2147483648) * 10000) / 10000),
       clips: Array.from(this.clips, Boolean),
       buckets: this.buckets,
-      seconds: this.seconds
+      seconds: this.seconds,
+      play: this.playInfo()
     });
     this.peaks.fill(0);
     this.clips.fill(0);
@@ -348,8 +352,106 @@ class MultitrackEngine extends EventEmitter {
     try { if (b.isStreamOpen()) b.closeStream(); } catch { /* egal */ }
   }
 
+  /* ---------------------------------------------------------------- Zurückspielen */
+
+  /**
+   * Spielt Spuren über die Ausgänge (Spur auf Kanal k → Ausgang k). Nicht während einer Aufnahme.
+   * @param {{tracks:{channel:number, file:string}[], start?:number, loop?:{start:number, end:number}|null}} o Sekunden
+   */
+  play({ tracks, start = 0, loop = null }) {
+    if (!this.opened) throw new Error('Das Gerät ist nicht offen.');
+    if (this.running) throw new Error('Während der Aufnahme wird nicht abgespielt.');
+    if (!this.outputs) throw new Error(`„${this.device.name}“ hat keine Ausgänge.`);
+    this.stopPlayback({ quiet: true });
+    const player = new Player({ tracks, outputs: this.outputs, sampleRate: this.opts.sampleRate, blockFrames: this.frameSize });
+    try {
+      if (loop) player.setLoop(loop);
+      player.seek(start);
+    } catch (err) {
+      player.close();
+      throw err;
+    }
+    this.player = player;
+    this.playQueue = [];                 // Anfangs-Frames der Blöcke, die in der Ausgabe liegen
+    this.playHeard = player.pos;         // Frame, der gerade erklingt (ungefähr: Anfang des laufenden Blocks)
+    this._fillOutput();
+    this.emit('playback', this.playInfo());
+    return this.playInfo();
+  }
+
+  /** Springen (Sekunden): die bereitliegenden Blöcke werden verworfen. */
+  seek(seconds) {
+    if (!this.player) return null;
+    this.backend.clearOutputQueue();
+    this.playQueue = [];
+    this.player.seek(seconds);
+    this.playHeard = this.player.pos;
+    this._fillOutput();
+    return this.playInfo();
+  }
+
+  setLoop(loop) {
+    if (!this.player) return null;
+    this.player.setLoop(loop);
+    return this.playInfo();
+  }
+
+  stopPlayback({ quiet = false } = {}) {
+    if (!this.player) return null;
+    try { this.backend.clearOutputQueue(); } catch { /* Gerät schon zu */ }
+    this.player.close();
+    this.player = null;
+    this.playQueue = [];
+    if (!quiet) this.emit('playback', this.playInfo());
+    return this.playInfo();
+  }
+
+  playInfo() {
+    if (!this.player) return { playing: false };
+    const rate = this.player.sampleRate;
+    const loop = this.player.loop;
+    return {
+      playing: true,
+      pos: this.playHeard / rate,
+      length: this.player.length / rate,
+      loop: loop ? { start: loop.start / rate, end: loop.end / rate } : null
+    };
+  }
+
+  /** Blöcke nachlegen, bis etwa 150 ms bereitliegen. */
+  _fillOutput() {
+    const p = this.player;
+    if (!p) return;
+    const target = Math.max(2, Math.ceil((this.opts.sampleRate * PLAY_AHEAD_SECONDS) / this.frameSize));
+    while (this.playQueue.length < target && !p.ended) {
+      const { buf, startFrame } = p.nextBlock();
+      try {
+        this.backend.write(buf);
+      } catch (err) {
+        this.emit('device-error', { type: 'play', message: `Abspielen: ${err.message}` });
+        this.stopPlayback();
+        return;
+      }
+      this.playQueue.push(startFrame);
+    }
+  }
+
+  /** Das Gerät hat einen Ausgabeblock verbraucht. */
+  _onFrameOut() {
+    if (!this.player) return;
+    const start = this.playQueue.shift();
+    if (start != null) this.playHeard = start;
+    if (this.player.ended && this.playQueue.length === 0) {
+      this.playHeard = this.player.length;
+      this.stopPlayback();                 // zu Ende gespielt
+      return;
+    }
+    this._fillOutput();
+  }
+
   /** Gerät schließen, Zeitgeber anhalten. */
   _shutdown() {
+    this.stopPlayback();
     clearInterval(this._levelTimer);
     clearInterval(this._watchTimer);
     if (this.backend) this._close(this.backend);

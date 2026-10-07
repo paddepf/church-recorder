@@ -4,7 +4,7 @@
  * Einstieg des Mehrspur-Prozesses (Electron `utilityProcess`). Nimmt Befehle vom Hauptprozess
  * entgegen und reicht die Ereignisse der Engine zurück.
  *
- * Befehle: {id, cmd: 'devices'|'monitor'|'unmonitor'|'info'|'start'|'pause'|'resume'|'stop', args} → Antwort {id, ok, result | error}.
+ * Befehle: {id, cmd: 'devices'|'monitor'|'unmonitor'|'info'|'start'|'pause'|'resume'|'stop'|'play'|'seek'|'loop'|'stopPlayback', args} → Antwort {id, ok, result | error}.
  * Ereignisse: {event, data}.
  */
 
@@ -15,7 +15,7 @@ const engine = new MultitrackEngine();
 
 const send = (msg) => port.postMessage(msg);
 
-for (const ev of ['levels', 'stall', 'gap', 'reopen', 'device-error', 'device-warning', 'write-error', 'slow']) {
+for (const ev of ['levels', 'stall', 'gap', 'reopen', 'device-error', 'device-warning', 'write-error', 'slow', 'playback']) {
   engine.on(ev, (data) => send({ event: ev, data }));
 }
 
@@ -25,6 +25,10 @@ const commands = {
   unmonitor: () => engine.unmonitor(),
   info: () => engine.info(),
   start: (args) => engine.start(args),
+  play: (args) => engine.play(args),
+  seek: (args) => engine.seek(args.seconds),
+  loop: (args) => engine.setLoop(args.loop),
+  stopPlayback: () => engine.stopPlayback(),
   pause: () => engine.pause(),
   resume: () => engine.resume(),
   stop: () => engine.stop()

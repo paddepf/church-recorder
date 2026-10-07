@@ -295,3 +295,87 @@ test('Aufnahme ohne Abhören schließt das Gerät beim Stopp; Wechsel während d
   await engine.stop();
   assert.equal(engine.opened, false);
 });
+
+/* ---------------------------------------------------------------- Zurückspielen */
+
+const { Player } = require(src('main/multitrack/player'));
+
+/** Zwei Spuren (Kanal 2 und 5) mit eindeutigen Werten je Frame: (Kanal+1)*65536 + Frame. */
+async function writeTracks(dir, frames, rate = 1000) {
+  const tracks = [{ channel: 1, file: path.join(dir, 'a.wav') }, { channel: 4, file: path.join(dir, 'b.wav') }];
+  const w = new MultiWavWriter({ sampleRate: rate, deviceChannels: 8, tracks });
+  w.write(block(frames, 8));
+  await w.close();
+  return tracks;
+}
+
+/** Wert auf Ausgang `ch` in Frame `i` eines Ausgabeblocks (oberste 3 Bytes des Int32). */
+const outValue = (buf, outputs, i, ch) => buf.readInt32LE((i * outputs + ch) * 4) >> 8;
+
+test('Abspieler legt jede Spur auf ihren Ausgang, mit Springen, Schleife und Ende', async () => {
+  const tracks = await writeTracks(tmpDir(), 1000);
+  const p = new Player({ tracks, outputs: 8, sampleRate: 1000, blockFrames: 300 });
+  assert.equal(p.length, 1000);
+  let b = p.nextBlock();
+  assert.equal(b.startFrame, 0);
+  for (const i of [0, 150, 299]) {
+    assert.equal(outValue(b.buf, 8, i, 1), 2 * 65536 + i);
+    assert.equal(outValue(b.buf, 8, i, 4), 5 * 65536 + i);
+    assert.equal(outValue(b.buf, 8, i, 0), 0, 'Ausgang ohne Spur bleibt still');
+  }
+  b = p.nextBlock();
+  assert.equal(outValue(b.buf, 8, 0, 1), 2 * 65536 + 300);
+
+  p.seek(0.9);                                     // 100 Frames vor dem Ende
+  b = p.nextBlock();
+  assert.equal(outValue(b.buf, 8, 99, 4), 5 * 65536 + 999);
+  assert.equal(outValue(b.buf, 8, 100, 4), 0, 'nach dem Ende Stille');
+  assert.equal(p.ended, true);
+
+  p.setLoop({ start: 0.2, end: 0.45 });            // 250 Frames Schleife
+  assert.equal(p.ended, false);
+  b = p.nextBlock();
+  assert.equal(b.startFrame, 200);
+  assert.equal(outValue(b.buf, 8, 249, 1), 2 * 65536 + 449);
+  assert.equal(outValue(b.buf, 8, 250, 1), 2 * 65536 + 200, 'nahtlos zurück zum Schleifenanfang');
+  assert.throws(() => p.setLoop({ start: 0.1, end: 0.2 }), /zu kurz/);
+  p.close();
+
+  assert.throws(() => new Player({ tracks, outputs: 8, sampleRate: 48000, blockFrames: 256 }), /1000 Hz/);
+  assert.throws(() => new Player({ tracks, outputs: 1, sampleRate: 1000, blockFrames: 256 }), /Keine Spur/);   // Spuren auf Kanal 2 und 5
+});
+
+test('Engine spielt im Takt des Geräts ab und hält am Ende an', async () => {
+  const dir = tmpDir();
+  // 0,6 s bei 48 kHz auf Kanal 2 und 5
+  const tracks = [{ channel: 1, file: path.join(dir, 'a.wav') }, { channel: 4, file: path.join(dir, 'b.wav') }];
+  const w = new MultiWavWriter({ sampleRate: 48000, deviceChannels: 8, tracks });
+  w.write(block(28800, 8));
+  await w.close();
+
+  const sim = new SimulatedAudio({ channels: 8 });
+  const engine = new MultitrackEngine({ createBackend: () => sim });
+  engine.monitor({ simulate: true, deviceId: SIM_DEVICE_ID });
+  sim.captureOutput = [];
+  const events = [];
+  engine.on('playback', (p) => events.push(p.playing));
+  const info = engine.play({ tracks, start: 0 });
+  assert.equal(info.playing, true);
+  assert.ok(sim.outQueue.length >= 2 && sim.outQueue.length <= 20, `Vorlauf ${sim.outQueue.length} Blöcke`);
+  assert.throws(() => engine.start({ simulate: true, deviceId: SIM_DEVICE_ID, tracks: [] }), /Keine Spur ausgewählt/);   // Aufnahme beendet das Abspielen
+  assert.equal(engine.playInfo().playing, false);
+
+  sim.captureOutput = [];
+  engine.play({ tracks, start: 0.2 });
+  await wait(800);
+  assert.deepEqual(events.slice(-1), [false], 'am Ende angehalten');
+  // Alles, was am Gerät ankam, hintereinander: Kanal 2 läuft lückenlos von Frame 9600 bis 28799.
+  const got = [];
+  for (const b of sim.captureOutput) for (let i = 0; i < b.length / 32; i++) got.push(outValue(b, 8, i, 1));
+  const first = got.indexOf(2 * 65536 + 9600);
+  assert.equal(first, 0, 'beginnt an der Sprungstelle');
+  const played = got.slice(0, 28800 - 9600);
+  assert.ok(played.every((v, i) => v === 2 * 65536 + 9600 + i), 'lückenlos und in der richtigen Reihenfolge');
+  assert.ok(got.slice(played.length).every((v) => v === 0), 'danach Stille');
+  engine.unmonitor();
+});

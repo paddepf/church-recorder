@@ -316,8 +316,9 @@
     $('next-name').hidden = !nextText;
     $('btn-next-item').title = 'Laufenden Abschnitt beenden und den nächsten Ablaufpunkt beginnen (N)' +
       (nextPoint ? ` – nächster: ${nextPoint.label}` : '');
-    // Abspielen und Mithören gibt es nur bei Stereo (eine WAV-Datei).
-    $('btn-play').disabled = session.mode === 'multitrack' || !((stopped && session.wavPath) || rec || paused);
+    // Mehrspur: Abspielen zum Pult nur bei beendeter Aufnahme, kein Mithören während der Aufnahme.
+    $('btn-play').disabled = session.mode === 'multitrack' ? !stopped : !((stopped && session.wavPath) || rec || paused);
+    $('loop-wrap').hidden = !(session.mode === 'multitrack' && stopped);
     updatePlayButton();
 
     if (stopped && session.wavPath) {
@@ -400,6 +401,9 @@
       if (capture.running) await capture.stop();
       // Mehrspur: Gerät und Dateien öffnet der Mehrspur-Prozess, die Oberfläche erfasst nichts.
       const multi = state.settings.recordingMode === 'multitrack';
+      // Läuft noch das Zurückspielen einer Mehrspuraufnahme: anhalten (und bei Stereo das Gerät freigeben), bevor
+      // die Erfassung startet.
+      if (mt.play?.playing) await window.api.multitrack.stopPlayback();
       let rec;
       if (multi) {
         rec = await window.api.record.start({});
@@ -754,6 +758,11 @@
         state.selectedSectionId = x.id;
         wave.scrollTo(x.start);
         renderLists();
+        // Mehrspur: an den Abschnittsanfang springen; mit Schleife wird dieser Abschnitt wiederholt.
+        if (isMultitrack() && state.session.status === 'stopped') {
+          setPlayhead(x.start, true);
+          if (mt.play?.playing) window.api.multitrack.loop(playbackLoop());
+        }
       });
       li.querySelector('[data-rename]').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -985,6 +994,11 @@
       return;
     }
     wave.update({ playhead: t });
+    state.playheadT = t;
+    if (isMultitrack()) {
+      if (seekPlayer && mt.play?.playing) window.api.multitrack.seek(t);
+      return;
+    }
     if (seekPlayer && $('player').src && state.session?.status === 'stopped') {
       $('player').currentTime = t;
     }
@@ -992,7 +1006,7 @@
 
   /** Leertaste / Abspielen-Knopf: Wiedergabe der fertigen Datei oder Mithören der laufenden Aufnahme. */
   function togglePlayback() {
-    if (isMultitrack()) return;          // Mehrspur: kein Abspielen/Mithören (Leertaste)
+    if (isMultitrack()) return toggleMultitrackPlayback();
     const status = state.session?.status;
     if (status === 'recording' || status === 'paused') {
       if (monitor.playing) return monitor.pause();
@@ -1012,6 +1026,11 @@
   function updatePlayButton() {
     const status = state.session?.status;
     const live = status === 'recording' || status === 'paused';
+    if (state.session?.mode === 'multitrack') {
+      $('btn-play').textContent = mt.play?.playing ? 'Stopp' : 'Zum Pult abspielen';
+      $('btn-play').title = 'Spuren über die USB-Ausgänge zum Mischpult spielen, ab der Marke in der Wellenform (Leertaste)';
+      return;
+    }
     const playing = live ? monitor.playing : state.playing;
     $('btn-play').textContent = playing ? 'Pause' : (live ? 'Mithören' : 'Abspielen');
   }
@@ -1557,6 +1576,10 @@
     window.api.on('mixer', (m) => renderMixer(m));
     window.api.on('multitrack', (m) => { mt.monitor = m; renderChannels(); });
     window.api.on('track-levels', (l) => applyTrackLevels(l));
+    window.api.on('multitrack-play', (p) => applyPlayback(p));
+    $('chk-loop').addEventListener('change', () => {
+      if (mt.play?.playing) window.api.multitrack.loop(playbackLoop()).then((r) => { if (!r.ok) toast('error', r.error); });
+    });
 
     window.api.on('toast', ({ level, message }) => toast(level, message));
 
@@ -2131,7 +2154,7 @@
 
   const CH_SILENT_LEVEL = 0.001;     // etwa -60 dBFS
   const CH_SILENT_AFTER_MS = 20000;  // so lange still → Kanal gilt als stumm (nur während der Aufnahme)
-  const mt = { monitor: null, rows: [], key: '', hold: [], holdAt: [], clipUntil: [], loudAt: [], silentText: '' };
+  const mt = { monitor: null, rows: [], key: '', hold: [], holdAt: [], clipUntil: [], loudAt: [], silentText: '', play: null, playText: '' };
 
   /** Eingestellte Aufnahmeart (für die nächste Aufnahme). */
   function settingMode() {
@@ -2252,6 +2275,7 @@
         parts.push('Angezeigt wird eine Stereo-Aufnahme – zum Exportieren oben auf „Stereo“ schalten.');
       }
     }
+    if (mt.playText) parts.push(mt.playText);
     if (mt.monitor?.stalled) parts.push('<span class="bad">Das Gerät liefert keine Daten (Mischpult aus?)</span>');
     if (state.mixer?.configured && state.mixer.status !== 'connected') parts.push('<span class="bad">Mischpult nicht verbunden – Namen fehlen</span>');
     if (state.diskHoursLeft != null && settingMode() === 'multitrack' && !isLive()) parts.push(`Platz für ca. ${formatHours(state.diskHoursLeft)}`);
@@ -2277,8 +2301,57 @@
     saveArmed(armed.size === model.length ? null : [...armed].sort((a, b) => a - b));
   }
 
+  /* Zurückspielen zum Pult (beendete Mehrspuraufnahme) */
+
+  /** Schleife: gewählter Abschnitt, sonst die ganze Aufnahme; ohne Häkchen keine. */
+  function playbackLoop() {
+    if (!$('chk-loop').checked) return null;
+    const x = (state.session?.sections || []).find((y) => y.id === state.selectedSectionId && y.start != null && y.end != null);
+    return x ? { start: x.start, end: x.end } : { start: 0, end: state.session?.duration || 0 };
+  }
+
+  async function toggleMultitrackPlayback() {
+    const s = state.session;
+    if (!s || s.status !== 'stopped') return;
+    if (mt.play?.playing) {
+      const res = await window.api.multitrack.stopPlayback();
+      if (!res.ok) toast('error', res.error);
+      return;
+    }
+    if (!mt.playHintShown) {
+      mt.playHintShown = true;
+      toast('info', 'Die Spuren laufen über die USB-Ausgänge zum Mischpult. Zu hören sind sie nur, wenn dort die Kanäle die USB-Karte als Quelle haben.', 12000);
+    }
+    const start = state.playheadT != null && state.playheadT < (s.duration || 0) - 0.5 ? state.playheadT : 0;
+    const res = await window.api.multitrack.play(start, playbackLoop());
+    if (!res.ok) return toast('error', res.error);
+    applyPlayback(res.play);
+  }
+
+  /** Abspielstand: Knopf, Marke in der Wellenform, Zeile im Kanal-Bereich. */
+  function applyPlayback(play) {
+    const was = mt.play?.playing;
+    mt.play = play;
+    if (play?.playing) {
+      wave.update({ playhead: play.pos });
+      state.playheadT = play.pos;
+    }
+    const loopName = play?.loop
+      ? ((state.session?.sections || []).find((x) => x.id === state.selectedSectionId && Math.abs(x.start - play.loop.start) < 0.05)?.label || 'ganze Aufnahme')
+      : null;
+    const text = play?.playing
+      ? `▶ Spielt zum Pult: ${fmt(play.pos)} / ${fmt(play.length)}${loopName ? ` · Schleife: ${loopName}` : ''}`
+      : '';
+    if (text !== mt.playText) {
+      mt.playText = text;
+      if (multitrackView()) renderChannelStatus();
+    }
+    if (was !== play?.playing) updatePlayButton();
+  }
+
   /** Kanalpegel (auch vor dem Start): Balken, Spitzenwert, Übersteuerung, stumme Kanäle während der Aufnahme. */
-  function applyTrackLevels({ peaks = [], clips = [] }) {
+  function applyTrackLevels({ peaks = [], clips = [], play }) {
+    if (play && (play.playing || mt.play?.playing)) applyPlayback(play);
     if (!multitrackView() || !mt.rows.length) return;
     const now = Date.now();
     const recording = state.session?.status === 'recording' && state.session.mode === 'multitrack';

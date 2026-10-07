@@ -415,6 +415,7 @@ src/main/        Hauptprozess
     engine.js    Gerät öffnen (audify/ASIO), Pegel, Aussetzer erkennen, Gerät neu öffnen
     writer.js    eine 24-Bit-Mono-WAV je Spur
     simulator.js nachgebautes 32-Kanal-Pult für Entwicklung und Tests
+    player.js    Zurückspielen: Spuren lesen, Ausgabeblöcke für alle Ausgänge, Springen, Schleife
     host.js      Einstieg des eigenen Mehrspur-Prozesses (Electron utilityProcess)
     manager.js   Hauptprozess-Seite: startet den Prozess, Befehle und Ereignisse
     probe.js     Technik-Test (siehe unten)
@@ -464,8 +465,15 @@ Pult“ nimmt ein nachgebautes 32-Kanal-Pult auf (zum Ausprobieren). Aufnehmen w
 Beenden, „An Aufnahme anhängen“, auch per Companion. Am Mischpult müssen die USB-Ausgänge dafür auf den Kanälen
 1–32 liegen. Die Spuren landen je Aufnahme in einem Unterordner des Mehrspur-Ordners (*Ablage & Export*, sonst
 `Mehrspur` im Aufnahmeordner), zusammen mit der Session-Datei; die Liste „Aufnahmen“ zeigt sie mit an.
-MP3-Export, Abspielen, Mithören und Cue-Marker gibt es bei Mehrspuraufnahmen nicht; das Mini-Fenster zeigt nach dem
-Beenden nur „Mehrspur: n Spuren gespeichert“.
+MP3-Export, Mithören während der Aufnahme und Cue-Marker gibt es bei Mehrspuraufnahmen nicht; das Mini-Fenster
+zeigt nach dem Beenden nur „Mehrspur: n Spuren gespeichert“.
+
+**Zurückspielen zum Pult** (virtueller Soundcheck, Nachmischen): Bei einer beendeten Mehrspuraufnahme spielt
+„Zum Pult abspielen“ (oder die Leertaste) die Spuren über die USB-Ausgänge – Spur von Kanal 5 auf USB-Ausgang 5 –,
+ab der Marke in der Wellenform. Klick in die Wellenform springt, Klick auf einen Abschnitt springt an dessen Anfang;
+mit „Schleife“ wird der gewählte Abschnitt (sonst die ganze Aufnahme) wiederholt. Im Kanal-Bereich steht die
+Position. Am Mischpult müssen die Kanäle dafür die USB-Karte als Quelle haben – das stellt Ebbton bewusst nicht
+selbst um. Eine neue Aufnahme beendet das Abspielen.
 
 **Mischpult (Einstellungen → Mischpult):** IP des M32 eintragen oder „Suchen“ (findet Pulte im selben Netz).
 Ebbton liest dann per OSC – nur lesend – die Kanalnamen und -farben (die Spuren heißen wie am Pult,
