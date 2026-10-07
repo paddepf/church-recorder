@@ -315,10 +315,17 @@ function setupLiveReload() {
 // Fenster, nur verkleinert (die Oberfläche blendet den Rest per CSS aus): Die Audioerfassung läuft in der
 // Oberfläche und darf dafür nicht neu geladen werden.
 const NORMAL_MIN = { width: 1024, height: 680 };
+// Kompakte Ansicht (Einstellung denseLayout): alle Bereiche bleiben, nur kleiner – das große Fenster darf schmaler werden.
+const DENSE_MIN = { width: 760, height: 520 };
+const dense = () => settings.get('denseLayout') === true;
+const normalMin = () => (dense() ? DENSE_MIN : NORMAL_MIN);
+// Fenstergrößen (Inhaltsgröße) beim Umschalten, wenn noch keine Lage gespeichert ist
+const LARGE_DEFAULT = { width: 1360, height: 880 };
+const DENSE_DEFAULT = { width: 960, height: 640 };
 // Größen des Mini-Fensters als Inhaltsgröße (ohne Titelleiste und Rahmen, die je System verschieden sind).
-// 266 px Höhe genügen für alle Zeilen; erscheint der rote Warnbalken, scrollt der Inhalt.
-const COMPACT_MIN = { width: 400, height: 266 };
-const COMPACT_DEFAULT = { width: 480, height: 270 };
+// 164 px Höhe genügen für alle Zeilen (gemessen: höchstens 158); erscheint der rote Warnbalken, scrollt der Inhalt.
+const COMPACT_MIN = { width: 320, height: 164 };
+const COMPACT_DEFAULT = { width: 360, height: 168 };
 let compact = null;            // Lage des großen Fensters ({ bounds, maximized }), solange das Mini-Fenster aktiv ist
 
 /** Platz für Titelleiste und Rahmen (Fenstergröße minus Inhaltsgröße). */
@@ -326,6 +333,30 @@ function frameSize() {
   const [w, h] = win.getSize();
   const [cw, ch] = win.getContentSize();
   return { width: w - cw, height: h - ch };
+}
+
+/** Liegt eine gespeicherte Fensterlage noch (sichtbar genug) auf einem der Bildschirme? */
+function onScreen(b) {
+  if (!b || ![b.x, b.y, b.width, b.height].every(Number.isFinite)) return false;
+  return screen.getAllDisplays().some(({ workArea: a }) =>
+    b.x < a.x + a.width - 60 && b.x + b.width > a.x + 60
+    && b.y >= a.y - 10 && b.y < a.y + a.height - 60);
+}
+
+/** Fenster der Größe width×height um die Mitte des jetzigen Fensters, ganz im Arbeitsbereich dieses Bildschirms. */
+function centeredBounds(width, height) {
+  const cur = win.getBounds();
+  const a = screen.getDisplayMatching(cur).workArea;
+  const w = Math.min(width, a.width);
+  const h = Math.min(height, a.height);
+  const x = Math.round(cur.x + cur.width / 2 - w / 2);
+  const y = Math.round(cur.y + cur.height / 2 - h / 2);
+  return {
+    x: Math.min(Math.max(x, a.x), a.x + a.width - w),
+    y: Math.min(Math.max(y, a.y), a.y + a.height - h),
+    width: w,
+    height: h
+  };
 }
 
 /** Zuletzt benutzte Lage des Mini-Fensters, wenn sie noch auf einem Bildschirm liegt; sonst unten rechts. */
@@ -336,18 +367,13 @@ function compactBounds() {
   const defW = COMPACT_DEFAULT.width + frame.width;
   const defH = COMPACT_DEFAULT.height + frame.height;
   const saved = settings.get('compactBounds');
-  if (saved && [saved.x, saved.y, saved.width, saved.height].every(Number.isFinite)) {
-    const visible = screen.getAllDisplays().some(({ workArea: a }) =>
-      saved.x < a.x + a.width - 60 && saved.x + saved.width > a.x + 60
-      && saved.y >= a.y - 10 && saved.y < a.y + a.height - 60);
-    if (visible) {
-      return {
-        x: saved.x,
-        y: saved.y,
-        width: Math.max(saved.width, minW),
-        height: Math.max(saved.height, minH)
-      };
-    }
+  if (onScreen(saved)) {
+    return {
+      x: saved.x,
+      y: saved.y,
+      width: Math.max(saved.width, minW),
+      height: Math.max(saved.height, minH)
+    };
   }
   const a = screen.getDisplayMatching(win.getBounds()).workArea;
   return {
@@ -359,6 +385,59 @@ function compactBounds() {
 }
 
 const compactOnTop = () => settings.get('compactOnTop') !== false;
+
+/** Umschalter „Groß | Kompakt | Mini“: Aus dem Mini-Fenster erst zurück (alte Größe), dann ggf. die Ansicht wechseln. */
+function setView(view) {
+  if (view === 'mini') {
+    setCompact(true);
+    return;
+  }
+  if (compact) setCompact(false);
+  setDense(view === 'dense');
+}
+
+/**
+ * Kompakte Ansicht ein/aus. Das Fenster wird dabei passend verkleinert (zuletzt benutzte Lage der kompakten
+ * Ansicht, sonst DENSE_DEFAULT um die bisherige Mitte) und beim Ausschalten wieder auf die vorherige Größe gebracht.
+ * Die Lagen stehen in den Einstellungen (denseBounds, largeBounds), damit das auch nach einem Neustart klappt.
+ * Im Mini-Fenster wird nur die Einstellung gemerkt; dessen Rückweg stellt das große Fenster selbst wieder her.
+ */
+function setDense(on) {
+  if (!win || win.isDestroyed()) return;
+  if (on === dense()) return;
+  if (compact) {
+    settings.save({ denseLayout: on });
+    return;
+  }
+  if (win.isFullScreen()) {
+    // Im Vollbild lässt sich die Größe nicht ändern: erst verlassen, dann umschalten.
+    win.once('leave-full-screen', () => setDense(on));
+    win.setFullScreen(false);
+    return;
+  }
+  const frame = frameSize();
+  if (on) {
+    settings.save({ denseLayout: true, largeBounds: { ...win.getNormalBounds(), maximized: win.isMaximized() } });
+    if (win.isMaximized()) win.unmaximize();
+    win.setMinimumSize(DENSE_MIN.width, DENSE_MIN.height);
+    const saved = settings.get('denseBounds');
+    win.setBounds(onScreen(saved)
+      ? { x: saved.x, y: saved.y, width: saved.width, height: saved.height }
+      : centeredBounds(DENSE_DEFAULT.width + frame.width, DENSE_DEFAULT.height + frame.height));
+  } else {
+    const maximized = win.isMaximized();
+    settings.save({ denseLayout: false, ...(maximized ? {} : { denseBounds: win.getBounds() }) });
+    if (maximized) win.unmaximize();
+    win.setMinimumSize(NORMAL_MIN.width, NORMAL_MIN.height);
+    const prev = settings.get('largeBounds');
+    if (onScreen(prev)) {
+      win.setBounds({ x: prev.x, y: prev.y, width: prev.width, height: prev.height });
+      if (prev.maximized) win.maximize();
+    } else {
+      win.setBounds(centeredBounds(LARGE_DEFAULT.width + frame.width, LARGE_DEFAULT.height + frame.height));
+    }
+  }
+}
 
 /** Das Mini-Fenster bleibt (abschaltbar) über anderen Programmen, das große nie. */
 function applyOnTop() {
@@ -385,7 +464,8 @@ function setCompact(on) {
     settings.save({ compactBounds: win.getBounds() });
     const prev = compact;
     compact = null;
-    win.setMinimumSize(NORMAL_MIN.width, NORMAL_MIN.height);
+    const min = normalMin();
+    win.setMinimumSize(min.width, min.height);
     win.setBounds(prev.bounds);
     if (prev.maximized) win.maximize();
   }
@@ -395,11 +475,14 @@ function setCompact(on) {
 }
 
 function createWindow() {
+  // Kompakte Ansicht: in deren zuletzt benutzter Größe starten (sonst DENSE_DEFAULT)
+  const denseStart = dense() ? settings.get('denseBounds') : null;
   win = new BrowserWindow({
-    width: 1360,
-    height: 880,
-    minWidth: NORMAL_MIN.width,
-    minHeight: NORMAL_MIN.height,
+    ...(onScreen(denseStart) ? denseStart : {}),
+    width: onScreen(denseStart) ? denseStart.width : (dense() ? DENSE_DEFAULT.width : LARGE_DEFAULT.width),
+    height: onScreen(denseStart) ? denseStart.height : (dense() ? DENSE_DEFAULT.height : LARGE_DEFAULT.height),
+    minWidth: normalMin().width,
+    minHeight: normalMin().height,
     backgroundColor: '#101419',
     show: false,
     autoHideMenuBar: process.platform !== 'darwin',
@@ -437,6 +520,7 @@ function createWindow() {
   win.on('close', (e) => {
     if (guardClose(e, () => { if (win && !win.isDestroyed()) win.close(); })) return;
     if (compact) settings.save({ compactBounds: win.getBounds() });
+    else if (dense() && !win.isMaximized() && !win.isFullScreen()) settings.save({ denseBounds: win.getBounds() });
     session.flushSave();
     net.stop();
   });
@@ -625,16 +709,18 @@ ipcMain.handle('app:info', () => ok({
   update: updater.status(),
   network: net.statusInfo(),
   compact: Boolean(compact),
-  compactOnTop: compactOnTop()
+  compactOnTop: compactOnTop(),
+  dense: dense()
 }));
 
-ipcMain.handle('window:compact', (_e, { on, onTop } = {}) => {
+ipcMain.handle('window:compact', (_e, { on, onTop, view } = {}) => {
+  if (['large', 'dense', 'mini'].includes(view)) setView(view);
   if (typeof onTop === 'boolean') {
     settings.save({ compactOnTop: onTop });
     applyOnTop();
   }
   if (typeof on === 'boolean') setCompact(on);
-  return ok({ on: Boolean(compact), onTop: compactOnTop() });
+  return ok({ on: Boolean(compact), onTop: compactOnTop(), dense: dense() });
 });
 
 /** Freier Platz auf dem Laufwerk der Aufnahmen und was das in Aufnahmestunden bedeutet. */

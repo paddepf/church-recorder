@@ -285,7 +285,8 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 
 ### Oberfläche
 - **Mini-Fenster** (`setCompact` in `main.js`, IPC `window:compact`, Ereignis `compact`): dasselbe Fenster,
-  nur verkleinert (Mindestgröße 400×266, Standard 480×270 unten rechts – jeweils Inhaltsgröße, Titelleiste/Rahmen kommen über `frameSize()` dazu, Lage in `compactBounds`), wahlweise
+  nur verkleinert (Mindestgröße 320×164, Standard 360×168 unten rechts – jeweils Inhaltsgröße, Titelleiste/Rahmen kommen über
+  `frameSize()` dazu, Lage in `compactBounds`; ältere, größere Lagen verwirft `settings.load` einmalig über `compactLayout: 2`), wahlweise
   immer im Vordergrund (`compactOnTop`). Bewusst kein zweites Fenster und kein Neuladen: Die Audioerfassung
   läuft in der Oberfläche. Die Ansicht blendet per `body.compact` alles außer Kopfzeile, Transport und den
   Knöpfen M/N aus; der laufende Abschnitt (`#current-item`, ein Button mit `#current-name`/`#current-artist`) steht groß
@@ -301,6 +302,30 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   (`fmtLength`; beim laufenden mit `data-live`, von `updateSectionElapsed` mitgezählt).
   Dialoge passen nicht hinein: `openModal`, `confirmDialog` und `?` schalten vorher auf groß zurück.
   Kürzel Strg+Umschalt+M im Renderer, auf dem Mac Cmd+Umschalt+M über das Menü „Fenster“.
+  **Aufbau (Stand 2):** Kopfzeile (Name, „oben“, Umschalter) · Pegel als 5-px-Streifen L|R über die ganze Breite (Beschriftung
+  aus, „Übersteuert“ nur bei Übersteuerung) · Timer (28 px) mit Pause/Beenden rechts daneben; vor dem Start statt dessen
+  „Neue Aufnahme starten“ (gesperrte Pause/Beenden ausgeblendet), während Aufnahme/Pause ist der gesperrte Aufnahmeknopf
+  ausgeblendet · Karte des laufenden Abschnitts · M und N einzeilig („→ Predigt“, Beschriftung nur ohne offenen Punkt,
+  per `:has`). „Immer oben“ heißt unter 380 px nur „oben“ (`.ontop-long`). Nach Änderungen alle vier Zustände bei 320×164
+  messen (kein Überlauf, keine abgeschnittenen Knöpfe).
+- **Ansicht-Umschalter** rechts oben: ein Segment „Groß | Kompakt | Mini“ (`.view-switch`, Knöpfe `#btn-view-large`,
+  `#btn-dense`, `#btn-compact`, Zustand über `aria-pressed`) statt einzelner Knöpfe, damit er wenig Platz braucht; er
+  bleibt auch im Mini-Fenster sichtbar (Wechsel Mini → Kompakt direkt). Renderer `setView(view)` → IPC
+  `window:compact` mit `view` → `setView` im Hauptprozess (aus dem Mini-Fenster erst zurück, dann `setDense`).
+- **Kompakte Ansicht** (**Voreinstellung**: `denseLayout: true`; `app:info` liefert `dense`): `body.dense` – dieselben Bereiche wie die große Ansicht, nur kleiner (Block
+  „Kompakte Ansicht“ am Ende von `styles.css`). Der Hauptprozess senkt dafür die Mindestgröße auf `DENSE_MIN` 760×520
+  (`normalMin()`, gilt auch beim Zurückschalten aus dem Mini-Fenster). **Umschalten ändert die Fenstergröße**
+  (`setDense`): ein → Lage des großen Fensters in `largeBounds` (mit `maximized`), dann zuletzt benutzte kompakte
+  Lage `denseBounds` bzw. `DENSE_DEFAULT` 960×640 um die bisherige Fenstermitte (`centeredBounds`); aus → `denseBounds`
+  merken, `largeBounds` wiederherstellen (sonst 1360×880). Beides in den Einstellungen, damit es auch nach einem
+  Neustart stimmt; die App startet in der kompakten Ansicht in `denseBounds`. Vollbild wird vorher verlassen; im
+  Mini-Fenster wird nur die Einstellung gemerkt. Im Mini-Fenster wird `dense` nicht gesetzt
+  (`applyDense`), damit sich die Regeln nicht in die Quere kommen. Nach Änderungen bei 760×520, 1024×680 und 1360×880
+  messen; auch hier darf der Timer in keinem Zustand wandern (`.transport-controls` 412 px, Aufnahmeknopf 210 px).
+- `body` hat `grid-template-columns: minmax(0, 1fr)`: Sonst macht die Mindestbreite der Kopfzeile (Badges, Knöpfe,
+  langer Gottesdienstname) die Spalte breiter als das Fenster. Knöpfe der Kopfzeile und des Transports brechen nicht um
+  (`nowrap`), stattdessen wird der Gottesdienstname mit „…“ gekürzt. Ab 1340 px hat der Transport 20 px Spaltenabstand,
+  sonst passten die Knöpfe bei 1360 px nicht in die Außenspalte und brachen um.
 - Zeitangaben (Marken, Listen, Zeitleiste der Wellenform) nutzen dieselbe
   Schrift wie der große Timer: `var(--sans)` mit `font-variant-numeric: tabular-nums`.
   Keine Monospace-Schrift verwenden (`--mono` gibt es nicht mehr).
@@ -316,7 +341,7 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - Kopfleiste, Transport und Werkzeugleiste sind ebenfalls groß (Dienstname 21 px, Aufnahmeknopf 18 px,
   Timer 60 px, Pegel 280 px breit). Für kleine Fenster gibt es zwei Abstufungen: `max-width: 1180px` (kleinere
   Schrift/Abstände, sonst läuft die Seite über) und `max-height: 820px` bzw. `720px` (Wellenform 150/120 px
-  hoch, engere Leisten, damit unten genug Platz für die Listen bleibt). Mindestfenster ist 1024×680; nach
+  hoch, engere Leisten, damit unten genug Platz für die Listen bleibt). Mindestfenster ist 1024×680 (kompakt 760×520); nach
   Änderungen bei 1360×880 **und** 1024×680 messen (kein Überlauf: `scrollWidth == innerWidth`).
 - **Der große Timer darf in keinem Zustand wandern** (bereit, läuft, pausiert, beendet): `.transport-controls` hat feste
   Mindestbreite (486 px), Aufnahmeknopf 244 px, Pause/Fortsetzen 116 px; im beendeten Zustand (`body.review`) entfallen die

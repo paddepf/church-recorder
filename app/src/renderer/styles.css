@@ -84,6 +84,7 @@ body {
   font-size: 14px;
   display: grid;
   grid-template-rows: auto auto auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr);   /* nie breiter als das Fenster: lange Namen werden gekürzt */
   overflow: hidden;
   user-select: none;
 }
@@ -159,6 +160,18 @@ input[readonly] { color: var(--muted); }
 .service-date { color: var(--muted); font-family: var(--sans); font-variant-numeric: tabular-nums; font-size: 16px; white-space: nowrap; }
 
 .top-actions { display: flex; align-items: center; gap: 12px; }
+/* Knöpfe brechen nie um; reicht der Platz nicht, wird der Gottesdienstname gekürzt */
+.top-actions > button { white-space: nowrap; flex-shrink: 0; }
+
+/* Umschalter „Groß | Kompakt | Mini“: ein schmales Segment statt drei Knöpfen */
+.view-switch { display: inline-flex; flex-shrink: 0; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.topbar .view-switch button { font-size: 13px; padding: 4px 10px; border: none; border-radius: 0; background: transparent; color: var(--muted); white-space: nowrap; }
+.topbar .view-switch button + button { border-left: 1px solid var(--line); }
+.topbar .view-switch button:hover:not([aria-pressed="true"]) { background: var(--panel-2); color: var(--text); }
+.topbar .view-switch button[aria-pressed="true"] { background: var(--raised); color: var(--text); font-weight: 600; cursor: default; }
+.service { min-width: 0; }
+.service-name { max-width: 100%; min-width: 0; }
+#service-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .badge {
   font-size: 14px;
@@ -189,11 +202,11 @@ input[readonly] { color: var(--muted); }
 .transport-controls { display: flex; gap: 12px; min-width: 486px; }
 /* Breit genug: Timer exakt in der Fenstermitte (gleich breite Außenspalten); schmaler: Timer zwischen Knöpfen und Pegel */
 @media (min-width: 1340px) {
-  .transport { grid-template-columns: minmax(0, 1fr) 300px minmax(0, 1fr); }
+  .transport { grid-template-columns: minmax(0, 1fr) 300px minmax(0, 1fr); column-gap: 20px; }   /* 1360 px: Knöpfe passen in die Außenspalte */
   .transport .meters { justify-self: end; }
   .transport .clock { justify-self: center; width: 300px; }
 }
-.transport-controls button { font-size: 18px; padding: 15px 24px; }
+.transport-controls button { font-size: 18px; padding: 15px 24px; white-space: nowrap; }
 /* Feste Breiten, damit der große Timer in allen Zuständen (bereit, läuft, pausiert, beendet) am selben Platz bleibt */
 body:not(.compact) button.record { min-width: 244px; justify-content: center; }
 body:not(.compact) #btn-pause { min-width: 116px; }
@@ -711,7 +724,9 @@ label small { color: var(--muted); font-size: 11px; }
 
 /* ---------------------------------------------------------- Mini-Fenster
    body.compact: nur Kopfzeile, Timer, Pegel, Aufnahme- und Abschnittsknöpfe. Die Wellenform bleibt in
-   voller Breite außerhalb des Fensters, damit Zoom und Ansicht beim Zurückschalten stimmen. */
+   voller Breite außerhalb des Fensters, damit Zoom und Ansicht beim Zurückschalten stimmen.
+   Aufbau (ab 320×164): Kopfzeile · Pegel als schmaler Streifen · Timer mit Pause/Beenden (bzw. Start) ·
+   laufender Abschnitt · „Abschnitt …“ und „→ nächster Punkt“. */
 
 .compact-only { display: none; }
 .ontop { color: var(--muted); font-size: 13px; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
@@ -722,29 +737,34 @@ body.compact .compact-only { display: flex; }
 body.compact .panels,
 body.compact .keybar { display: none; }
 
-body.compact .topbar { padding: 6px 10px; gap: 8px; }
-body.compact .topbar button { font-size: 13px; padding: 5px 10px; }
-body.compact .top-actions { gap: 8px; flex-shrink: 0; }
-body.compact .top-actions > :not(#btn-compact):not(.compact-only):not(#disk-badge) { display: none; }
+body.compact .topbar { padding: 4px 8px; gap: 6px; }
+body.compact .topbar button { font-size: 12px; padding: 3px 8px; }
+body.compact .top-actions { gap: 6px; flex-shrink: 0; }
+body.compact .ontop { font-size: 12px; gap: 4px; }
+body.compact .ontop input { width: 13px; height: 13px; }
+@media (max-width: 380px) { body.compact .ontop-long { display: none; } }   /* schmal: nur „oben“ */
+body.compact .top-actions > :not(.view-switch):not(.compact-only):not(#disk-badge) { display: none; }
 body.compact #disk-badge[data-level="ok"] { display: none; }
 body.compact .service { min-width: 0; flex: 1; }
-body.compact .service-name { padding: 4px 6px; max-width: 100%; min-width: 0; }
-body.compact #service-name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.compact .service-name { padding: 2px 4px; max-width: 100%; min-width: 0; }
+body.compact #service-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 body.compact .service-date { display: none; }
-body.compact .badge { font-size: 12px; padding: 3px 8px; }
+body.compact .badge { font-size: 11px; padding: 1px 6px; }
 
 body.compact .audio-warning { padding: 4px 8px; font-size: 12px; }
 
 body.compact .transport {
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: "clock meters" "current current" "controls controls";
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "meters meters" "clock controls" "current current";
   align-content: start;
-  gap: 8px 14px;
-  padding: 8px 10px;
+  align-items: center;
+  gap: 5px 10px;
+  padding: 5px 8px;
+  border-bottom: none;
 }
 body.compact .clock { display: contents; }
 body.compact .timecode { grid-area: clock; }
-body.compact .timecode { font-size: 34px; }
+body.compact .timecode { font-size: 28px; }
 /* Laufender Abschnitt groß: Name und Interpret, Klick bearbeitet beides */
 body.compact .current-item {
   grid-area: current;
@@ -753,50 +773,61 @@ body.compact .current-item {
   gap: 8px;
   min-width: 0;
   margin: 0;
-  padding: 6px 10px;
+  padding: 3px 8px;
   text-align: left;
   background: var(--panel-2);
   border: 1px solid var(--line);
   border-left: 4px solid hsl(var(--hue, 0), 55%, 62%);
   border-radius: var(--radius);
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 600;
 }
 body.compact .current-item:not([data-live="true"]) { border-left-color: var(--line); color: var(--muted); font-weight: 400; }
 body.compact .ci-text { display: flex; flex-direction: column; align-items: flex-start; flex: 1; min-width: 0; text-align: left; }
 body.compact .ci-text > * { max-width: 100%; }
 body.compact .ci-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; }
-body.compact .ci-artist { font-size: 14px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3; }
+body.compact .ci-artist { font-size: 12px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3; }
 body.compact .ci-artist::before { content: none; }
-body.compact .ci-edit { display: block; color: var(--muted); font-size: 16px; font-weight: 400; }
+body.compact .ci-edit { display: block; color: var(--muted); font-size: 14px; font-weight: 400; }
 body.compact .current-item[data-live="true"]:hover .ci-edit { color: var(--text); }
-body.compact .meters { grid-area: meters; width: 150px; gap: 4px; }
-body.compact .bar { height: 9px; }
-body.compact .meter-label { font-size: 11px; }
-body.compact .clip { font-size: 11px; }
-body.compact .transport-controls { grid-area: controls; gap: 6px; min-width: 0; }
-body.compact .transport-controls button { font-size: 14px; padding: 8px 12px; }
-body.compact .transport-controls button.record { flex: 1; justify-content: center; }
+/* Pegel als schmaler Streifen über die ganze Breite: L und R nebeneinander, „Übersteuert“ rechts */
+body.compact .meters { grid-area: meters; width: auto; display: flex; align-items: center; gap: 6px; }
+body.compact .meter { flex: 1; gap: 0; }
+body.compact .meter-label { display: none; }
+body.compact .bar { height: 5px; border: none; border-radius: 2px; }
+body.compact .clip { font-size: 10px; line-height: 1; }
+body.compact .clip:not([data-on="true"]) { display: none; }
+body.compact .transport-controls { grid-area: controls; gap: 5px; min-width: 0; justify-content: flex-end; }
+body.compact .transport-controls button { font-size: 13px; padding: 5px 9px; white-space: nowrap; }
+body.compact .transport-controls button.record { flex: 1; justify-content: center; gap: 6px; min-width: 0; }
+body.compact button.record .dot { width: 9px; height: 9px; flex-shrink: 0; }
+body.compact #record-label { overflow: hidden; text-overflow: ellipsis; }
+/* Während der Aufnahme zeigt der (gesperrte) Aufnahmeknopf nur den Zustand: Timer und roter Rand sagen das schon */
+body.compact[data-status="recording"] #btn-record,
+body.compact[data-status="paused"] #btn-record { display: none; }
+/* Vor dem Start sind Pause/Beenden gesperrt: ausblenden, damit „Neue Aufnahme starten“ Platz hat */
+body.compact:not([data-status="recording"]):not([data-status="paused"]) #btn-pause,
+body.compact:not([data-status="recording"]):not([data-status="paused"]) #btn-stop { display: none; }
 
-body.compact .wave-section { padding: 0 10px 8px; background: var(--panel); }
-body.compact .wave-toolbar { padding-bottom: 0; gap: 6px; align-items: stretch; }
+body.compact .wave-section { padding: 0 8px 6px; background: var(--panel); }
+body.compact .wave-toolbar { padding-bottom: 0; gap: 5px; align-items: stretch; }
 body.compact .wave-toolbar > :not(#btn-marker):not(#btn-next-item) { display: none; }
-body.compact .wave-toolbar button { font-size: 14px; padding: 8px 12px; flex: 1; }
+body.compact .wave-toolbar button { font-size: 12px; padding: 5px 6px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.compact canvas.wave { position: fixed; left: -10000px; top: 0; width: 1000px; }
 
 body.compact .alerts { top: 6px; width: calc(100vw - 16px); }
-body.compact .alert { padding: 10px 12px; font-size: 14px; gap: 10px; }
-body.compact .alert::before { font-size: 20px; }
+body.compact .alert { padding: 8px 10px; font-size: 13px; gap: 8px; }
+body.compact .alert::before { font-size: 17px; }
 body.compact .toasts { left: 8px; right: 8px; bottom: 8px; max-width: none; }
-body.compact .toast { font-size: 13px; padding: 6px 10px; }
+body.compact .toast { font-size: 12px; padding: 5px 8px; }
 
 /* Mini-Fenster nach dem Beenden (body.review): keine Aufnahmeknöpfe, dafür der MP3-Export */
 .compact-export { display: none; }
 body.compact.review .compact-export {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 10px 8px;
+  gap: 6px;
+  padding: 4px 8px 6px;
   background: var(--panel);
 }
 body.compact.review .transport-controls,
@@ -804,22 +835,23 @@ body.compact.review .wave-toolbar,
 body.compact.review .meters,
 body.compact.review .current-item { display: none; }
 body.compact.review .wave-section { padding: 0; }
-body.compact.review .transport { grid-template-areas: "clock meters"; padding-bottom: 4px; }
-.ce-summary { font-size: 15px; color: var(--muted); }
-.compact-export > button.primary { padding: 12px 14px; font-size: 16px; }
+body.compact.review .transport { grid-template-areas: "clock controls"; padding-bottom: 2px; }
+.ce-summary { font-size: 13px; color: var(--muted); }
+.compact-export > button.primary { padding: 6px 10px; font-size: 14px; }
 .compact-export .progress { margin: 0; width: 100%; }
-.ce-result { font-size: 13px; color: var(--muted); }
+.ce-result { font-size: 12px; color: var(--muted); }
 .ce-result:empty { display: none; }
 .ce-result .mini-link { margin-left: 4px; }
-.compact-export > button.ghost { align-self: flex-start; font-size: 13px; padding: 4px 8px; }
+.compact-export > button.ghost { align-self: flex-start; font-size: 12px; padding: 2px 6px; }
 
 /* „Nächster Ablaufpunkt“ nennt den Namen des Punktes */
 .nb-name { margin-left: 8px; color: var(--text); font-weight: 600; max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; display: inline-block; }
 .nb-name[hidden] { display: none; }
 .nb-name::before { content: "→ "; font-weight: 400; color: var(--muted); }
-body.compact #btn-next-item { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 5px 10px; min-width: 0; line-height: 1.25; }
-body.compact .nb-label { font-size: 12px; color: var(--muted); }
-body.compact .nb-name { margin: 0; max-width: 100%; font-size: 14px; display: block; }
+/* Im Mini-Fenster einzeilig: „→ Predigt“ (ohne Punkt: „Nächster Ablaufpunkt“), voller Text im Tooltip */
+body.compact #btn-next-item { display: flex; align-items: center; justify-content: center; min-width: 0; }
+body.compact #btn-next-item:has(.nb-name:not([hidden])) .nb-label { display: none; }
+body.compact .nb-name { margin: 0; max-width: 100%; font-size: 12px; display: block; }
 body.compact .nb-name[hidden] { display: none; }
 
 /* Große Ansicht: Name · Interpret in einer Zeile (gekürzt), die Laufzeit daneben */
@@ -831,7 +863,7 @@ body.compact .nb-name[hidden] { display: none; }
 .ci-elapsed { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); margin-left: 12px; white-space: nowrap; }
 .ci-elapsed::before { content: "⏱ "; font-weight: 400; color: var(--muted); }
 .ci-elapsed[hidden] { display: none; }
-body.compact .ci-elapsed { margin-left: 0; font-size: 20px; }
+body.compact .ci-elapsed { margin-left: 0; font-size: 16px; }
 body.compact .ci-elapsed::before { content: none; }
 
 /* Laufzeit je Abschnitt in der Liste */
@@ -843,3 +875,107 @@ body.compact .ci-elapsed::before { content: none; }
   .item .dur { font-size: 14px; margin-left: 2px; }
   #marker-list .item { gap: 6px; padding-left: 10px; padding-right: 8px; }
 }
+
+/* ------------------------------------------------------- Kompakte Ansicht
+   body.dense (Schalter „Kompakt“, Einstellung denseLayout): alle Bereiche und Funktionen wie in der großen
+   Ansicht, nur kleiner und dichter, damit auch ein kleines Fenster (ab 760×520) voll bedienbar bleibt.
+   Im Mini-Fenster wird die Klasse nicht gesetzt (dort gelten die eigenen Regeln). */
+
+
+body.dense { font-size: 13px; }
+body.dense button { padding: 5px 10px; }
+
+body.dense .topbar { padding: 5px 12px; gap: 10px; }
+body.dense .topbar button { font-size: 13px; padding: 4px 10px; }
+body.dense .top-actions { gap: 6px; min-width: 0; }
+body.dense .service { min-width: 120px; flex: 1 1 140px; }
+body.dense .service-name { padding: 3px 6px; gap: 8px; }
+body.dense #service-name { font-size: 15px; }
+body.dense .service-date { font-size: 13px; }
+body.dense .badge { font-size: 12px; padding: 2px 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }   /* im schmalen Fenster gekürzt */
+body.dense .audio-warning { padding: 4px 10px; font-size: 13px; }
+
+body.dense .transport { gap: 14px; padding: 6px 12px; }
+body.dense .transport-controls { gap: 6px; min-width: 412px; }
+body.dense .transport-controls button,
+body.dense button.record { font-size: 14px; padding: 7px 12px; }
+body.dense button.record { gap: 8px; min-width: 210px; }
+body.dense button.record .dot { width: 10px; height: 10px; }
+body.dense #btn-pause { min-width: 100px; }
+body.dense .timecode { font-size: 34px; }
+body.dense .current-item { margin-top: 2px; font-size: 13px; padding: 1px 6px; }
+body.dense .ci-elapsed { margin-left: 8px; }
+body.dense .meters { width: 190px; gap: 4px; }
+body.dense .bar { height: 9px; }
+body.dense .meter-label, body.dense .clip { font-size: 11px; }
+@media (min-width: 1340px) {
+  body.dense .transport { grid-template-columns: minmax(0, 1fr) 260px minmax(0, 1fr); }
+  body.dense .transport .clock { width: 260px; }
+}
+
+body.dense .wave-section { padding: 6px 12px 0; }
+body.dense .wave-toolbar { gap: 6px; padding-bottom: 6px; }
+body.dense .wave-toolbar button { font-size: 13px; padding: 4px 10px; }
+body.dense .wave-toolbar .zoom button { font-size: 16px; padding: 1px 10px; }
+body.dense .zoom { gap: 4px; }
+body.dense .follow { font-size: 13px; gap: 5px; }
+body.dense .follow input { width: 15px; height: 15px; }
+body.dense .nb-name { max-width: 16ch; }
+body.dense canvas.wave { height: 150px; }
+
+body.dense .panels { grid-template-columns: 1fr 1fr 300px; gap: 8px; padding: 8px 12px 10px; }
+body.dense .panel-head { padding: 6px 10px; gap: 6px; flex-wrap: wrap; align-items: center; }
+body.dense .panel-head h2 { font-size: 14px; }
+body.dense .head-actions { gap: 4px; align-items: center; }
+body.dense .head-actions .secondary { font-size: 12px; padding: 3px 7px; }
+body.dense .panel-head .select { font-size: 12px; padding: 3px 6px; }
+body.dense .plan-source { font-size: 12px; padding: 3px 10px; }
+body.dense .hint { font-size: 12px; }
+body.dense .pending, body.dense .markers { padding: 6px; }
+body.dense .item { padding: 5px 8px; gap: 6px; margin-bottom: 3px; font-size: 13px; border-left-width: 3px; border-radius: 4px; }
+body.dense .item .mini { font-size: 14px; padding: 2px 5px; }
+body.dense .item .time { font-size: 11px; }
+body.dense .item .dur { font-size: 12px; margin-left: 2px; }
+body.dense .item .artist { font-size: 12px; }
+body.dense .empty { font-size: 12px; padding: 10px; }
+body.dense .add-row { gap: 6px; padding: 6px 8px 8px; }
+body.dense .add-row input { font-size: 13px; padding: 5px 8px; }
+body.dense .add-row button { font-size: 16px; padding: 3px 12px; }
+
+body.dense .panel-export .select, body.dense .panel-export button,
+body.dense .segment-info, body.dense .export-result { margin: 8px 10px 0; width: calc(100% - 20px); }
+body.dense .panel-export > button.primary { padding: 7px 10px; font-size: 14px; }
+body.dense .export-list { margin: 8px 10px 0; gap: 3px; min-height: 52px; }
+body.dense .export-item { padding: 3px 8px; font-size: 13px; column-gap: 8px; border-left-width: 3px; border-radius: 4px; }
+body.dense .export-item input[type="checkbox"] { width: 14px; height: 14px; }
+body.dense .export-item .meta, body.dense .segment-info { font-size: 12px; }
+body.dense .export-item .done { font-size: 12px; }
+body.dense .export-select .mini { font-size: 12px; padding: 2px 6px; }
+body.dense .export-result { font-size: 12px; padding-bottom: 10px; }
+
+body.dense .keybar { padding: 3px 12px; font-size: 11px; gap: 10px; }
+body.dense .keybar-list { gap: 2px 14px; }
+body.dense kbd { font-size: 10px; padding: 0 4px; }
+
+body.dense .inline-edit input { font-size: 13px; padding: 4px 7px; }
+body.dense .alert { padding: 10px 14px; font-size: 14px; }
+body.dense .alert::before { font-size: 20px; }
+
+/* Schmale Fenster in der kompakten Ansicht */
+@media (max-width: 1020px) {
+  body.dense .panels { grid-template-columns: 1fr 1fr 250px; }
+  body.dense .meters { width: 130px; }
+  body.dense .transport { gap: 10px; }
+  body.dense .item .time { display: none; }      /* Zeitraum steht im Tooltip, die Länge bleibt */
+  body.dense .hint { display: none; }
+  body.dense .service-date { display: none; }   /* Platz für den Namen; das Datum steht im Termin-Dialog */
+  body.dense .badge { max-width: 120px; }
+}
+@media (max-height: 700px) {
+  body.dense canvas.wave { height: 110px; }
+}
+@media (max-height: 580px) {
+  body.dense canvas.wave { height: 90px; }
+  body.dense .keybar { display: none; }        /* Kürzel weiter über „?“ */
+}
+body.compact .topbar .view-switch button { font-size: 11px; padding: 2px 6px; }

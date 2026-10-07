@@ -250,8 +250,10 @@ verschwindet, wenn kein Abschnitt aktiv ist (z. B. in der Pause zwischen zwei Pu
 
 ### Mini-Fenster
 
-Wird nebenher am PC gearbeitet, verkleinert **„Mini-Fenster“** (rechts oben) die App auf ein kleines
-Fenster mit Gottesdienstname, Timer, Pegel, dem **laufenden Abschnitt groß mit Interpret** und den Knöpfen für Aufnahme, Pause,
+Rechts oben wählt der Umschalter **„Groß | Kompakt | Mini“** die Ansicht.
+
+Wird nebenher am PC gearbeitet, verkleinert **„Mini“** die App auf ein sehr kleines
+Fenster (ab 320 × 164) mit Gottesdienstname, Timer, Pegel (schmaler Streifen), dem **laufenden Abschnitt groß mit Interpret** und den Knöpfen für Aufnahme, Pause,
 Beenden, „Abschnitt starten“ und „Nächster Ablaufpunkt“ (der Knopf nennt den Namen des Punktes, der als Nächstes
 beginnt – „→ Predigt“; ist keiner mehr offen, steht dort „→ Abschnitt abschließen“). Ein Klick auf den laufenden Abschnitt (oder ✎) öffnet
 direkt die Eingabe für Name und Interpret samt Vorschlägen aus der Dienstplanung (Klick auf den Interpret
@@ -261,9 +263,20 @@ anderen Programmen (Voreinstellung, abschaltbar). **Nach dem Beenden** der Aufna
 stattdessen zeigt das Mini-Fenster, wie viele Abschnitte noch nicht gesichert sind, und einen Knopf **„… als MP3
 speichern“** (angehakte bzw. noch nicht gesicherte oder seit dem Export geänderte Abschnitte, ohne Abschnitte die gesamte
 Aufnahme; ist alles gesichert, steht dort „alles gesichert ✓“ und der Knopf entfällt), dazu Fortschritt
-und „Im Ordner zeigen“. „Neue Aufnahme“ darunter beginnt die nächste. **„Großes Fenster“** stellt die vorherige Größe
+und „Im Ordner zeigen“. „Neue Aufnahme“ darunter beginnt die nächste. **„Groß“** bzw. **„Kompakt“** stellt die vorherige Größe
 wieder her. Öffnet sich ein Dialog (z. B. Rückfrage beim Start, Einstellungen, `?`), schaltet die App
 selbst auf das große Fenster um. Die Aufnahme läuft beim Umschalten unverändert weiter.
+
+### Kompakte Ansicht
+
+**„Kompakt“** (Voreinstellung) verkleinert Schrift, Knöpfe, Abstände und Wellenform,
+lässt aber **alle Bereiche und Funktionen** stehen: Ablaufplan, Abschnitte, Export, Wellenform und Tastenleiste. So
+lässt sich auch in einem kleineren Fenster (ab 760 × 520 statt 1024 × 680) vollständig arbeiten. In sehr schmalen
+Fenstern entfallen die Zeitspalte der Abschnitte (Zeitraum im Tooltip), das Datum neben dem Gottesdienstnamen und bei
+sehr niedrigen die Tastenleiste (Kürzel weiter über `?`). Beim Einschalten wird das Fenster passend verkleinert
+(beim ersten Mal 960 × 640, danach die zuletzt benutzte Größe), beim Ausschalten bekommt es wieder seine vorherige Größe.
+Die Wahl bleibt gespeichert; die App startet dann gleich in der kompakten Größe. Das Mini-Fenster ist davon
+unabhängig und sieht immer gleich aus.
 
 ### Kalender, Beenden, Bedienung per Tastatur
 

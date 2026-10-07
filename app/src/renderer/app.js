@@ -85,6 +85,7 @@
   async function init() {
     const info = await window.api.app.info();
     const cfg = await window.api.settings.get();
+    state.dense = Boolean(info.dense);
     applyCompact(info.compact, info.compactOnTop);
     state.settings = cfg.settings;
     state.sampleRate = state.settings.sampleRate || 48000;
@@ -697,7 +698,9 @@
       li.innerHTML = `<span class="time"></span><span class="label"></span><span class="dur" title="Laufzeit des Abschnitts"></span>
         <button class="mini" data-rename title="Name und Interpret bearbeiten" aria-label="Name und Interpret bearbeiten">✎</button>
         <button class="mini" data-remove title="Abschnitt entfernen (Ablaufpunkte gehen zurück in den Ablaufplan)" aria-label="Abschnitt entfernen">×</button>`;
-      li.querySelector('.time').textContent = `${fmt(x.start)} – ${x.end != null ? fmt(x.end) : 'läuft'}`;
+      const range = `${fmt(x.start)} – ${x.end != null ? fmt(x.end) : 'läuft'}`;
+      li.querySelector('.time').textContent = range;
+      li.title = range;                 // sichtbar, wenn die Zeitspalte im schmalen Fenster entfällt
       const dur = li.querySelector('.dur');
       if (x.end != null) {
         dur.textContent = fmtLength(x.end - x.start);
@@ -1065,7 +1068,9 @@
     $('btn-library').addEventListener('click', openLibrary);
     $('btn-service').addEventListener('click', openServicePicker);
     $('btn-plan-service').addEventListener('click', openServicePicker);
-    $('btn-compact').addEventListener('click', () => toggleCompact());
+    $('btn-view-large').addEventListener('click', () => setView('large'));
+    $('btn-dense').addEventListener('click', () => setView('dense'));
+    $('btn-compact').addEventListener('click', () => setView('mini'));
     $('current-item').addEventListener('click', (e) => {
       const cur = state.session?.currentSegment;
       if (!cur) return;
@@ -1105,9 +1110,31 @@
   function applyCompact(on, onTop) {
     state.compact = Boolean(on);
     document.body.classList.toggle('compact', state.compact);
+    applyDense();
     if (wave) wave.resize();           // Zeichenfläche passt sich an die neue Ansicht an (sonst gestreckt)
-    $('btn-compact').textContent = state.compact ? 'Großes Fenster' : 'Mini-Fenster';
     if (typeof onTop === 'boolean') $('chk-ontop').checked = onTop;
+  }
+
+  /** Kompakte Ansicht: dieselben Bereiche, nur dichter. Im Mini-Fenster ohne Wirkung (eigene Regeln). */
+  function applyDense() {
+    document.body.classList.toggle('dense', Boolean(state.dense) && !state.compact);
+    if (wave) wave.resize();
+    // Umschalter „Groß | Kompakt | Mini“
+    $('btn-view-large').setAttribute('aria-pressed', String(!state.compact && !state.dense));
+    $('btn-dense').setAttribute('aria-pressed', String(!state.compact && Boolean(state.dense)));
+    $('btn-compact').setAttribute('aria-pressed', String(state.compact));
+  }
+
+  /**
+   * Ansicht wählen ('large', 'dense', 'mini'). Die Fenstergröße ändert der Hauptprozess; das Mini-Fenster meldet er
+   * über das Ereignis 'compact', groß/kompakt wird hier sofort gezeigt.
+   */
+  function setView(view) {
+    if (view !== 'mini') {
+      state.dense = view === 'dense';
+      applyDense();
+    }
+    window.api.app.setView(view);
   }
 
   /** Die Fenstergröße ändert der Hauptprozess; die Ansicht folgt über das Ereignis 'compact'. */
@@ -1469,7 +1496,7 @@
     const mod = platform === 'darwin' ? 'Cmd' : 'Strg';
     $('btn-record').title = `Neue Aufnahme starten (${mod}+R)`;
     $('btn-stop').title = `Aufnahme beenden (${mod}+R)`;
-    $('btn-compact').title = `Kleines Fenster mit den nötigsten Knöpfen, z. B. wenn nebenher am PC gearbeitet wird (${mod}+Umschalt+M)`;
+    $('btn-compact').title = `Mini-Fenster mit den nötigsten Knöpfen, z. B. wenn nebenher am PC gearbeitet wird (${mod}+Umschalt+M)`;
   }
 
   function renderShortcuts(platform) {

@@ -24,8 +24,12 @@
       <button id="btn-update" class="ghost" hidden>Update bereit</button>
       <button id="btn-library" class="ghost" title="Frühere Aufnahmen">Aufnahmen</button>
       <button id="btn-settings" class="ghost" title="Einstellungen">Einstellungen</button>
-      <label class="ontop compact-only" title="Das Mini-Fenster bleibt über anderen Programmen"><input type="checkbox" id="chk-ontop" checked /> Immer oben</label>
-      <button id="btn-compact" class="ghost" title="Kleines Fenster mit den nötigsten Knöpfen">Mini-Fenster</button>
+      <label class="ontop compact-only" title="Das Mini-Fenster bleibt über anderen Programmen"><input type="checkbox" id="chk-ontop" checked /> <span class="ontop-long">Immer </span>oben</label>
+      <div class="view-switch" role="group" aria-label="Ansicht">
+        <button id="btn-view-large" aria-pressed="false" title="Große Ansicht mit großen Knöpfen und Schriften">Groß</button>
+        <button id="btn-dense" aria-pressed="false" title="Kompakte Ansicht: alle Bereiche bleiben, nur kleiner – so lässt sich auch in einem kleineren Fenster vollständig arbeiten">Kompakt</button>
+        <button id="btn-compact" aria-pressed="false" title="Mini-Fenster mit den nötigsten Knöpfen">Mini</button>
+      </div>
     </div>
   </header>
 

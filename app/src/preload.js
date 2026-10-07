@@ -11,7 +11,9 @@ contextBridge.exposeInMainWorld('api', {
     openRecordingsFolder: () => invoke('folder:open'),
     reveal: (filePath) => invoke('file:reveal', { filePath }),
     setCompact: (on) => invoke('window:compact', { on }),
-    setCompactOnTop: (onTop) => invoke('window:compact', { onTop })
+    setCompactOnTop: (onTop) => invoke('window:compact', { onTop }),
+    /** Ansicht wählen: 'large' (groß), 'dense' (kompakt) oder 'mini' (Mini-Fenster). */
+    setView: (view) => invoke('window:compact', { view })
   },
 
   settings: {

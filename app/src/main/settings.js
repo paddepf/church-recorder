@@ -44,7 +44,11 @@ const DEFAULTS = {
   // UI
   theme: 'dark',                // 'dark' | 'light' | 'system'
   compactOnTop: true,           // Mini-Fenster bleibt über anderen Programmen
-  compactBounds: null           // zuletzt benutzte Lage des Mini-Fensters ({ x, y, width, height })
+  compactBounds: null,          // zuletzt benutzte Lage des Mini-Fensters ({ x, y, width, height })
+  compactLayout: 2,             // Stand des Mini-Fensters; ältere gespeicherte Lagen (größer) werden verworfen
+  denseLayout: true,            // kompakte Ansicht (Voreinstellung): alle Bereiche, aber kleiner (kleinere Fenster möglich)
+  denseBounds: null,            // zuletzt benutzte Lage des Fensters in der kompakten Ansicht
+  largeBounds: null             // Lage des großen Fensters vor dem Umschalten auf kompakt ({ x, y, width, height, maximized })
 };
 
 let cache = null;
@@ -78,6 +82,8 @@ function load() {
   }
   delete cache.defaultAgenda;
   delete cache.keepMasterWavDays;   // frühere, nie umgesetzte Einstellung
+  // Das Mini-Fenster ist seit Stand 2 deutlich kleiner: die alte, größere Lage nicht übernehmen.
+  if (stored.compactLayout !== DEFAULTS.compactLayout) cache.compactBounds = null;
   if (!Array.isArray(cache.agendaTemplates) || cache.agendaTemplates.length === 0) {
     cache.agendaTemplates = DEFAULTS.agendaTemplates;
   }
