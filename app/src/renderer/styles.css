@@ -155,7 +155,11 @@ input[readonly] { color: var(--muted); }
   gap: 12px;
   border-radius: var(--radius);
 }
-.service-name:hover { background: var(--panel-2); }
+/* Kopfleisten-Knöpfe: dezenter Rahmen, damit sie als Knöpfe erkennbar sind */
+.topbar button.ghost, .service-name { border: 1px solid var(--line); }
+.topbar button.ghost { color: var(--text); }
+.topbar button.ghost:hover, .service-name:hover { border-color: var(--hover-border); background: var(--panel-2); }
+.service-name::after { content: "▾"; color: var(--muted); font-size: 14px; align-self: center; }
 #service-name { font-size: 21px; font-weight: 600; }
 .service-date { color: var(--muted); font-family: var(--sans); font-variant-numeric: tabular-nums; font-size: 16px; white-space: nowrap; }
 
