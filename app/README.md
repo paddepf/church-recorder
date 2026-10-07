@@ -11,7 +11,8 @@ speichert einen ausgewählten Abschnitt – zum Beispiel die Predigt – als MP3
 
 ## Installation für die Entwicklung
 
-Voraussetzung: Node.js 20 oder neuer.
+Voraussetzung: Node.js 22.12 oder neuer (empfohlen 24 LTS), weil Electron 44 und
+electron-builder 26 das zum Installieren und Bauen verlangen.
 
 ```bash
 npm install
@@ -29,7 +30,7 @@ npm run dist:mac    # macOS: DMG und ZIP in release/
 
 Das Repository ist auf beiden Systemen gleich einzurichten:
 
-1. [Git for Windows](https://git-scm.com/download/win) und Node.js 20 (LTS)
+1. [Git for Windows](https://git-scm.com/download/win) und Node.js 24 (LTS)
    installieren, ein Editor wie VS Code oder die Claude-Desktop-App ist optional.
 2. Klonen und starten (im Ordner `app/`):
    ```bash
@@ -309,6 +310,10 @@ wird spätestens beim nächsten regulären Beenden eingespielt.
    Windows- und Mac-Version hinein und gibt das Release erst frei, wenn beide
    vollständig sind. Ohne Mac-Zertifikat wird die Mac-App ad hoc signiert.
 
+Der Windows-Installer lässt sich auf einem Mac mit Apple Silicon nur mit Rosetta
+bauen (das NSIS-Werkzeug von electron-builder ist ein Intel-Programm); verlässlich
+entsteht er im Workflow auf einem Windows-Rechner.
+
 Da das Repository öffentlich ist, braucht niemand ein Zugriffstoken, um Updates
 herunterzuladen – `electron-updater` liest öffentliche Releases ohne Anmeldung.
 Ein `GH_TOKEN` ist nur beim Veröffentlichen selbst nötig (siehe oben), nicht
@@ -316,7 +321,7 @@ beim Herunterladen auf den Aufnahmerechnern.
 
 ## Besonderheiten unter macOS
 
-Die App läuft auf macOS 11 und neuer, sowohl auf Intel als auch auf Apple
+Die App läuft auf macOS 13 (Ventura) und neuer (Vorgabe von Electron 44), sowohl auf Intel als auch auf Apple
 Silicon. Ein paar Dinge unterscheiden sich:
 
 - **Mikrofonfreigabe.** Beim ersten Start fragt macOS nach dem Zugriff auf den

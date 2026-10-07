@@ -17,7 +17,7 @@ contextBridge.exposeInMainWorld('api', {
   settings: {
     get: () => invoke('settings:get'),
     set: (patch) => invoke('settings:set', patch),
-    chooseFolder: (title) => invoke('settings:chooseFolder', { title }),
+    chooseFolder: (title, defaultPath) => invoke('settings:chooseFolder', { title, defaultPath }),
     chooseFile: (opts) => invoke('settings:chooseFile', opts)
   },
 

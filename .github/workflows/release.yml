@@ -17,11 +17,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: app/package-lock.json
 
@@ -54,11 +54,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: app/package-lock.json
 
@@ -76,11 +76,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: app/package-lock.json
 
@@ -95,6 +95,8 @@ jobs:
           else
             # Ohne Zertifikat ad hoc signieren: Auf Apple Silicon startet eine gar nicht signierte App
             # sonst mit der Meldung „beschädigt“. Gatekeeper fragt trotzdem einmal nach („Dennoch öffnen“).
+            # Die leere Variable (fehlendes Secret) muss weg, sonst liest electron-builder sie als Dateipfad.
+            unset CSC_LINK CSC_KEY_PASSWORD
             npm run publish:mac -- -c.mac.identity=-
           fi
         env:
@@ -117,7 +119,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Release freigeben
         run: gh release edit "$GITHUB_REF_NAME" --draft=false

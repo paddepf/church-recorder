@@ -672,10 +672,12 @@ ipcMain.handle('settings:set', (_e, patch) => {
   }
 });
 
-ipcMain.handle('settings:chooseFolder', async (_e, { title } = {}) => {
+ipcMain.handle('settings:chooseFolder', async (_e, { title, defaultPath } = {}) => {
   // Nur auswählen – gespeichert wird erst mit "Einstellungen speichern" (der Dialog dient für mehrere Ordner).
+  // Startordner immer setzen: Ohne defaultPath öffnet Electron (ab 43) den Downloads-Ordner.
   const res = await dialog.showOpenDialog(win, {
     title: title || 'Ordner wählen',
+    defaultPath: defaultPath && fs.existsSync(defaultPath) ? defaultPath : app.getPath('documents'),
     properties: ['openDirectory', 'createDirectory']
   });
   if (res.canceled || !res.filePaths[0]) return ok({ canceled: true });

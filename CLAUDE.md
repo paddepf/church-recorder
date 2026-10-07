@@ -197,6 +197,22 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - Updater auf dem Mac ohne Zertifikat: Status `manual` mit Hinweis statt Fehler. Release-Workflow: Tag-Prüfung,
   Tests, Entwurf, beide Builds, dann Freigabe; Mac ohne Zertifikat ad hoc signiert (`-c.mac.identity=-`).
   App-Icon `app/build/icon.png` (1024 px, wird von electron-builder umgerechnet).
+  Leere Secrets kommen als leere Umgebungsvariablen an: `CSC_LINK=""` hält electron-builder für einen Dateipfad
+  („app not a file“), deshalb `unset CSC_LINK CSC_KEY_PASSWORD` im Zweig ohne Zertifikat.
+
+### Electron-Stand (Oktober 2026)
+- Vor dem ersten Release von Electron 33 (ohne Sicherheitsupdates) auf **Electron 44** gehoben (Node 24, Chromium 152),
+  dazu electron-builder 26 und electron-updater 6.8. Keine Erstveröffentlichung auf einem nicht mehr gepflegten
+  Electron; vor jedem Release prüfen, ob die Hauptversion noch unterstützt wird (`npm view electron version`).
+- Folgen: macOS ab 13 (`LSMinimumSystemVersion`), Bauen braucht Node ≥ 22.12 (CI: Node 24, `checkout`/`setup-node` v7).
+  Ab Electron 43 öffnet `dialog.showOpenDialog` ohne `defaultPath` den Downloads-Ordner, deshalb gibt
+  `settings:chooseFolder` den aktuellen Ordner mit (sonst Dokumente).
+- **Vor Electron 45/46:** `safeStorage.encryptString/decryptString/isEncryptionAvailable` sind ab 45 veraltet und
+  entfallen in 46. Dann `settings.js` auf `encryptStringAsync`/`decryptStringAsync` umbauen (entschlüsselt alte
+  Werte weiter, bei `shouldReEncrypt` neu verschlüsseln), sonst ist der ChurchTools-Token weg.
+- Geprüft nach dem Update: Tests auch mit Electrons Node (`ELECTRON_RUN_AS_NODE=1 electron --test test/*.test.js`),
+  echte Aufnahme mit Abschnitten, Schnitt, Pause, Anhängen, Mithören, Mini-Fenster, MP3-Export mit ID3, Cue-Marker,
+  ChurchTools-Token, gepackte Mac-App inkl. Schreib-Thread aus `app.asar`.
 - **Tests:** `npm test` (`node --test`, Ordner `app/test/`, `helpers.js` ersetzt `./settings`). CI:
   `.github/workflows/test.yml` auf Windows und macOS. Neue Logik dort mit Tests absichern.
 

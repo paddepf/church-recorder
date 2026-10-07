@@ -1963,11 +1963,11 @@
       if (opt) opt.textContent = $('tpl-name').value || 'Ohne Namen';
     });
     $('btn-choose-dir').addEventListener('click', async () => {
-      const res = await window.api.settings.chooseFolder('Ordner für Aufnahmen wählen');
+      const res = await window.api.settings.chooseFolder('Ordner für Aufnahmen wählen', $('set-dir').value);
       if (res.ok && res.path) $('set-dir').value = res.path;
     });
     $('btn-choose-export-dir').addEventListener('click', async () => {
-      const res = await window.api.settings.chooseFolder('Oberordner für MP3-Exporte wählen');
+      const res = await window.api.settings.chooseFolder('Oberordner für MP3-Exporte wählen', $('set-export-dir').value);
       if (res.ok && res.path) $('set-export-dir').value = res.path;
     });
     $('btn-clear-export-dir').addEventListener('click', () => { $('set-export-dir').value = ''; });

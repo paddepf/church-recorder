@@ -18,12 +18,12 @@
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
-    "electron-updater": "^6.3.9",
-    "ws": "^8.21.3"
+    "electron-updater": "^6.8.9",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
-    "electron": "^33.4.11",
-    "electron-builder": "^25.1.8"
+    "electron": "^44.6.0",
+    "electron-builder": "^26.15.3"
   },
   "build": {
     "appId": "de.ebbp.ebbton",
@@ -82,7 +82,7 @@
       "notarize": false,
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Ebbton nimmt über den gewählten Audioeingang den Gottesdienst auf.",
-        "LSMinimumSystemVersion": "11.0"
+        "LSMinimumSystemVersion": "13.0"
       },
       "icon": "build/icon.png"
     },
