@@ -91,7 +91,7 @@ function multitrackChannels(inputs) {
 
 function multitrackTrackCount() {
   const armed = settings.get('multitrackArmed');
-  return Array.isArray(armed) ? Math.max(1, armed.length) : 32;
+  return Array.isArray(armed) ? Math.max(1, armed.length) : (monitorState.info?.inputs || 32);
 }
 
 /** Gerät für die Mehrspuraufnahme: das gewählte (per Name) oder das mit den meisten Eingängen. */
@@ -168,7 +168,51 @@ async function continueMultitrack() {
   return session.continueRecording({ writer: multitrack.writer(info) });
 }
 
-multitrack.on('levels', (l) => session.pushTrackLevels(l));
+multitrack.on('levels', (l) => {
+  session.pushTrackLevels(l);
+  send('track-levels', { peaks: l.peaks, clips: l.clips });   // Kanalpegel, auch beim Abhören vor dem Start
+});
+
+/* Abhören: Im Mehrspur-Modus ist das Gerät auch ohne Aufnahme offen, damit die Kanalpegel schon vor dem Start
+   laufen. Die Aufnahme übernimmt den offenen Strom (ASIO erlaubt nur einen). Fehlt das Gerät (Pult aus),
+   wird es alle 10 s erneut versucht. */
+let monitorState = { active: false, info: null, error: null, stalled: false };
+let monitorTimer = null;
+let monitorQueue = Promise.resolve();
+let multitrackExits = [];                      // Zeitpunkte der letzten Abstürze des Mehrspur-Prozesses
+const MONITOR_RETRY_MS = 10000;
+
+function sendMultitrack() {
+  send('multitrack', monitorState);
+}
+
+function updateMonitor() {
+  monitorQueue = monitorQueue.then(doUpdateMonitor, doUpdateMonitor);
+  return monitorQueue;
+}
+
+async function doUpdateMonitor() {
+  clearTimeout(monitorTimer);
+  monitorTimer = null;
+  if (isBusy()) return;                       // die laufende Aufnahme hat das Gerät
+  if (settings.get('recordingMode') !== 'multitrack') {
+    if (monitorState.active || monitorState.error) {
+      await multitrack.unmonitor().catch(() => {});
+      monitorState = { active: false, info: null, error: null, stalled: false };
+      sendMultitrack();
+    }
+    return;
+  }
+  try {
+    const { device, simulate } = await multitrackDevice();
+    const info = await multitrack.monitor({ simulate, deviceId: device.id });
+    monitorState = { active: true, info, error: null, stalled: false };
+  } catch (err) {
+    monitorState = { active: false, info: null, error: err.message, stalled: false };
+    monitorTimer = setTimeout(updateMonitor, MONITOR_RETRY_MS);
+  }
+  sendMultitrack();
+}
 
 /* ---------------------------------------------------------------------- Mischpult */
 
@@ -209,12 +253,18 @@ function configureMixer() {
   const simulate = settings.get('recordingMode') === 'multitrack' && Boolean(settings.get('multitrackSimulate'));
   return mixer.configure({ host: settings.get('mixerHost'), simulate }).then(onMixerChange, (err) => console.warn('Mischpult:', err.message));
 }
-multitrack.on('stall', () => {
+multitrack.on('stall', ({ recording }) => {
+  monitorState = { ...monitorState, stalled: true };
+  sendMultitrack();
+  if (!recording) return;                     // beim Abhören nur anzeigen, keine Meldung
   health.inputLost = true;
   publishHealth();
   toast('error', 'Mehrspur: Das Mischpult liefert keine Daten mehr – das Gerät wird neu geöffnet.');
 });
-multitrack.on('gap', ({ at, seconds }) => {
+multitrack.on('gap', ({ at, seconds, recording }) => {
+  monitorState = { ...monitorState, stalled: false };
+  sendMultitrack();
+  if (!recording) return;
   health.inputLost = false;
   publishHealth();
   const m = Math.floor(at / 60);
@@ -228,6 +278,17 @@ multitrack.on('device-error', ({ message }) => toast('error', `Mehrspur: ${messa
 multitrack.on('device-warning', ({ message }) => console.warn('Mehrspur:', message));
 multitrack.on('exit', ({ code, wasRecording }) => {
   console.error('Mehrspur-Prozess beendet, Code', code);
+  // Abhören wieder aufnehmen (startet den Prozess neu) – aber nicht endlos, falls er beim Öffnen immer wieder abstürzt.
+  const now = Date.now();
+  multitrackExits = multitrackExits.filter((t) => now - t < 60000).concat(now);
+  const giveUp = multitrackExits.length > 3;
+  monitorState = {
+    active: false, info: null, stalled: false,
+    error: giveUp ? 'Der Mehrspur-Prozess stürzt wiederholt ab (Treiber?). Ebbton neu starten.' : 'Mehrspur-Prozess beendet'
+  };
+  sendMultitrack();
+  if (giveUp) toast('error', 'Der Mehrspur-Prozess stürzt wiederholt ab – Mehrspur ist bis zum Neustart von Ebbton aus.');
+  else setTimeout(updateMonitor, 2000);
   if (!wasRecording) return;
   toast('error', 'Der Mehrspur-Prozess ist abgestürzt. Die Aufnahme wurde beendet; die Spuren bis hierher sind gespeichert.');
   if (session.mode === 'multitrack' && (session.status === 'recording' || session.status === 'paused')) session.stop();
@@ -761,6 +822,7 @@ session.on('recording-started', () => {
 
 session.on('recording-stopped', (info) => {
   onMixerChange();
+  session.whenWritten().then(updateMonitor);  // Aufnahmeart könnte inzwischen umgestellt sein
   preventSleep(false);
   silentSince = null;
   health.silent = false;
@@ -932,6 +994,10 @@ ipcMain.handle('settings:set', (_e, patch) => {
     settings.save(clean);
     if (clean.recordingsDir) fs.mkdirSync(clean.recordingsDir, { recursive: true });
     if (['mixerHost', 'recordingMode', 'multitrackSimulate'].some((k) => k in clean)) configureMixer();
+    if (['recordingMode', 'multitrackDevice', 'multitrackSimulate', 'multitrackArmed'].some((k) => k in clean)) {
+      updateMonitor();
+      refreshDisk();
+    }
     if (networkChanged) {
       const result = settings.get('networkEnabled') ? net.restart() : (net.stop(), { ok: true });
       if (!result.ok) toast('warn', result.error);
@@ -1100,6 +1166,7 @@ ipcMain.handle('mixer:forget', () => {
   return ok({ mixer: mixerState() });
 });
 ipcMain.handle('mixer:simulateRouting', (_e, { kind } = {}) => (mixer.simulateRouting(kind) ? ok() : fail('Kein simuliertes Pult.')));
+ipcMain.handle('multitrack:state', () => ok({ monitor: monitorState }));
 ipcMain.handle('multitrack:devices', async (_e, { simulate } = {}) => {
   try { return ok(await multitrack.devices({ simulate: Boolean(simulate) })); } catch (err) { return fail(err); }
 });
@@ -1389,6 +1456,7 @@ if (!singleInstance) {
     refreshDisk();
     setInterval(refreshDisk, 30000);   // Speicherplatz regelmäßig prüfen und an Netzwerk-Clients melden
     configureMixer();
+    updateMonitor();
 
     // macOS verlangt zusätzlich zur Chromium-Freigabe eine Systemfreigabe.
     if (process.platform === 'darwin') {

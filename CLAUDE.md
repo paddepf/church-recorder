@@ -437,10 +437,10 @@ Der Ordnername des lokalen Klons ist egal.
   Routing-Erkennung per OSC soll warnen, wenn Schalter und Pult nicht zusammenpassen. Eingangsquellen am Pult schaltet
   Ebbton **nicht** um (Gefahr: keine Mikros im Gottesdienst). Nur Windows; auf dem Mac nur Simulation bzw. CoreAudio.
 - Festlegungen: 32 Mono-WAVs, 24 Bit, Rate des Treibers, Ordner pro Aufnahme, Dateinamen nach Pultnamen; alle Kanäle
-  scharf, einzeln abwählbar; Abschnitte laufen mit; eigener Ordner für Mehrspur-Aufnahmen; Raster mit 32
-  Kanalstreifen ohne Wellenform. Kirchen-PC: Samsung PM981a NVMe 512 GB, etwa 16,6 GB je Stunde bei 32 Kanälen.
+  scharf, einzeln abwählbar; Abschnitte laufen mit; eigener Ordner für Mehrspur-Aufnahmen. Kanalübersicht als
+  Bereich „Kanäle“ an der Stelle des Exports; die Wellenform (Abschnitte!) bleibt, sie zeigt den lautesten Kanal. Kirchen-PC: Samsung PM981a NVMe 512 GB, etwa 16,6 GB je Stunde bei 32 Kanälen.
 - Reihenfolge: 1 Technik-Test (erledigt) → 2 Anbindung an die Session (erledigt) → 3 OSC/Routing mit Pult-Simulator (erledigt) →
-  4 Oberfläche → 5 Zurückspielen → 6 Test am Pult, erst dann Merge in `main`.
+  4 Oberfläche (erledigt) → 5 Zurückspielen → 6 Test am Pult, erst dann Merge in `main`.
 - **Audio über `audify`** (MIT, RtAudio; N-API, also ohne Neubau für Electron; Windows-Builds mit ASIO). audify meldet
   Überläufe des Treibers nicht (Status im Callback wird ignoriert) und verwirft Blöcke mit abweichender Framezahl
   still. Deshalb eigene Aussetzererkennung in `engine.js`: 1 s ohne Block → `stall`, nach 3 s Gerät neu öffnen
@@ -487,8 +487,31 @@ Der Ordnername des lokalen Klons ist egal.
   fehlt noch. Beim Stopp endet der laufende Abschnitt bei der zuletzt gemeldeten Dauer (bis etwa 50 ms vor Dateiende).
 - Geprüft (Mac, Simulator): Tests mit echter Engine (Session-Ablauf inkl. Laden/Anhängen) und die App per
   WebSocket-Fernsteuerung sowie per Knöpfen (Start, Abschnitt, Pause, Stopp, Anhängen, Einstellungen).
-- Offen für Schritt 4: Kanalpegel schon vor dem Start (Gerät ohne Aufnahme öffnen), Kanalwahl, Export-Bereich
-  im Mehrspur-Modus ausblenden.
+- **Oberfläche (Schritt 4):** Umschalter „Stereo | Mehrspur“ in der Kopfzeile (`.mode-switch`, `setRecordingMode`,
+  speichert `recordingMode`; während der Aufnahme gesperrt, im Mini-Fenster ausgeblendet). `body.mt`
+  (`multitrackView()`: Mehrspur eingestellt **oder** eine Mehrspuraufnahme angezeigt) ersetzt den Export-Bereich durch
+  den Bereich „Kanäle“ (`renderChannels`, `channelModel`, `applyTrackLevels`); die Spalte ist dann breiter
+  (`minmax(380px, 1.25fr)`, kompakt 330 px), damit die Namen passen. Wird bei Mehrspur-Einstellung eine beendete
+  Stereo-Aufnahme angezeigt, fehlt der Export; Hinweis im Kanal-Bereich „zum Exportieren auf Stereo schalten“.
+  Gemessen: kein Überlauf, Timer gleich in beiden Modi, keine gekürzten Kanalnamen bei 1360×880, 1024×680, kompakt
+  960×640 und 760×520.
+- **Abhören vor dem Start:** `engine.monitor()` öffnet das Gerät ohne Aufnahme; `start()` übernimmt den offenen Strom
+  (ASIO: nur einer), `stop()` lässt ihn beim Abhören offen, `open()` mit anderer Rate (Anhängen) öffnet neu, während der
+  Aufnahme wird ein Gerätewechsel abgelehnt. Hauptprozess `updateMonitor()` (Warteschlange, damit sich Aufrufe nicht
+  überholen): im Mehrspur-Modus und ohne laufende Aufnahme offen, im Stereo-Modus geschlossen (gemessen); fehlt das
+  Gerät, alle 10 s neuer Versuch; Aufrufe bei App-Start, Einstellungsänderung und nach `whenWritten` eines Stopps.
+  Aussetzer beim Abhören (`stall`/`gap` mit `recording: false`) nur als Status, keine Meldung. Stürzt der Prozess ab,
+  wird er nach 2 s neu gestartet, mehr als drei Abstürze je Minute → aus bis zum App-Neustart (Schutz vor
+  Absturzschleifen durch einen Treiber). Kanalpegel gehen als `track-levels` an die Oberfläche (auch vor dem Start).
+- Kanalwahl: Klick auf einen Kanal (nicht während der Aufnahme) schreibt `multitrackArmed`; alle gewählt → `null`
+  (neue Gerätekanäle kommen automatisch dazu), keiner → abgelehnt. Während der Aufnahme zeigt der Bereich die Spuren
+  der Aufnahme (fest), nicht aufgenommene Kanäle mit aktuellem Pultnamen. Stumm: gewählter Kanal 20 s unter 0,001 während
+  der Aufnahme (wie die Stereo-Stillewarnung), nur im Kanal-Bereich, keine Meldung.
+- Fehler aus Schritt 2 behoben: Die Oberfläche hing „An Aufnahme anhängen“, die Ansicht nach dem Beenden
+  (`body.review`) und die Rückfrage vor einer neuen Aufnahme an `session.wavPath` – bei Mehrspur `null`. Jetzt
+  `hasAudio(session)`. (Der damalige Test hatte den versteckten Knopf per Skript geklickt.)
+- Geprüft (Mac, Simulator, echte App per DevTools-Protokoll): Kanalwahl, Aufnahme, Sperren, Stummwarnung, Neuladen
+  der Oberfläche während der Aufnahme (Aufnahme läuft ungestört weiter), Beenden, Umschalten, Gerät im Stereo-Modus frei.
 - **Mischpult per OSC (Schritt 3, `src/main/mixer/`):** nur lesend, UDP 10023, eigenes kleines OSC (`osc.js`, keine
   Abhängigkeit). `client.js` liest `/ch/NN/config/name|color` und `/config/routing/CARD/1-8 … 25-32`, meldet sich mit
   `/xremote` an (alle 8 s erneuern, Änderungen am Pult kommen sofort), Lebenszeichen per `/xinfo`; 12 s ohne Antwort

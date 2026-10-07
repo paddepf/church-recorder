@@ -450,14 +450,22 @@ Für Aufnahmen aller 32 Kanäle des Midas M32 (DN32-USB-Karte, ASIO) gibt es ein
 Ein eigener Prozess öffnet das Gerät über `audify` (RtAudio; unter Windows ASIO) und schreibt je
 Kanal eine 24-Bit-Mono-WAV. Die Oberfläche erfasst dabei nichts selbst.
 
-**Bedienung (vorläufig, die Kanalübersicht folgt):** *Einstellungen → Audio → Mehrspuraufnahme*:
-Aufnahmeart „Mehrspur“, Gerät wählen („Suchen“ fragt die Geräte ab, unter Windows die ASIO-Treiber; nur
-außerhalb einer Aufnahme) oder „Automatisch“ (Gerät mit den meisten Eingängen). „Simuliertes Pult“ nimmt ein
-nachgebautes 32-Kanal-Pult auf (zum Ausprobieren). Danach wie gewohnt aufnehmen: Start, Pause, Abschnitte,
+**Bedienung:** Oben rechts „Stereo | Mehrspur“ wählt die Aufnahmeart (während einer Aufnahme gesperrt; dasselbe
+unter *Einstellungen → Audio*). Im Mehrspur-Modus ersetzt der Bereich **Kanäle** den Export: alle Kanäle mit
+Name und Farbe vom Pult und Pegel – schon vor dem Start, denn das Gerät ist im Mehrspur-Modus ständig offen.
+Ein Klick auf einen Kanal wählt ihn für die nächste Aufnahme ab bzw. wieder an (durchgestrichen = wird nicht
+aufgenommen), „Alle“ und „Nur benannte“ (Kanäle mit Namen am Pult) wählen schnell aus. Rot umrandet = übersteuert,
+gelb umrandet = seit über 20 s still während der Aufnahme (die Namen stehen auch oben im Bereich). Darüber stehen
+Gerät, Abtastrate, Zahl der gewählten Kanäle und der Platz in Stunden; fehlt das Gerät (Pult aus), versucht
+Ebbton es alle 10 s erneut. Der große Pegel zeigt den lautesten gewählten Kanal.
+Gerät wählen unter *Einstellungen → Audio → Mehrspuraufnahme* („Suchen“ fragt die Geräte ab, unter Windows die
+ASIO-Treiber; nur außerhalb einer Aufnahme) oder „Automatisch“ (Gerät mit den meisten Eingängen). „Simuliertes
+Pult“ nimmt ein nachgebautes 32-Kanal-Pult auf (zum Ausprobieren). Aufnehmen wie gewohnt: Start, Pause, Abschnitte,
 Beenden, „An Aufnahme anhängen“, auch per Companion. Am Mischpult müssen die USB-Ausgänge dafür auf den Kanälen
 1–32 liegen. Die Spuren landen je Aufnahme in einem Unterordner des Mehrspur-Ordners (*Ablage & Export*, sonst
 `Mehrspur` im Aufnahmeordner), zusammen mit der Session-Datei; die Liste „Aufnahmen“ zeigt sie mit an.
-MP3-Export, Mithören und Cue-Marker gibt es bei Mehrspuraufnahmen nicht.
+MP3-Export, Abspielen, Mithören und Cue-Marker gibt es bei Mehrspuraufnahmen nicht; das Mini-Fenster zeigt nach dem
+Beenden nur „Mehrspur: n Spuren gespeichert“.
 
 **Mischpult (Einstellungen → Mischpult):** IP des M32 eintragen oder „Suchen“ (findet Pulte im selben Netz).
 Ebbton liest dann per OSC – nur lesend – die Kanalnamen und -farben (die Spuren heißen wie am Pult,

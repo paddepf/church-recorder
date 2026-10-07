@@ -251,3 +251,47 @@ test('Anhängen scheitert bei anderer Abtastrate, ohne die Spuren anzufassen', a
   assert.throws(() => new MultiWavWriter({ sampleRate: 48000, deviceChannels: 1, tracks: [{ channel: 0, file }, { channel: 0, file: path.join(dir, 'fehlt.wav') }], append: true }));
   assert.deepEqual(fs.readFileSync(file), before);
 });
+
+test('Abhören vor dem Start: Aufnahme übernimmt den offenen Strom, danach bleibt das Gerät offen', async () => {
+  const dir = tmpDir();
+  const sims = [];
+  const engine = new MultitrackEngine({ createBackend: () => { const s = new SimulatedAudio({ channels: 4 }); sims.push(s); return s; } });
+  const levels = [];
+  engine.on('levels', (l) => levels.push(l));
+  const info = engine.monitor({ simulate: true, deviceId: SIM_DEVICE_ID });
+  assert.equal(info.recording, false);
+  await wait(300);
+  assert.ok(levels.some((l) => l.peaks[0] > 0), 'Pegel ohne Aufnahme');
+  assert.ok(levels.every((l) => l.buckets.length === 0), 'keine Wellenform ohne Aufnahme');
+  assert.deepEqual(fs.readdirSync(dir), [], 'keine Dateien beim Abhören');
+  const opened = sims.length;
+
+  const file = path.join(dir, '1.wav');
+  engine.start({ simulate: true, deviceId: SIM_DEVICE_ID, tracks: [{ channel: 0, file }] });
+  assert.equal(sims.length, opened, 'derselbe Strom (ASIO erlaubt nur einen)');
+  await wait(400);
+  const res = await engine.stop();
+  assert.ok(res.seconds > 0.3 && res.seconds < 0.6, `aufgenommen ${res.seconds}`);
+  assert.equal(engine.opened, true, 'nach dem Stopp weiter offen');
+  const n = levels.length;
+  await wait(200);
+  assert.ok(levels.length > n, 'Pegel laufen weiter');
+
+  // Andere Abtastrate (z. B. Anhängen an eine 44,1-kHz-Aufnahme): Gerät wird neu geöffnet.
+  engine.open({ simulate: true, deviceId: SIM_DEVICE_ID, sampleRate: 44100 });
+  assert.equal(engine.info().sampleRate, 44100);
+  assert.equal(sims[opened - 1].isStreamOpen(), false);
+  engine.unmonitor();
+  assert.equal(engine.opened, false);
+  assert.equal(sims[sims.length - 1].isStreamOpen(), false);
+});
+
+test('Aufnahme ohne Abhören schließt das Gerät beim Stopp; Wechsel während der Aufnahme wird abgelehnt', async () => {
+  const dir = tmpDir();
+  const engine = new MultitrackEngine();
+  engine.start({ simulate: true, deviceId: SIM_DEVICE_ID, tracks: [{ channel: 0, file: path.join(dir, '1.wav') }] });
+  assert.throws(() => engine.open({ simulate: true, deviceId: SIM_DEVICE_ID, sampleRate: 44100 }), /gewechselt/);
+  await wait(200);
+  await engine.stop();
+  assert.equal(engine.opened, false);
+});

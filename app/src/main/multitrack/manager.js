@@ -81,6 +81,16 @@ class MultitrackManager extends EventEmitter {
     return result;
   }
 
+  /** Gerät zum Abhören öffnen (Pegel ohne Aufnahme); eine spätere Aufnahme übernimmt den Strom. */
+  monitor(opts) {
+    return this._call('monitor', opts);
+  }
+
+  /** Abhören beenden (nur wenn der Prozess läuft; eine laufende Aufnahme bleibt unberührt). */
+  unmonitor() {
+    return this.child ? this._call('unmonitor') : Promise.resolve(true);
+  }
+
   pause() {
     return this._call('pause');
   }

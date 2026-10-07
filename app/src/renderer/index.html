@@ -21,6 +21,10 @@
     <div class="top-actions">
       <span id="disk-badge" class="badge" data-level="ok" title="Freier Speicherplatz auf dem Laufwerk der Aufnahmen">Speicher</span>
       <button id="btn-update" class="update-btn" hidden title="Update anzeigen">Update</button>
+      <div class="view-switch mode-switch" role="group" aria-label="Aufnahmeart">
+        <button id="btn-mode-stereo" aria-pressed="true" title="Stereo: Eingang aus den Einstellungen, z. B. die Matrix auf USB 1–2">Stereo</button>
+        <button id="btn-mode-multi" aria-pressed="false" title="Mehrspur: alle Kanäle des Mischpults einzeln (am Pult die USB-Ausgänge auf die Kanäle legen)">Mehrspur</button>
+      </div>
       <button id="btn-library" class="ghost" title="Frühere Aufnahmen">Aufnahmen</button>
       <button id="btn-settings" class="ghost" title="Einstellungen">Einstellungen</button>
       <label class="ontop compact-only" title="Das Mini-Fenster bleibt über anderen Programmen"><input type="checkbox" id="chk-ontop" checked /> <span class="ontop-long">Immer </span>oben</label>
@@ -122,6 +126,18 @@
       <button id="btn-export" class="primary" disabled>Ausgewählte als MP3 speichern</button>
       <div id="export-progress" class="progress" hidden><i></i></div>
       <div id="export-result" class="export-result"></div>
+    </div>
+
+    <div class="panel panel-channels">
+      <div class="panel-head">
+        <h2>Kanäle</h2>
+        <span class="export-select">
+          <button id="ch-all" class="mini" title="Alle Kanäle aufnehmen">Alle</button>
+          <button id="ch-named" class="mini" title="Nur Kanäle aufnehmen, die am Pult einen Namen haben">Nur benannte</button>
+        </span>
+      </div>
+      <div id="ch-status" class="ch-status"></div>
+      <div id="ch-list" class="ch-list" role="group" aria-label="Kanäle: Klick wählt für die Aufnahme an oder ab"></div>
     </div>
   </section>
 

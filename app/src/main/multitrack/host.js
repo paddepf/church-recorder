@@ -4,7 +4,7 @@
  * Einstieg des Mehrspur-Prozesses (Electron `utilityProcess`). Nimmt Befehle vom Hauptprozess
  * entgegen und reicht die Ereignisse der Engine zurück.
  *
- * Befehle: {id, cmd: 'devices'|'start'|'pause'|'resume'|'stop', args} → Antwort {id, ok, result | error}.
+ * Befehle: {id, cmd: 'devices'|'monitor'|'unmonitor'|'info'|'start'|'pause'|'resume'|'stop', args} → Antwort {id, ok, result | error}.
  * Ereignisse: {event, data}.
  */
 
@@ -21,6 +21,9 @@ for (const ev of ['levels', 'stall', 'gap', 'reopen', 'device-error', 'device-wa
 
 const commands = {
   devices: (args) => engine.devices(args || {}),
+  monitor: (args) => engine.monitor(args),
+  unmonitor: () => engine.unmonitor(),
+  info: () => engine.info(),
   start: (args) => engine.start(args),
   pause: () => engine.pause(),
   resume: () => engine.resume(),

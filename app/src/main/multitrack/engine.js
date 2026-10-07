@@ -17,7 +17,7 @@
  * - Fehlen gegenüber der Uhr dauerhaft mehr als 0,25 s Audio (über ein 5-s-Fenster, damit
  *   Uhrendrift und verspätete Blöcke nicht zählen), folgt ebenfalls 'gap'.
  *
- * Ereignisse: 'levels' ({peaks, clips, buckets, seconds}), 'stall' ({at}), 'gap' ({at, seconds}), 'reopen' ({ok, error}),
+ * Ereignisse: 'levels' ({peaks, clips, buckets, seconds}), 'stall' ({at, recording}), 'gap' ({at, seconds, recording}), 'reopen' ({ok, error}),
  * 'device-error' / 'device-warning' ({type, message}), 'write-error', 'slow'.
  */
 
@@ -58,12 +58,14 @@ class MultitrackEngine extends EventEmitter {
     this.now = now;
     this.backend = null;
     this.writer = null;
-    this.running = false;
+    this.opened = false;           // Gerät offen (Pegel laufen)
+    this.running = false;          // Aufnahme läuft (auch pausiert)
+    this.monitorWanted = false;    // Gerät auch ohne Aufnahme offen halten (Pegel vor dem Start)
   }
 
-  /** Geräte der Schnittstelle (bzw. das simulierte Pult). */
+  /** Geräte der Schnittstelle (bzw. das simulierte Pult). Bei offenem Gerät über dieselbe Verbindung. */
   devices({ simulate = false } = {}) {
-    const b = this.running && !!this.opts.simulate === simulate ? this.backend : this.createBackend(simulate);
+    const b = this.opened && !!this.opts.simulate === simulate ? this.backend : this.createBackend(simulate);
     return {
       api: b.getApi(),
       devices: b.getDevices().map((d) => ({
@@ -78,64 +80,107 @@ class MultitrackEngine extends EventEmitter {
   }
 
   /**
-   * Startet die Aufnahme.
+   * Öffnet das Gerät (Pegel laufen, geschrieben wird nichts). Ist es mit denselben Werten schon offen,
+   * bleibt es offen – ASIO erlaubt nur einen Strom, Abhören und Aufnahme teilen ihn sich.
    * @param {object} o
    * @param {number} o.deviceId
+   * @param {boolean} [o.simulate]
    * @param {number} [o.sampleRate] Standard: bevorzugte Rate des Geräts
    * @param {number} [o.frameSize] 0 = Puffergröße des Treibers (bei ASIO so gewollt)
-   * @param {{channel:number, file:string}[]} o.tracks
-   * @param {boolean} [o.simulate]
-   * @param {boolean} [o.append] an die vorhandenen Spurdateien anhängen
    */
-  start(o) {
-    if (this.running) throw new Error('Mehrspuraufnahme läuft bereits.');
+  open(o) {
+    const same = this.opened && this.opts.deviceId === o.deviceId && !!this.opts.simulate === !!o.simulate
+      && (!o.sampleRate || o.sampleRate === this.opts.sampleRate);
+    if (same) return this.info();
+    if (this.running) throw new Error('Während der Aufnahme kann das Gerät nicht gewechselt werden.');
+    this._shutdown();
+
     const backend = this.createBackend(!!o.simulate);
     const device = backend.getDevices().find((d) => d.id === o.deviceId);
     if (!device) throw new Error('Das Audiogerät wurde nicht gefunden.');
     if (!device.inputChannels) throw new Error(`„${device.name}“ hat keine Eingänge.`);
     const sampleRate = o.sampleRate || device.preferredSampleRate || 48000;
 
-    this.opts = { ...o, sampleRate };
+    this.opts = { deviceId: o.deviceId, simulate: !!o.simulate, sampleRate, frameSize: o.frameSize };
     this.device = device;
     this.inputs = device.inputChannels;
     this.outputs = device.outputChannels;
     this.backend = backend;
+    this.frameSize = this._open();
 
-    // Zuerst die Dateien: Scheitert das, wird das Gerät gar nicht erst geöffnet.
-    this.writer = new MultiWavWriter({ sampleRate, deviceChannels: this.inputs, tracks: o.tracks, append: !!o.append });
-    this.writer.on('error', (e) => this.emit('write-error', e));
-    this.writer.on('slow', (s) => this.emit('slow', s));
-
-    try {
-      this.frameSize = this._open();
-    } catch (err) {
-      this.writer.close();
-      this.writer = null;
-      this.backend = null;
-      throw err;
-    }
-
-    this.running = true;
+    this.opened = true;
     this.paused = false;
     this.framesIn = 0;
-    this.gaps = [];
     this.peaks = new Float64Array(this.inputs);
     this.clips = new Uint8Array(this.inputs);
-    this.armed = Int32Array.from(o.tracks.map((t) => t.channel));
+    this.armed = new Int32Array(0);
     this.bucketSize = Math.round((sampleRate * BUCKET_MS) / 1000);
     this.bucketAcc = 0;
     this.bucketFill = 0;
     this.buckets = [];
     this.stalledAt = null;
+    this.lastReopen = null;
     this.lastChunkAt = this.now();
-    this.startedAt = this.lastChunkAt;
+    this._resetClock(this.lastChunkAt);
     this.history = [];
     this._levelTimer = setInterval(() => this._emitLevels(), LEVEL_EVERY_MS);
     this._watchTimer = setInterval(() => this._watch(), WATCH_EVERY_MS);
+    return this.info();
+  }
+
+  info() {
+    if (!this.opened) return null;
     return {
-      device: device.name, api: backend.getApi(), sampleRate, frameSize: this.frameSize,
-      inputs: this.inputs, outputs: this.outputs, seconds: this.writer.durationSeconds
+      device: this.device.name, api: this.backend.getApi(), sampleRate: this.opts.sampleRate, frameSize: this.frameSize,
+      inputs: this.inputs, outputs: this.outputs, simulate: this.opts.simulate,
+      recording: this.running, seconds: this.seconds
     };
+  }
+
+  /** Abhören: Gerät offen halten, auch ohne Aufnahme (Pegel vor dem Start). */
+  monitor(o) {
+    this.monitorWanted = true;
+    return this.open(o);
+  }
+
+  /** Abhören beenden; eine laufende Aufnahme bleibt davon unberührt (das Gerät schließt danach). */
+  unmonitor() {
+    this.monitorWanted = false;
+    if (!this.running) this._shutdown();
+    return true;
+  }
+
+  /**
+   * Startet die Aufnahme (öffnet das Gerät, falls es nicht schon zum Abhören offen ist).
+   * @param {object} o wie `open`, dazu:
+   * @param {{channel:number, file:string}[]} o.tracks
+   * @param {boolean} [o.append] an die vorhandenen Spurdateien anhängen
+   */
+  start(o) {
+    if (this.running) throw new Error('Mehrspuraufnahme läuft bereits.');
+    const wasOpen = this.opened;
+    this.open(o);
+    try {
+      // Erst die Dateien: Scheitert das, bleibt alles wie vorher.
+      this.writer = new MultiWavWriter({ sampleRate: this.opts.sampleRate, deviceChannels: this.inputs, tracks: o.tracks, append: !!o.append });
+    } catch (err) {
+      this.writer = null;
+      if (!wasOpen && !this.monitorWanted) this._shutdown();
+      throw err;
+    }
+    this.writer.on('error', (e) => this.emit('write-error', e));
+    this.writer.on('slow', (s) => this.emit('slow', s));
+
+    this.running = true;
+    this.paused = false;
+    this.gaps = [];
+    this.armed = Int32Array.from(o.tracks.map((t) => t.channel));
+    this.bucketAcc = 0;
+    this.bucketFill = 0;
+    this.buckets = [];
+    this.history = [];
+    this._resetClock(this.now());
+    return this.info();
   }
 
   _open() {
@@ -159,20 +204,20 @@ class MultitrackEngine extends EventEmitter {
   }
 
   _onInput(buf) {
-    if (!this.running) return;
+    if (!this.opened) return;
     const t = this.now();
     this.lastChunkAt = t;
     if (this.stalledAt != null) {
       const seconds = (t - this.stalledAt.time) / 1000;
-      this.gaps.push({ at: this.stalledAt.at, seconds, kind: 'stall' });
-      this.emit('gap', { at: this.stalledAt.at, seconds });
+      if (this.running) this.gaps.push({ at: this.stalledAt.at, seconds, kind: 'stall' });
+      this.emit('gap', { at: this.stalledAt.at, seconds, recording: this.running });
       this.stalledAt = null;
       this.lastReopen = null;
       this.history = [];
       this._resetClock(t);
     }
-    // In der Pause läuft das Gerät weiter (Pegel, Wächter), geschrieben wird nicht.
-    if (!this.paused) this.writer.write(buf);
+    // In der Pause und beim Abhören läuft das Gerät (Pegel, Wächter), geschrieben wird nicht.
+    if (this.running && !this.paused) this.writer.write(buf);
     this.framesIn += buf.length / (this.inputs * 4);
     this._measure(buf);
   }
@@ -188,7 +233,7 @@ class MultitrackEngine extends EventEmitter {
       : new Int32Array(Uint8Array.from(buf).buffer);
     const frames = Math.floor(view.length / ch);
     const { peaks, clips, armed } = this;
-    const wave = !this.paused;
+    const wave = this.running && !this.paused;
     for (let f = 0; f < frames; f++) {
       const base = f * ch;
       for (let c = 0; c < ch; c++) {
@@ -253,12 +298,17 @@ class MultitrackEngine extends EventEmitter {
     if (t - this.lastChunkAt > STALL_MS) {
       if (this.stalledAt == null) {
         this.stalledAt = { time: this.lastChunkAt, at: this.seconds };
-        this.emit('stall', { at: this.seconds });
+        this.emit('stall', { at: this.seconds, recording: this.running });
       }
       if (t - (this.lastReopen || this.stalledAt.time) > REOPEN_AFTER_MS) this._reopen(t);
       return;
     }
-    // Fehlbetrag gegenüber der Uhr, über ein Fenster beobachtet.
+    // Fehlbetrag gegenüber der Uhr, über ein Fenster beobachtet (nur während der Aufnahme von Belang).
+    if (!this.running) {
+      this.history = [];
+      this._resetClock(t);
+      return;
+    }
     const expected = ((t - this.startedAt) / 1000) * this.opts.sampleRate;
     const deficit = expected - (this.framesIn - (this.framesAtStart || 0));
     this.history.push({ t, deficit });
@@ -270,7 +320,7 @@ class MultitrackEngine extends EventEmitter {
     const missing = (recent - old) / this.opts.sampleRate;
     if (missing > GAP_MIN_SECONDS) {
       this.gaps.push({ at: this.seconds, seconds: missing, kind: 'drop' });
-      this.emit('gap', { at: this.seconds, seconds: missing });
+      this.emit('gap', { at: this.seconds, seconds: missing, recording: true });
       this.history = [];
       this._resetClock(t);
     }
@@ -298,17 +348,27 @@ class MultitrackEngine extends EventEmitter {
     try { if (b.isStreamOpen()) b.closeStream(); } catch { /* egal */ }
   }
 
-  /** Beendet die Aufnahme; das Versprechen erfüllt sich, wenn alles auf der Platte ist. */
+  /** Gerät schließen, Zeitgeber anhalten. */
+  _shutdown() {
+    clearInterval(this._levelTimer);
+    clearInterval(this._watchTimer);
+    if (this.backend) this._close(this.backend);
+    this.opened = false;
+  }
+
+  /**
+   * Beendet die Aufnahme; das Versprechen erfüllt sich, wenn alles auf der Platte ist.
+   * Beim Abhören bleibt das Gerät offen, sonst wird es geschlossen.
+   */
   async stop() {
     if (!this.running) return null;
     this.running = false;
-    clearInterval(this._levelTimer);
-    clearInterval(this._watchTimer);
-    this._close(this.backend);
     const writer = this.writer;
     this.writer = null;
+    const sampleRate = this.opts.sampleRate;
+    if (!this.monitorWanted) this._shutdown();
     const result = await writer.close();
-    return { ...result, seconds: result.frames / this.opts.sampleRate, files: writer.files, gaps: this.gaps };
+    return { ...result, seconds: result.frames / sampleRate, files: writer.files, gaps: this.gaps };
   }
 }
 
