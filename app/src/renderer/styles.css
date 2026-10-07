@@ -241,6 +241,7 @@ button.record {
 }
 button.record .dot {
   width: 14px; height: 14px;
+  flex-shrink: 0;                 /* sonst drückt ein knapper Knopf den Punkt bei manchen Fensterbreiten auf 0 px */
   border-radius: 50%;
   background: var(--tally);
   box-shadow: 0 0 0 0 rgba(255,59,48,.6);
