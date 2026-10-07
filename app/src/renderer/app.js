@@ -649,6 +649,8 @@
         ? 'Klicken: jetzt beginnen · auf die Wellenform ziehen: an die Stelle legen'
         : 'Auf die Wellenform ziehen, um den Punkt an eine Stelle zu legen';
       li.querySelector('.label').textContent = x.label;
+      // Lange Titel werden mit „…“ gekürzt: beim Darüberfahren den ganzen Titel zeigen.
+      li.querySelector('.label').title = `${fullTitle(x)}\n\n${li.title}`;
       li.querySelector('.label').appendChild(artistTag(x, () => li.getBoundingClientRect()));
       li.querySelector('[data-rename]').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -717,6 +719,7 @@
         dur.textContent = fmtLength((state.duration || 0) - x.start);
       }
       li.querySelector('.label').textContent = x.label;
+      li.querySelector('.label').title = `${fullTitle(x)}\n${range}`;
       li.dataset.id = x.id;
       li.tabIndex = 0;
       li.querySelector('.label').appendChild(artistTag(x, () => li.getBoundingClientRect()));
@@ -736,6 +739,11 @@
       });
       sectionEl.appendChild(li);
     });
+  }
+
+  /** Ganzer Titel samt Interpret für den Tooltip (in den Listen wird er bei Platzmangel gekürzt). */
+  function fullTitle(section) {
+    return section.artist ? `${section.label} · ${section.artist}` : section.label;
   }
 
   /** Interpret hinter dem Namen; ohne Eintrag erscheint beim Darüberfahren "+ Interpret". Klick = direkt bearbeiten. */

@@ -112,6 +112,8 @@ Windows erzeugen. Der mitgelieferte Workflow erledigt beides auf GitHub.
    bearbeiten") – auch schon bei den offenen Punkten im Ablaufplan, bevor sie
    aufgenommen werden. Er steht hell hinter dem Namen, fehlt er, erscheint beim
    Darüberfahren „+ Interpret“.
+   Lange Namen werden in den Listen mit „…“ gekürzt; beim Darüberfahren erscheint
+   der ganze Titel samt Interpret.
 
 Die WAV-Masteraufnahme bleibt erhalten. Über „Aufnahmen“ kann eine frühere
 Session erneut geöffnet, die Marken nachjustiert und ein weiterer Abschnitt

@@ -349,6 +349,8 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - Zeitangaben (Marken, Listen, Zeitleiste der Wellenform) nutzen dieselbe
   Schrift wie der große Timer: `var(--sans)` mit `font-variant-numeric: tabular-nums`.
   Keine Monospace-Schrift verwenden (`--mono` gibt es nicht mehr).
+- Listen Ablaufplan/Abschnitte: Lange Namen werden mit „…“ gekürzt; die `.label` trägt den ganzen Titel samt Interpret als
+  Tooltip (`fullTitle`), im Ablaufplan gefolgt vom Bedienhinweis der Zeile, bei Abschnitten vom Zeitraum.
 - Wellenform-Beschriftung: Der Name am Start-Fähnchen wird mit „…“ auf den Platz bis zum Ende-Fähnchen
   gekürzt (`_fitText`, `_drawHandles`); reicht der Platz nicht, schrumpft das Ende-Fähnchen zur Lasche. Der
   Interpret erscheint nur bei genug Platz.
