@@ -26,6 +26,12 @@ test('Dienst Geschichte gehört zum Kinderbeitrag', () => {
   assert.deepEqual(namesForLabel('Kinderbeitrag', [{ role: 'Geschichte', name: 'Dora' }, { role: 'Predigt', name: 'Ben' }]), ['Dora']);
 });
 
+test('Einleitung: ohne Leitung macht der Prediger sie, mit Leitung nicht', () => {
+  assert.deepEqual(namesForLabel('Einleitung', [{ role: 'Predigt', name: 'Ben' }, { role: 'Predigt 2', name: 'Cara' }]), ['Ben']);
+  assert.deepEqual(namesForLabel('Einleitung', [{ role: 'Leitung', name: 'Eva' }, { role: 'Predigt', name: 'Ben' }]), ['Eva']);
+  assert.deepEqual(namesForLabel('Abschluss', [{ role: 'Predigt', name: 'Ben' }]), []);
+});
+
 test('Namen ohne Doppelte', () => {
   const sug = [{ role: 'Predigt', name: 'Ben' }, { role: 'Predigt 2', name: 'Cara' }, { role: 'Leitung', name: 'Ben' }];
   assert.deepEqual(namesForLabel('Predigt', sug), ['Ben', 'Cara']);

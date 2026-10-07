@@ -119,8 +119,8 @@ test('Vorlage zweimal laden erzeugt keine Doppelten', () => withSession(async (s
 test('Interpreten aus der Dienstplanung werden zugeordnet', () => withSession(async (s) => {
   s.setService({ id: 1, name: 'Test', suggestions: [{ role: 'Predigt 2', name: 'Ben' }] });
   const n = s.setAgenda([{ id: null, title: 'Predigt' }, { id: null, title: 'Einleitung' }], 'plan');
-  assert.equal(n, 1);
-  assert.deepEqual(s.pendingSections().map((x) => x.artist), ['Ben', null]);
+  assert.equal(n, 2);   // Einleitung: ohne Leitung macht der Prediger sie
+  assert.deepEqual(s.pendingSections().map((x) => x.artist), ['Ben', 'Ben']);
 }));
 
 test('Infotext des Termins landet im Predigt-Abschnitt, nur einmal', () => withSession(async (s) => {

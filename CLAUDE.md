@@ -115,7 +115,7 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   (`editSection`) als Chips; passender Dienst zuerst (Wortvergleich: „Gebetsleitung“ passt nicht zu „Einleitung“; „Leitung“ → „Einleitung“ gilt nur über `ALIASES`).
   **Automatisch eintragen:** `Session.setAgenda` ruft `_applySuggestions()`: für Punkte ohne `artist` kommen die
   Namen aus `service.suggestions`, deren Dienst zum Punktnamen passt (`src/shared/roles.js`, `RoleLogic`:
-  ganze Wörter, reine Zahlen zählen nicht; feste Zuordnung `ALIASES`: Dienst „Geschichte“ → Punkt „Kinderbeitrag“, Dienst „Leitung“ → Punkte „Einleitung“ und „Abschluss“; "Predigt 2" → Punkt "Predigt"; mehrere Treffer mit Komma). Dieselbe
+  ganze Wörter, reine Zahlen zählen nicht; feste Zuordnung `ALIASES`: Dienst „Geschichte“ → Punkt „Kinderbeitrag“, Dienst „Leitung“ → Punkte „Einleitung“ und „Abschluss“; "Predigt 2" → Punkt "Predigt"; mehrere Treffer mit Komma; Rückfall `FALLBACKS`: passt kein Dienst zum Punkt „Einleitung“ (keine Leitung eingetragen, z. B. Bibelstunde), macht der erste Prediger sie). Dieselbe
   Regel sortiert die Chips im Editor. `setAgenda` gibt die Anzahl zurück (`autoFilled` in der Antwort von
   `ct:agenda`). Reihenfolge der Quellen: Ablaufplan-Person vor Dienstplanung.
   **Die genaue Antwortform von ChurchTools wurde nicht gegen eine echte Instanz geprüft** (nur mit nachgebauten
@@ -260,6 +260,8 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   über Lautsprecher landet das Mithören sonst im Mikrofon.
 
 ### ChurchTools
+- ChurchTools behandelt `to` bei `/api/events` als **exklusiv** (`from = to` liefert nichts, so wurde der heutige Termin beim Start
+  nicht geladen): `listServices` fragt bis zum Folgetag ab und filtert danach nach Ortsdatum.
 - Beim Start wird heute geprüft: ein Termin wird geladen, bei mehreren der
   laufende bzw. nächste (Ende oder +2 h). Der Termin-Dialog zeigt die letzten und
   kommenden 5 Termine. ChurchTools liefert **UTC**; Zeit und Datum werden in

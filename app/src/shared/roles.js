@@ -17,6 +17,14 @@
     leitung: ['einleitung', 'abschluss']
   };
 
+  /**
+   * Rückfall, wenn zu einem Punkt kein Dienst passt: Punkt-Wort → Wörter eines anderen Dienstes. Bei der
+   * Bibelstunde ist nur der Prediger eingetragen, der auch die Einleitung macht.
+   */
+  const FALLBACKS = {
+    einleitung: ['predigt']
+  };
+
   function words(text) {
     return String(text || '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   }
@@ -36,6 +44,12 @@
     (suggestions || []).forEach((s) => {
       if (roleMatchesLabel(s.role, label) && !names.includes(s.name)) names.push(s.name);
     });
+    if (names.length === 0) {
+      const wanted = words(label).flatMap((w) => FALLBACKS[w] || []);
+      // Nur der erste Treffer (bei „Predigt“ und „Predigt 2“ leitet nicht zugleich der zweite Prediger ein).
+      const hit = (suggestions || []).find((s) => words(s.role).some((w) => wanted.includes(w)));
+      if (hit) names.push(hit.name);
+    }
     return names;
   }
 
@@ -63,5 +77,5 @@
     return words(label).includes('predigt');
   }
 
-  return { words, roleMatchesLabel, namesForLabel, templateForTitle, takesEventInfo, ALIASES };
+  return { words, roleMatchesLabel, namesForLabel, templateForTitle, takesEventInfo, ALIASES, FALLBACKS };
 });

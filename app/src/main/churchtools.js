@@ -98,7 +98,16 @@ async function test() {
  * @param {string} to   ISO-Datum
  */
 async function listServices(from, to) {
-  const list = await requestAll('/api/events', { from, to });
+  // ChurchTools behandelt `to` als exklusiv (from = to liefert nichts): einen Tag zugeben, danach nach Ortsdatum filtern.
+  const [ty, tm, td] = String(to || from).split('-').map(Number);
+  const toExclusive = isoDate(new Date(ty, tm - 1, td + 1));
+  const raw = await requestAll('/api/events', { from, to: toExclusive });
+  const list = raw.filter((e) => {
+    const t = e.startDate ? new Date(e.startDate) : null;
+    if (!t || Number.isNaN(+t)) return true;
+    const day = isoDate(t);
+    return day >= from && day <= (to || from);
+  });
   // Optional nur bestimmte Kalender (Einstellung; leer = alle). Termine ohne Kalenderangabe bleiben.
   const wanted = (settings.get('churchToolsCalendarIds') || []).map(String);
   const filtered = wanted.length === 0 ? list : list.filter((e) => {

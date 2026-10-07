@@ -21,9 +21,20 @@ test('Termine über mehrere Seiten, Kalender-Filter', async () => {
     '/api/events?page=2': { data: [{ id: 2, name: 'B', startDate: '2026-10-05T08:00:00Z', calendar: { id: 5 } }], meta: { pagination: { lastPage: 2 } } }
   };
   setSettings({ churchToolsUrl: 'https://x.church.tools', churchToolsCalendarIds: [] });
-  assert.deepEqual((await ct.listServices('a', 'b')).map((x) => x.name), ['A', 'B']);
+  assert.deepEqual((await ct.listServices('2026-10-04', '2026-10-05')).map((x) => x.name), ['A', 'B']);
   setSettings({ churchToolsUrl: 'https://x.church.tools', churchToolsCalendarIds: [5] });
-  assert.deepEqual((await ct.listServices('a', 'b')).map((x) => x.name), ['B']);
+  assert.deepEqual((await ct.listServices('2026-10-04', '2026-10-05')).map((x) => x.name), ['B']);
+});
+
+test('Ein Tag (from = to): ChurchTools-`to` ist exklusiv, Termine anderer Tage bleiben draußen', async () => {
+  routes = {
+    '/api/events?page=1': { data: [
+      { id: 1, name: 'Heute', startDate: new Date(2026, 9, 7, 19, 0).toISOString() },
+      { id: 2, name: 'Morgen', startDate: new Date(2026, 9, 8, 19, 0).toISOString() }
+    ], meta: { pagination: { lastPage: 1 } } }
+  };
+  setSettings({ churchToolsUrl: 'https://x.church.tools', churchToolsCalendarIds: [] });
+  assert.deepEqual((await ct.listServices('2026-10-07', '2026-10-07')).map((x) => x.name), ['Heute']);
 });
 
 test('Ablaufplan: flache Überschriften werden zur Kategorie, Person zum Interpreten', async () => {
