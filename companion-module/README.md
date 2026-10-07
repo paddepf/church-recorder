@@ -19,8 +19,19 @@ npm install
 3. Companion neu starten. Das Modul erscheint unter **Connections** als
    „Ebbton“.
 
-Für die Weitergabe an andere Rechner lässt sich mit
-`npx companion-module-build` ein Paket erzeugen.
+### Als Paket installieren (ohne Entwicklerordner)
+
+Für die Weitergabe an andere Rechner lässt sich ein Paket erzeugen:
+
+```bash
+npm install
+npm run package      # erzeugt pkg.tgz
+```
+
+In Companion (ab 3.5/4.x) unter **Modules** → **Import module package** die `.tgz`-Datei wählen. Das Paket
+enthält alles gebündelt, `npm install` ist auf dem Zielrechner nicht nötig.
+`@companion-module/tools` ist bewusst auf `~2.1.0` festgelegt: Neuere 2.x-Versionen verlangen
+`@companion-module/base` ab 1.12 und lassen sich mit dem hier verwendeten 1.11 nicht installieren.
 
 ## Konfiguration
 
