@@ -1,4 +1,4 @@
-/* ChurchRecorder – Oberflächenlogik */
+/* Ebbton – Oberflächenlogik */
 
 (function () {
   'use strict';

@@ -1,5 +1,5 @@
 {
-  "name": "church-recorder",
+  "name": "ebbton",
   "version": "1.0.0",
   "description": "Aufnahmesoftware für Gottesdienste mit ChurchTools-Ablaufplan, Abschnitten und Netzwerksteuerung",
   "main": "src/main/main.js",
@@ -26,8 +26,8 @@
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "de.gemeinde.churchrecorder",
-    "productName": "ChurchRecorder",
+    "appId": "de.ebbp.ebbton",
+    "productName": "Ebbton",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -53,7 +53,7 @@
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
       "createDesktopShortcut": true,
-      "shortcutName": "ChurchRecorder"
+      "shortcutName": "Ebbton"
     },
     "mac": {
       "target": [
@@ -81,13 +81,13 @@
       "entitlementsInherit": "build/entitlements.mac.plist",
       "notarize": false,
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "ChurchRecorder nimmt über den gewählten Audioeingang den Gottesdienst auf.",
+        "NSMicrophoneUsageDescription": "Ebbton nimmt über den gewählten Audioeingang den Gottesdienst auf.",
         "LSMinimumSystemVersion": "11.0"
       },
       "icon": "build/icon.png"
     },
     "dmg": {
-      "title": "ChurchRecorder ${version}",
+      "title": "Ebbton ${version}",
       "contents": [
         {
           "x": 140,
@@ -113,7 +113,7 @@
       {
         "provider": "github",
         "owner": "paddepf",
-        "repo": "church-recorder",
+        "repo": "ebbton",
         "private": false,
         "releaseType": "draft"
       }

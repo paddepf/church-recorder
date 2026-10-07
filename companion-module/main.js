@@ -35,9 +35,9 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				type: 'static-text',
 				id: 'info',
 				width: 12,
-				label: 'ChurchRecorder',
+				label: 'Ebbton',
 				value:
-					'Verbindet sich mit der Netzwerkschnittstelle von ChurchRecorder. ' +
+					'Verbindet sich mit der Netzwerkschnittstelle von Ebbton. ' +
 					'Port und Passwort stehen dort in den Einstellungen unter „Netzwerk“.',
 			},
 			{
@@ -557,7 +557,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				type: 'button',
 				category: 'Aufnahme',
 				name: 'Aufnahme starten/beenden',
-				style: { ...base, text: 'REC\\n$(churchrecorder:timecode)' },
+				style: { ...base, text: 'REC\\n$(ebbton:timecode)' },
 				steps: [{ down: [{ actionId: 'record_toggle' }], up: [] }],
 				feedbacks: [fb('recording')],
 			},
@@ -589,7 +589,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				type: 'button',
 				category: 'Ablaufplan',
 				name: 'Nächster Programmpunkt',
-				style: { ...base, text: 'Weiter\\n$(churchrecorder:next_item)' },
+				style: { ...base, text: 'Weiter\\n$(ebbton:next_item)' },
 				steps: [{ down: [{ actionId: 'marker_next' }], up: [] }],
 				feedbacks: [fb('has_pending')],
 			},
@@ -616,7 +616,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				style: {
 					...base,
 					size: '7',
-					text: 'Eingang: $(churchrecorder:input_status)\\nSpeicher: $(churchrecorder:disk_free) GB\\n$(churchrecorder:disk_hours)',
+					text: 'Eingang: $(ebbton:input_status)\\nSpeicher: $(ebbton:disk_free) GB\\n$(ebbton:disk_hours)',
 				},
 				steps: [{ down: [], up: [] }],
 				feedbacks: [fb('input_problem'), fb('write_problem'), fb('disk_warn'), fb('disk_low')],
@@ -628,7 +628,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				style: {
 					...base,
 					size: '7',
-					text: '$(churchrecorder:status)\\n$(churchrecorder:timecode)\\n$(churchrecorder:current_item)',
+					text: '$(ebbton:status)\\n$(ebbton:timecode)\\n$(ebbton:current_item)',
 				},
 				steps: [{ down: [], up: [] }],
 				feedbacks: [fb('recording')],

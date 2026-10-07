@@ -1,12 +1,12 @@
 {
-  "id": "churchrecorder",
-  "name": "churchrecorder",
-  "shortname": "ChurchRecorder",
-  "description": "Steuert ChurchRecorder: Aufnahme, Abschnitte, Schnitte und Ablaufplan",
+  "id": "ebbton",
+  "name": "ebbton",
+  "shortname": "Ebbton",
+  "description": "Steuert Ebbton: Aufnahme, Abschnitte, Schnitte und Ablaufplan",
   "version": "1.0.0",
   "license": "MIT",
-  "repository": "git+https://github.com/paddepf/church-recorder.git",
-  "bugs": "https://github.com/paddepf/church-recorder/issues",
+  "repository": "git+https://github.com/paddepf/ebbton.git",
+  "bugs": "https://github.com/paddepf/ebbton/issues",
   "maintainers": [
     {
       "name": "paddepf"
@@ -21,7 +21,7 @@
   },
   "manufacturer": "Eigenentwicklung",
   "products": [
-    "ChurchRecorder"
+    "Ebbton"
   ],
   "keywords": [
     "Recording",

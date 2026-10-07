@@ -1,6 +1,6 @@
-# Companion-Modul: ChurchRecorder
+# Companion-Modul: Ebbton
 
-Steuert ChurchRecorder aus Bitfocus Companion heraus und zeigt den
+Steuert Ebbton aus Bitfocus Companion heraus und zeigt den
 Aufnahmestatus auf den Tasten an.
 
 ## Einbinden
@@ -17,7 +17,7 @@ npm install
 ```
 
 3. Companion neu starten. Das Modul erscheint unter **Connections** als
-   „ChurchRecorder“.
+   „Ebbton“.
 
 Für die Weitergabe an andere Rechner lässt sich mit
 `npx companion-module-build` ein Paket erzeugen.
@@ -87,8 +87,8 @@ die Verbindung abbricht.
 Beispiel für eine Tastenbeschriftung:
 
 ```
-REC $(churchrecorder:timecode)
-$(churchrecorder:current_item)
+REC $(ebbton:timecode)
+$(ebbton:current_item)
 ```
 
 ## Mitgelieferte Presets

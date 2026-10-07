@@ -59,14 +59,14 @@ class NetServer extends EventEmitter {
       if (req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
-          app: 'church-recorder',
+          app: 'ebbton',
           protocol: PROTOCOL_VERSION,
           status: this.lastState?.status || 'idle'
         }));
         return;
       }
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('ChurchRecorder: bitte über WebSocket verbinden.');
+      res.end('Ebbton: bitte über WebSocket verbinden.');
     });
 
     this.wss = new WebSocketServer({ server: this.http });
@@ -153,7 +153,7 @@ class NetServer extends EventEmitter {
       }
     }, 10000);
 
-    this._send(ws, { type: 'hello', app: 'church-recorder', protocol: PROTOCOL_VERSION });
+    this._send(ws, { type: 'hello', app: 'ebbton', protocol: PROTOCOL_VERSION });
 
     // Anmeldung auch per Query-Parameter erlauben: ws://host:port/?password=...&role=monitor
     try {

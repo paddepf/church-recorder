@@ -1,12 +1,12 @@
 # Netzwerkschnittstelle
 
-Der ChurchRecorder stellt im lokalen Netzwerk einen WebSocket-Server bereit.
+Der Ebbton stellt im lokalen Netzwerk einen WebSocket-Server bereit.
 Darüber lässt sich der Aufnahmestatus mitlesen (Dashboard) und die Aufnahme
 steuern (Bitfocus Companion).
 
 - Adresse: `ws://<rechner>:<port>/` – Standardport **8765**
 - Zusätzlich: `GET http://<rechner>:<port>/health` liefert ohne Anmeldung
-  `{"app":"church-recorder","protocol":1,"status":"recording"}` –
+  `{"app":"ebbton","protocol":1,"status":"recording"}` –
   praktisch für eine einfache Erreichbarkeitsprüfung im Dashboard.
 - Alle Nachrichten sind JSON-Objekte mit einem Feld `type`.
 

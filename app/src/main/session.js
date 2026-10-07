@@ -876,7 +876,7 @@ class Session extends EventEmitter {
     if (!target) return;
     const data = {
       version: 2,
-      app: 'church-recorder',
+      app: 'ebbton',
       service: this.service,
       status: this.status,
       finalized: this.finalized,

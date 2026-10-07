@@ -29,7 +29,7 @@ function setSettings(patch) {
 }
 
 function tmpDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'churchrecorder-test-'));
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'ebbton-test-'));
 }
 
 /** Stille als Audioblock (Int16 Stereo). */

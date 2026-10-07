@@ -403,7 +403,7 @@ function createWindow() {
     backgroundColor: '#101419',
     show: false,
     autoHideMenuBar: process.platform !== 'darwin',
-    title: 'ChurchRecorder',
+    title: 'Ebbton',
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload.js'),
       contextIsolation: true,

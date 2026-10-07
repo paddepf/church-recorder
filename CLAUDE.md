@@ -1,4 +1,4 @@
-# ChurchRecorder – Hinweise für Claude
+# Ebbton – Hinweise für Claude
 
 Aufnahmesoftware für Gottesdienste (Electron). Entwickelt wird abwechselnd auf
 einem MacBook und auf dem Windows-PC in der Kirche. Der Code muss auf beiden
@@ -318,7 +318,7 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - `npm run dev` startet neu bei Änderungen im Hauptprozess, **außer während einer
   Aufnahme** (dann nur ein Hinweis). Änderungen am Renderer laden die Oberfläche
   sofort neu – ebenfalls **nicht während einer Aufnahme** (die Audioerfassung läuft in der Oberfläche). Nach Änderungen an `main`/`preload`/`shared` also App neu starten:
-  `pkill -f "church-recorder/app/node_modules/[e]lectron"; cd app && npm run dev`
+  `pkill -f "app/node_modules/[e]lectron"; cd app && npm run dev`
   (die Klammer in `[e]lectron` verhindert, dass pkill sich selbst beendet).
 - Claude öffnet für den Neustart einen Terminal-Tab (`run_in_terminal`); davon sind höchstens
   6 pro Sitzung erlaubt. Vor jedem Neustart den vorherigen Tab mit `stop_terminal_tab`
@@ -329,6 +329,14 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   (siehe `test/helpers.js`), Aufnahmen mit `stop()` beenden und auf `whenWritten()` warten.
 - Tests dürfen keine Dateideskriptoren unter der Hand schließen: Die Nummer wird sofort neu vergeben (z. B.
   an den Kanal des Testrunners) und der Schreib-Thread schreibt dann dort hinein.
+
+### Name
+Die App hieß früher „ChurchRecorder“ und heißt jetzt **Ebbton** (Ton + EBBP, Verein: Evangelische Baptisten-Brüdergemeinde
+Pfungstadt). Kennungen: `appId` `de.ebbp.ebbton`, Companion-Modul `ebbton` (Variablen `$(ebbton:…)`), WebSocket-`app`-Feld
+`ebbton`, Repo `paddepf/ebbton`. Electron legt die Einstellungen unter `userData/<name aus package.json>` ab, also
+`~/Library/Application Support/ebbton` (Windows `%APPDATA%\ebbton`); beim Umbenennen musste der alte Ordner
+`church-recorder` von Hand umbenannt werden, sonst startet die App mit leeren Einstellungen. Der Ordnername des
+lokalen Klons ist egal.
 
 ### Entfernt: Mitschrift
 Die lokale Transkription (whisper.cpp, Mitschrift-Panel, Einstellungen) wurde

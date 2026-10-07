@@ -1,7 +1,7 @@
 {
-  "name": "companion-module-churchrecorder",
+  "name": "companion-module-ebbton",
   "version": "1.0.0",
-  "description": "Bitfocus Companion Modul für ChurchRecorder",
+  "description": "Bitfocus Companion Modul für Ebbton",
   "main": "main.js",
   "type": "module",
   "scripts": {

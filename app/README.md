@@ -1,4 +1,4 @@
-# ChurchRecorder
+# Ebbton
 
 Aufnahmeprogramm für Gottesdienste. Nimmt eine Stereospur des Audioeingangs auf,
 gliedert sie über Abschnitte mit verschiebbarer Anfangs- und Endmarke in die Programmpunkte des Ablaufplans und
@@ -33,8 +33,8 @@ Das Repository ist auf beiden Systemen gleich einzurichten:
    installieren, ein Editor wie VS Code oder die Claude-Desktop-App ist optional.
 2. Klonen und starten (im Ordner `app/`):
    ```bash
-   git clone https://github.com/paddepf/church-recorder.git
-   cd church-recorder/app
+   git clone https://github.com/paddepf/ebbton.git
+   cd ebbton/app
    npm install
    npm run dev
    ```
@@ -335,7 +335,7 @@ benutzen – beim ersten Öffnen blockiert Gatekeeper sie aber. Seit macOS 15 hi
 der frühere Rechtsklick → *Öffnen* nicht mehr: Nach dem ersten Startversuch unter
 *Systemeinstellungen → Datenschutz & Sicherheit* auf **„Dennoch öffnen“** klicken.
 Meldet macOS die App als „beschädigt“, entfernt
-`xattr -dr com.apple.quarantine /Applications/ChurchRecorder.app` die Sperre.
+`xattr -dr com.apple.quarantine /Applications/Ebbton.app` die Sperre.
 
 **Wichtig:** Die automatische Update-Funktion arbeitet auf macOS ausschließlich
 mit signierten Apps. Ohne Zertifikat muss jede neue Version von Hand installiert
