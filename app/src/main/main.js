@@ -248,6 +248,30 @@ function onMixerChange() {
 }
 mixer.on('change', onMixerChange);
 
+/** Zustand für Netzwerk-Clients: Session, Gesundheit und die gerade gültige Aufnahmeart (Companion zeigt sie an). */
+function netState(s = session.snapshot()) {
+  return { ...s, health: currentHealth(), recordingMode: activeMode() };
+}
+
+/**
+ * Aufnahmeart umstellen (Netzwerkbefehl `mode.set`; die Oberfläche speichert über `settings:set`).
+ * Während einer Aufnahme abgelehnt, wie der Umschalter in der Kopfzeile.
+ */
+function setRecordingMode(mode) {
+  if (isBusy()) return { ok: false, error: 'Während einer Aufnahme kann die Aufnahmeart nicht umgeschaltet werden.' };
+  const current = settings.get('recordingMode') === 'multitrack' ? 'multitrack' : 'stereo';
+  const next = mode === 'toggle' ? (current === 'multitrack' ? 'stereo' : 'multitrack') : mode;
+  if (next !== 'stereo' && next !== 'multitrack') return { ok: false, error: 'Unbekannte Aufnahmeart (stereo, multitrack oder toggle).' };
+  if (next !== current) {
+    settings.save({ recordingMode: next });
+    send('settings', settings.forRenderer());   // Oberfläche: Umschalter und Kanal-Bereich nachziehen
+    configureMixer();
+    updateMonitor();
+    refreshDisk();
+  }
+  return { ok: true, mode: next };
+}
+
 /** Verbindung passend zu den Einstellungen; den Pult-Simulator gibt es nur zum simulierten Mehrspur-Gerät. */
 function configureMixer() {
   const simulate = settings.get('recordingMode') === 'multitrack' && Boolean(settings.get('multitrackSimulate'));
@@ -322,7 +346,7 @@ function publishHealth() {
   if (json === lastHealthJson) return;
   lastHealthJson = json;
   send('health', h);
-  net.publishState({ ...session.snapshot(), health: h });
+  net.publishState(netState());
 }
 
 /* Wächter im Hauptprozess: kommen während der Aufnahme keine Audioblöcke mehr an (Oberfläche hängt,
@@ -360,7 +384,7 @@ function stateThrottle() {
       const s = pending;
       pending = null;
       send('state', s);
-      net.publishState({ ...s, health: currentHealth() });
+      net.publishState(netState(s));
     }, 100);
   };
 }
@@ -879,7 +903,7 @@ ipcMain.on('remote:result', (_e, { kind, ok: success, error } = {}) => {
 net.on('command', ({ action, params, reply }) => {
   const done = (result) => {
     reply(result);
-    net.publishState({ ...session.snapshot(), health: currentHealth() });
+    net.publishState(netState());
   };
   switch (action) {
     case 'record.start':
@@ -934,6 +958,8 @@ net.on('command', ({ action, params, reply }) => {
       return done(session.undo());
     case 'redo':
       return done(session.redo());
+    case 'mode.set':
+      return done(setRecordingMode(params.mode));
     case 'template.apply': {
       const tpl = findTemplate(params.name || params.id);
       if (!tpl) return done({ ok: false, error: 'Vorlage nicht gefunden.' });
@@ -999,6 +1025,7 @@ ipcMain.handle('settings:set', (_e, patch) => {
     settings.save(clean);
     if (clean.recordingsDir) fs.mkdirSync(clean.recordingsDir, { recursive: true });
     if (['mixerHost', 'recordingMode', 'multitrackSimulate'].some((k) => k in clean)) configureMixer();
+    if ('recordingMode' in clean) net.publishState(netState());
     if (['recordingMode', 'multitrackDevice', 'multitrackSimulate', 'multitrackArmed'].some((k) => k in clean)) {
       updateMonitor();
       refreshDisk();

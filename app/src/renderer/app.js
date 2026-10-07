@@ -1577,6 +1577,14 @@
     window.api.on('multitrack', (m) => { mt.monitor = m; renderChannels(); });
     window.api.on('track-levels', (l) => applyTrackLevels(l));
     window.api.on('multitrack-play', (p) => applyPlayback(p));
+    // Aufnahmeart von außen umgestellt (Companion): nur Umschalter und Ansicht nachziehen, ein offener
+    // Einstellungsdialog behält seine ungespeicherten Eingaben.
+    window.api.on('settings', (st) => {
+      state.settings = st;
+      $('set-rec-mode').value = settingMode();
+      applyMode();
+      refreshDisk();
+    });
     $('chk-loop').addEventListener('change', () => {
       if (mt.play?.playing) window.api.multitrack.loop(playbackLoop()).then((r) => { if (!r.ok) toast('error', r.error); });
     });

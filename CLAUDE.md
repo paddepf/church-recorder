@@ -547,7 +547,15 @@ Der Ordnername des lokalen Klons ist egal.
 - Pult-Simulator (`mixer/simulator.js`, Beispielnamen und -farben): läuft in der App nur bei Aufnahmeart Mehrspur mit
   „Simuliertes Pult“ und leerer IP (`configureMixer`); im Stereo-Modus nie, sonst meldete er ständig falsches Routing.
   Umschalten seines Routings über Knöpfe in *Einstellungen → Mischpult* (`mixer:simulateRouting`).
-- Companion-Modul zeigt `health.routing` noch nicht (bräuchte neue Modulversion).
+- Companion (Modul 2.1.0): Variablen `recording_mode`/`routing_status`, Rückmeldungen `routing_mismatch` (nur bei
+  `mismatch`, nicht bei `unknown`, sonst stünde die Taste bei nicht erreichbarem Pult dauernd auf Rot) und
+  `multitrack`, Aktion `mode_set` → WebSocket `mode.set` (`stereo`/`multitrack`/`toggle`, während der Aufnahme
+  abgelehnt; `setRecordingMode` in `main.js` speichert, schickt `settings` an die Oberfläche – die zieht nur Umschalter
+  und Ansicht nach, ein offener Einstellungsdialog behält seine Eingaben –, stellt Pult-Verbindung und Abhören um).
+  Der Zustand für Netzwerk-Clients trägt dafür `recordingMode` (`netState()`: Art der laufenden, sonst der eingestellten
+  Aufnahme). Preset „Aufnahmeart umschalten“, Rückmeldung zusätzlich im Preset „Eingang und Speicher“.
+  Geprüft: Paketbau, Befehl gegen die echte App (umschalten, ablehnen, Oberfläche zieht mit); das Modul selbst in
+  Companion noch nicht.
 
 ### Entfernt: Mitschrift
 Die lokale Transkription (whisper.cpp, Mitschrift-Panel, Einstellungen) wurde

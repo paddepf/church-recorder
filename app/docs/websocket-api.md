@@ -67,6 +67,7 @@ Wird direkt nach der Anmeldung und bei jeder Änderung gesendet (max. 10×/s).
     "channels": 2,
     "levels": { "l": 0.42, "r": 0.39, "clip": false },
     "mode": "stereo",
+    "recordingMode": "stereo",
     "tracks": [],
     "sections": [
       { "id": "sec_x1", "label": "Predigt", "category": "Verkündigung", "color": 2,
@@ -109,7 +110,9 @@ zusätzlich alle 5 Sekunden, auch ohne Änderung.
 `status` ist einer von `idle`, `recording`, `paused`, `stopped`.
 Alle Zeitangaben sind Sekunden seit Aufnahmebeginn.
 
-`mode` ist `stereo` oder `multitrack` (Mehrspuraufnahme aller Kanäle des Mischpults, im Aufbau). Bei
+`mode` ist die Art der angezeigten Aufnahme, `recordingMode` die gerade gültige Aufnahmeart (während einer
+Aufnahme deren Art, sonst die eingestellte – das, was die nächste Aufnahme wird). Beide sind `stereo` oder
+`multitrack` (Mehrspuraufnahme aller Kanäle des Mischpults, im Aufbau). Bei
 `multitrack` nennt `tracks` die aufgenommenen Kanäle (`[{ "channel": 0, "name": "Kanal 1" }, …]`, `channel`
 0-basiert), `wavPath` ist `null`, `channels` die Zahl der Spuren und `levels` der Pegel des lautesten
 aufgenommenen Kanals (in `l` und `r` gleich). `health.input` wird `lost`, wenn das Mischpult keine Daten mehr
@@ -168,6 +171,7 @@ Getrennt vom Zustand und auf 5×/s gedrosselt, damit das Netz nicht geflutet wir
 | `cut.toggle` | Schnitt an der aktuellen Stelle beginnen bzw. beenden (nur während der Aufnahme); Antwort `change`: `started`, `ended` oder `discarded` |
 | `undo` / `redo` | Letzte Änderung an Abschnitten oder Schnitten zurücknehmen bzw. wiederholen |
 | `template.apply` | Vorlage für Programmpunkte laden: `params.name` (oder `params.id`), ohne Angabe die Standardvorlage; ersetzt die offenen Punkte |
+| `mode.set` | Aufnahmeart für die nächste Aufnahme: `params.mode` `stereo`, `multitrack` oder `toggle`; Antwort enthält `mode`. Während einer Aufnahme `ok:false`. Das Routing am Pult stellt Ebbton dabei nicht um |
 
 Antwort:
 

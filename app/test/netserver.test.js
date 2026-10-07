@@ -60,6 +60,22 @@ test('Anmeldung, Rollen, Schutz', async (t) => {
   await sleep(150);
   assert.equal(c.msgs.find((m) => m.type === 'auth').role, 'control');
   assert.equal(c.msgs.find((m) => m.type === 'state').payload.wavPath, '/pfad.wav');
+  // Aufnahmeart umschalten (Companion): wird an die App weitergereicht, die Antwort kommt von dort
+  const got = [];
+  net.once('command', (cmd) => { got.push(cmd); cmd.reply({ ok: true, mode: 'multitrack' }); });
+  c.ws.send(JSON.stringify({ type: 'command', id: 5, action: 'mode.set', params: { mode: 'toggle' } }));
+  await sleep(100);
+  assert.deepEqual(got.map((x) => [x.action, x.params.mode]), [['mode.set', 'toggle']]);
+  assert.deepEqual(c.msgs.find((m) => m.type === 'result'), { type: 'result', id: 5, action: 'mode.set', ok: true, mode: 'multitrack' });
+  c.ws.close();
+
+  // Mitlesende dürfen nicht umschalten
+  c = await connect();
+  c.ws.send(JSON.stringify({ type: 'auth', password: 'lesen' }));
+  await sleep(150);
+  c.ws.send(JSON.stringify({ type: 'command', id: 6, action: 'mode.set', params: { mode: 'stereo' } }));
+  await sleep(100);
+  assert.equal(c.msgs.find((m) => m.type === 'error').code, 'read_only');
   c.ws.close();
 
   // nach 5 Fehlversuchen gesperrt

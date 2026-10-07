@@ -1,6 +1,6 @@
 {
   "name": "companion-module-ebbton",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Bitfocus Companion Modul für Ebbton",
   "main": "main.js",
   "type": "module",
