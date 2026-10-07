@@ -76,7 +76,8 @@ Windows erzeugen. Der mitgelieferte Workflow erledigt beides auf GitHub.
 1. Oben auf den Namen klicken und den Gottesdienst wählen. Ist für heute genau
    ein Termin eingetragen, wird er beim Start automatisch geladen. Die
    Programmpunkte erscheinen links als offene Punkte. Dieselbe Auswahl öffnet auch der Knopf
-   „ChurchTools …“ in der Kachel „Ablaufplan“; darunter steht, ob der Plan aus ChurchTools oder aus einer Vorlage stammt.
+   „ChurchTools …“ in der Kachel „Ablaufplan“; darunter steht, ob der Plan aus ChurchTools oder aus welcher Vorlage er stammt und welche Dienstplanung/welchen Infotext
+   ChurchTools für den Termin geliefert hat.
 2. **Neue Aufnahme starten.** Die Wellenform wächst mit, die Pegelanzeige zeigt den
    Eingang, der obere Fensterrand leuchtet rot. **Der erste Punkt des Ablaufplans beginnt dabei
    automatisch** (bei Sekunde 0); ohne Ablaufpunkte läuft zunächst kein Abschnitt.

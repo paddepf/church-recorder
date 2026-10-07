@@ -83,6 +83,7 @@ class Session extends EventEmitter {
     this.flushSave();                   // Änderungen der bisherigen Session nicht verlieren
     this.status = 'idle';               // idle | recording | paused | stopped
     this.service = { id: null, name: '', date: dateStamp() };
+    this.agendaOrigin = null;           // {source: 'churchtools'|'plan', template} – woher der Ablaufplan stammt
     this.sections = [];                 // {id,label,category,color,start|null,end|null,source}
     this.exports = {};                  // Segment-ID -> {file,start,end,cuts,at}: bereits als MP3 gesichert
     this.cuts = [];                     // {id,start,end|null}: beim MP3-Export ausgelassene Stellen
@@ -169,6 +170,7 @@ class Session extends EventEmitter {
     return {
       status: this.status,
       service: this.service,
+      agendaOrigin: this.agendaOrigin,
       duration: this.duration,
       startedAt: this.startedAt,
       sampleRate: this.sampleRate,
@@ -359,7 +361,8 @@ class Session extends EventEmitter {
   }
 
   /** Übernimmt Ablaufplan-Punkte als noch nicht gesetzte Abschnitte. */
-  setAgenda(items, source = 'churchtools') {
+  setAgenda(items, source = 'churchtools', templateName = null) {
+    this.agendaOrigin = { source, template: templateName || null };
     const manual = this.sections.filter((x) => x.source === 'manual');
     const placedFromPlan = this.sections.filter((x) => x.source !== 'manual' && x.start != null);
     const keepIds = new Set(placedFromPlan.map((x) => x.ctId).filter((id) => id != null));
@@ -878,6 +881,7 @@ class Session extends EventEmitter {
       version: 2,
       app: 'ebbton',
       service: this.service,
+      agendaOrigin: this.agendaOrigin,
       status: this.status,
       finalized: this.finalized,
       startedAt: this.startedAt,
@@ -909,6 +913,7 @@ class Session extends EventEmitter {
     this.basePath = sessionPath.replace(/\.session\.json$/, '');
     this.wavPath = data.wavPath && fs.existsSync(data.wavPath) ? data.wavPath : `${this.basePath}.wav`;
     this.service = data.service || this.service;
+    this.agendaOrigin = data.agendaOrigin || null;
     this.peaks = data.peaks || [];
     this.sampleRate = data.sampleRate || this.sampleRate;
     this.channels = data.channels || 2;

@@ -257,13 +257,26 @@
     $('service-name').textContent = session.service?.name || 'Kein Gottesdienst gewählt';
     $('service-date').textContent = session.service?.date || '';
     {
-      // Herkunft des Ablaufplans: aus den Quellen der Punkte abgeleitet (Standardpunkte/Vorlage = `plan`).
+      // Herkunft des Ablaufplans (agendaOrigin; bei alten Sessions aus den Quellen der Punkte abgeleitet) und
+      // was sonst noch aus ChurchTools stammt (Termin, Dienstplanung, Infotext).
       const plan = (session.sections || []).filter((x) => x.source !== 'manual');
       const el = $('plan-source');
       el.hidden = plan.length === 0;
       if (plan.length) {
-        const ct = plan.some((x) => x.source === 'churchtools');
-        el.textContent = ct ? 'Aus ChurchTools geladen' : 'Aus Vorlage – kein Ablaufplan aus ChurchTools';
+        const origin = session.agendaOrigin;
+        const ct = origin ? origin.source === 'churchtools' : plan.some((x) => x.source === 'churchtools');
+        const tplName = origin?.template;
+        const lines = [ct ? 'Ablaufplan aus ChurchTools geladen' : `Vorlage${tplName ? ` „${tplName}“` : ''} – kein Ablaufplan in ChurchTools`];
+        const svc = session.service || {};
+        if (svc.id != null) {
+          const names = [...new Set((svc.suggestions || []).map((x) => x.name))];
+          const parts = [`Termin „${svc.name}“`];
+          parts.push(names.length ? `Dienstplanung: ${names.join(', ')}` : 'keine Dienstplanung');
+          parts.push(svc.info ? `Infotext: ${svc.info}` : 'kein Infotext');
+          lines.push('Aus ChurchTools: ' + parts.join(' · '));
+        }
+        el.replaceChildren(...lines.map((t) => { const d = document.createElement('div'); d.textContent = t; return d; }));
+        el.title = lines.join('\n');
       }
     }
 

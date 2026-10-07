@@ -602,7 +602,7 @@ net.on('command', ({ action, params, reply }) => {
     case 'template.apply': {
       const tpl = findTemplate(params.name || params.id);
       if (!tpl) return done({ ok: false, error: 'Vorlage nicht gefunden.' });
-      session.setAgenda(templateItems(tpl), 'plan');
+      session.setAgenda(templateItems(tpl), 'plan', tpl.name);
       return done({ ok: true, template: tpl.name });
     }
     default:
@@ -739,7 +739,7 @@ ipcMain.handle('agenda:applyTemplate', (_e, { templateId } = {}) => {
   const tpl = findTemplate(templateId);
   if (!tpl) return fail('Vorlage nicht gefunden.');
   const items = templateItems(tpl);
-  session.setAgenda(items, 'plan');
+  session.setAgenda(items, 'plan', tpl.name);
   return ok({ count: items.length, name: tpl.name });
 });
 
@@ -775,7 +775,7 @@ ipcMain.handle('ct:agenda', async (_e, { eventId, name, date } = {}) => {
     // Ohne Ablaufplan: die Vorlage, die zum Titel passt (sonst die Standardvorlage).
     const tpl = usedDefaults ? templateForTitle(session.service.name) : null;
     const items = usedDefaults ? templateItems(tpl) : plan.items;
-    const autoFilled = session.setAgenda(items, usedDefaults ? 'plan' : 'churchtools');
+    const autoFilled = session.setAgenda(items, usedDefaults ? 'plan' : 'churchtools', tpl ? tpl.name : null);
     return ok({ items, count: items.length, usedDefaults, templateName: tpl ? tpl.name : null, info, suggestions, suggestionError, wanted, autoFilled });
   } catch (err) { return fail(err); }
 });
@@ -785,7 +785,10 @@ ipcMain.handle('ct:agenda', async (_e, { eventId, name, date } = {}) => {
 ipcMain.handle('session:service', (_e, service) => {
   session.setService(service);
   // Ohne ChurchTools gibt es keinen Ablaufplan: Standardpunkte anbieten, solange noch nichts da ist.
-  if (session.sections.length === 0) session.setAgenda(templateItems(templateForTitle(session.service.name)), 'plan');
+  if (session.sections.length === 0) {
+    const tpl = templateForTitle(session.service.name);
+    session.setAgenda(templateItems(tpl), 'plan', tpl.name);
+  }
   return ok({ state: session.snapshot() });
 });
 
