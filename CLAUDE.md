@@ -98,10 +98,9 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   ChurchTools) trägt dieselbe Vorlage ein, wenn noch keine Abschnitte existieren. Ein vorhandener ChurchTools-Ablaufplan
   hat immer Vorrang.
 - Ablaufplan-Kachel: Knopf „ChurchTools …“ neben der Vorlagenwahl öffnet denselben Termin-Dialog wie der Klick auf den
-  Gottesdienst in der Kopfzeile (`openServicePicker`); `#plan-source` zeigt die Herkunft: Zeile 1 aus `session.agendaOrigin` (`{source, template}`, gesetzt in
-  `setAgenda(items, source, templateName)`, in der Session-Datei gespeichert; bei alten Sessions aus `source` der Punkte abgeleitet)
-  – „Ablaufplan aus ChurchTools geladen“ bzw. „Vorlage „Name“ – kein Ablaufplan in ChurchTools“; Zeile 2 (nur bei
-  ChurchTools-Termin, `service.id`): Termin, Dienstplanung-Namen und Infotext, die auch bei Vorlage aus ChurchTools kommen.
+  Gottesdienst in der Kopfzeile (`openServicePicker`); `#plan-source` zeigt die Herkunft: eine Zeile aus `session.agendaOrigin` (`{source, template}`, gesetzt in `setAgenda(items, source, templateName)`,
+  in der Session-Datei gespeichert; bei alten Sessions aus `source` der Punkte abgeleitet): „Ablaufplan aus ChurchTools“ bzw.
+  „Vorlage „Name““, bei ChurchTools-Termin (`service.id`) dahinter „· Dienste: n · Infotext ✓“ (Namen und Infotext im Tooltip).
 - Ablaufplan-Kachel: Punkt hinzufügen (`section:add`), entfernen (`section:delete`), umsortieren per Drag in der
   Liste (`section:reorder`, setzt `order` der offenen Punkte neu). Dieselbe Drag-Quelle (`text/marker-id`) dient
   weiter zum Ablegen auf der Wellenform, das Ziel unterscheidet.

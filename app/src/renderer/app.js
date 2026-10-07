@@ -266,17 +266,18 @@
         const origin = session.agendaOrigin;
         const ct = origin ? origin.source === 'churchtools' : plan.some((x) => x.source === 'churchtools');
         const tplName = origin?.template;
-        const lines = [ct ? 'Ablaufplan aus ChurchTools geladen' : `Vorlage${tplName ? ` „${tplName}“` : ''} – kein Ablaufplan in ChurchTools`];
+        const head = ct ? 'Ablaufplan aus ChurchTools' : `Vorlage${tplName ? ` „${tplName}“` : ''}`;
         const svc = session.service || {};
+        let line = head;
+        let detail = head;
         if (svc.id != null) {
           const names = [...new Set((svc.suggestions || []).map((x) => x.name))];
-          const parts = [`Termin „${svc.name}“`];
-          parts.push(names.length ? `Dienstplanung: ${names.join(', ')}` : 'keine Dienstplanung');
-          parts.push(svc.info ? `Infotext: ${svc.info}` : 'kein Infotext');
-          lines.push('Aus ChurchTools: ' + parts.join(' · '));
+          line += ` · Dienste: ${names.length}${svc.info ? ' · Infotext ✓' : ''}`;
+          detail += `\nDienstplanung: ${names.join(', ') || 'keine'}\nInfotext: ${svc.info || 'keiner'}`;
         }
+        const lines = [line];
         el.replaceChildren(...lines.map((t) => { const d = document.createElement('div'); d.textContent = t; return d; }));
-        el.title = lines.join('\n');
+        el.title = detail;
       }
     }
 
