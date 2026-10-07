@@ -167,6 +167,25 @@
           </label>
         </fieldset>
 
+        <fieldset data-tab="audio">
+          <legend>Mehrspuraufnahme</legend>
+          <label>Aufnahmeart
+            <select id="set-rec-mode" class="select">
+              <option value="stereo">Stereo – Eingang oben (z. B. Matrix auf USB 1–2)</option>
+              <option value="multitrack">Mehrspur – alle Kanäle des Mischpults einzeln</option>
+            </select>
+            <small>Für Mehrspur am Mischpult die USB-Ausgänge auf die Kanäle 1–32 legen. Je Kanal entsteht eine 24-Bit-WAV, MP3-Export gibt es dann nicht.</small>
+          </label>
+          <label>Mehrspur-Gerät
+            <span class="row">
+              <select id="set-mt-device" class="select"></select>
+              <button id="btn-mt-refresh" class="secondary" type="button">Suchen</button>
+            </span>
+            <small id="mt-device-info"></small>
+          </label>
+          <label class="check"><input type="checkbox" id="set-mt-simulate" /> Simuliertes Pult (32 Kanäle, zum Ausprobieren ohne Mischpult)</label>
+        </fieldset>
+
         <fieldset data-tab="ablage">
           <legend>Ordner</legend>
           <label>Ordner für Aufnahmen
@@ -183,6 +202,14 @@
               <button id="btn-clear-export-dir" class="secondary" title="Zurücksetzen">×</button>
             </span>
             <small>Darin entsteht je Gottesdienst ein Unterordner „Datum_Gottesdienstname“, die MP3-Dateien werden ohne Rückfrage dort abgelegt.</small>
+          </label>
+          <label>Ordner für Mehrspuraufnahmen
+            <span class="row">
+              <input id="set-mt-dir" type="text" readonly placeholder="Nicht gesetzt – Unterordner „Mehrspur“ im Aufnahmeordner" />
+              <button id="btn-choose-mt-dir" class="secondary">Wählen</button>
+              <button id="btn-clear-mt-dir" class="secondary" title="Zurücksetzen">×</button>
+            </span>
+            <small>Je Aufnahme ein Unterordner mit einer WAV je Kanal (etwa 16,6 GB je Stunde bei 32 Kanälen). Kann auf einem anderen Laufwerk liegen.</small>
           </label>
         </fieldset>
 

@@ -15,6 +15,13 @@ const DEFAULTS = {
   outputDeviceLabel: '',
   sampleRate: 48000,
 
+  // Mehrspuraufnahme (siehe multitrack/)
+  recordingMode: 'stereo',      // 'stereo' | 'multitrack'
+  multitrackDevice: '',         // Name des Geräts; leer = das mit den meisten Eingängen
+  multitrackSimulate: false,    // simuliertes 32-Kanal-Pult statt echtem Gerät (Entwicklung, Test)
+  multitrackArmed: null,        // aufgenommene Kanäle (0-basiert); null = alle
+  multitrackDir: '',            // leer = Unterordner „Mehrspur“ im Aufnahmeordner
+
   // Ablage
   recordingsDir: '',            // wird beim ersten Start gesetzt
   fileNamePattern: '{interpret}_{abschnitt}_{gottesdienst}_{datum}',

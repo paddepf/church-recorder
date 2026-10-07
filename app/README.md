@@ -440,10 +440,20 @@ Version des Zustands – Oberfläche, Netzwerk und Companion sehen alle dasselbe
 
 ### Mehrspuraufnahme (im Aufbau)
 
-Für Aufnahmen aller 32 Kanäle des Midas M32 (DN32-USB-Karte, ASIO) entsteht ein eigener Aufnahmeweg:
+Für Aufnahmen aller 32 Kanäle des Midas M32 (DN32-USB-Karte, ASIO) gibt es einen eigenen Aufnahmeweg:
 Ein eigener Prozess öffnet das Gerät über `audify` (RtAudio; unter Windows ASIO) und schreibt je
-Kanal eine 24-Bit-Mono-WAV. Noch nicht in der Oberfläche; bisher gibt es nur den **Technik-Test**,
-der statt der App läuft und Gerät, Prozess und Schreiben prüft – auch mit der installierten App:
+Kanal eine 24-Bit-Mono-WAV. Die Oberfläche erfasst dabei nichts selbst.
+
+**Bedienung (vorläufig, die Kanalübersicht folgt):** *Einstellungen → Audio → Mehrspuraufnahme*:
+Aufnahmeart „Mehrspur“, Gerät wählen („Suchen“ fragt die Geräte ab, unter Windows die ASIO-Treiber; nur
+außerhalb einer Aufnahme) oder „Automatisch“ (Gerät mit den meisten Eingängen). „Simuliertes Pult“ nimmt ein
+nachgebautes 32-Kanal-Pult auf (zum Ausprobieren). Danach wie gewohnt aufnehmen: Start, Pause, Abschnitte,
+Beenden, „An Aufnahme anhängen“, auch per Companion. Am Mischpult müssen die USB-Ausgänge dafür auf den Kanälen
+1–32 liegen. Die Spuren landen je Aufnahme in einem Unterordner des Mehrspur-Ordners (*Ablage & Export*, sonst
+`Mehrspur` im Aufnahmeordner), zusammen mit der Session-Datei; die Liste „Aufnahmen“ zeigt sie mit an.
+MP3-Export, Mithören und Cue-Marker gibt es bei Mehrspuraufnahmen nicht.
+
+**Technik-Test**, läuft statt der App und prüft Gerät, Prozess und Schreiben – auch mit der installierten App:
 
 ```
 EBBTON_MT_PROBE=list      Geräte auflisten

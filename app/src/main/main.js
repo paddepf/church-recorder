@@ -17,9 +17,11 @@ const { Updater } = require('./updater');
 const churchtools = require('./churchtools');
 const mp3 = require('./mp3');
 const RoleLogic = require('../shared/roles');
+const { MultitrackManager } = require('./multitrack/manager');
 
 let win = null;
 const session = new Session();
+const multitrack = new MultitrackManager();
 const net = new NetServer();
 const updater = new Updater(() => session.status === 'recording' || session.status === 'paused');
 
@@ -55,14 +57,131 @@ const SILENT_AFTER_MS = 20000;
 /** Freier Platz auf dem Laufwerk der Aufnahmen (Stunden bezogen auf die aktuelle Abtastrate). */
 function diskInfo() {
   // Der Ordner kann noch nicht existieren: vom nächsten vorhandenen Elternordner messen.
-  let dir = settings.get('recordingsDir');
+  const multi = settings.get('recordingMode') === 'multitrack';
+  let dir = multi ? multitrackDir() : settings.get('recordingsDir');
   while (dir && !fs.existsSync(dir) && path.dirname(dir) !== dir) dir = path.dirname(dir);
   const st = fs.statfsSync(dir);
   const freeBytes = Number(st.bavail) * Number(st.bsize);
   const totalBytes = Number(st.blocks) * Number(st.bsize);
-  const bytesPerHour = (settings.get('sampleRate') || 48000) * 2 * 2 * 3600;   // 16 Bit, Stereo
-  return { freeBytes, totalBytes, hoursLeft: freeBytes / bytesPerHour, dir };
+  // Stereo: 16 Bit, 2 Kanäle. Mehrspur: 24 Bit je aufgenommenem Kanal (Rate der letzten Mehrspuraufnahme, sonst 48 kHz).
+  const bytesPerHour = multi
+    ? (lastMultitrackRate || 48000) * 3 * multitrackTrackCount() * 3600
+    : (settings.get('sampleRate') || 48000) * 2 * 2 * 3600;
+  return { freeBytes, totalBytes, hoursLeft: freeBytes / bytesPerHour, dir, mode: multi ? 'multitrack' : 'stereo' };
 }
+
+/* ------------------------------------------------------------- Mehrspuraufnahme */
+
+let lastMultitrackRate = null;
+
+/** Ordner der Mehrspuraufnahmen: eigene Einstellung, sonst Unterordner „Mehrspur“ der Aufnahmen. */
+function multitrackDir() {
+  return settings.get('multitrackDir') || path.join(settings.get('recordingsDir'), 'Mehrspur');
+}
+
+/** Gewählte Kanäle (0-basiert); `null` in den Einstellungen = alle des Geräts. */
+function multitrackChannels(inputs) {
+  const armed = settings.get('multitrackArmed');
+  if (!Array.isArray(armed)) return Array.from({ length: inputs }, (_, c) => c);
+  return armed.filter((c) => Number.isInteger(c) && c >= 0 && c < inputs).sort((a, b) => a - b);
+}
+
+function multitrackTrackCount() {
+  const armed = settings.get('multitrackArmed');
+  return Array.isArray(armed) ? Math.max(1, armed.length) : 32;
+}
+
+/** Gerät für die Mehrspuraufnahme: das gewählte (per Name) oder das mit den meisten Eingängen. */
+async function multitrackDevice() {
+  const simulate = Boolean(settings.get('multitrackSimulate'));
+  const { devices } = await multitrack.devices({ simulate });
+  const wanted = settings.get('multitrackDevice');
+  const withInputs = devices.filter((d) => d.inputs > 0);
+  const device = wanted && !simulate
+    ? withInputs.find((d) => d.name === wanted)
+    : withInputs.sort((a, b) => b.inputs - a.inputs)[0];
+  if (!device) {
+    throw new Error(wanted ? `Das Mehrspur-Gerät „${wanted}“ ist nicht verfügbar – Mischpult eingeschaltet und per USB verbunden?` : 'Kein Audiogerät mit Eingängen gefunden.');
+  }
+  return { device, simulate };
+}
+
+/** Dateiname einer Spur: Kanalnummer und Name, z. B. „03_Predigtmikro.wav“. */
+function trackFileName(t) {
+  return `${String(t.channel + 1).padStart(2, '0')}_${slug(t.name, 'Kanal')}.wav`;
+}
+
+async function startMultitrack() {
+  if (session.status === 'recording') return fail('Es läuft bereits eine Aufnahme.');
+  if (session.status === 'paused') return session.resume();
+  const { device, simulate } = await multitrackDevice();
+  const channels = multitrackChannels(device.inputs);
+  if (!channels.length) return fail('Für die Mehrspuraufnahme ist kein Kanal ausgewählt.');
+  const { folder, base } = session.multitrackTarget(multitrackDir());
+  const tracks = channels.map((c) => {
+    const t = { channel: c, name: `Kanal ${c + 1}` };
+    return { ...t, file: path.join(folder, trackFileName(t)) };
+  });
+  let info;
+  try {
+    info = await multitrack.start({ simulate, deviceId: device.id, tracks });
+  } catch (err) {
+    try { fs.rmdirSync(folder); } catch { /* nicht leer oder schon weg */ }
+    return fail(`Die Mehrspuraufnahme konnte nicht gestartet werden: ${err.message}`);
+  }
+  lastMultitrackRate = info.sampleRate;
+  const res = session.start({ multitrack: { writer: multitrack.writer(info), tracks, base, folder } });
+  if (!res.ok) {
+    await multitrack.stop().catch(() => {});
+    return res;
+  }
+  return { ...res, device: info.device, api: info.api, sampleRate: info.sampleRate, tracks: tracks.length };
+}
+
+/** Hängt an die angezeigte, beendete Mehrspuraufnahme an (dieselben Spurdateien). */
+async function continueMultitrack() {
+  const files = session.trackFiles();
+  const missing = files.filter((t) => !fs.existsSync(t.file));
+  if (!files.length || missing.length) {
+    return fail(`Spurdateien fehlen (${missing.length || 'alle'}) – Anhängen nicht möglich.`);
+  }
+  const { device, simulate } = await multitrackDevice();
+  if (files.some((t) => t.channel >= device.inputs)) {
+    return fail(`„${device.name}“ hat nur ${device.inputs} Eingänge – Anhängen nicht möglich.`);
+  }
+  let info;
+  try {
+    info = await multitrack.start({ simulate, deviceId: device.id, tracks: files, sampleRate: session.sampleRate, append: true });
+  } catch (err) {
+    return fail(`An die Mehrspuraufnahme kann nicht angehängt werden: ${err.message}`);
+  }
+  return session.continueRecording({ writer: multitrack.writer(info) });
+}
+
+multitrack.on('levels', (l) => session.pushTrackLevels(l));
+multitrack.on('stall', () => {
+  health.inputLost = true;
+  publishHealth();
+  toast('error', 'Mehrspur: Das Mischpult liefert keine Daten mehr – das Gerät wird neu geöffnet.');
+});
+multitrack.on('gap', ({ at, seconds }) => {
+  health.inputLost = false;
+  publishHealth();
+  const m = Math.floor(at / 60);
+  const sec = String(Math.floor(at % 60)).padStart(2, '0');
+  toast('warn', `Mehrspur: Eingang wieder da. Bei ${m}:${sec} fehlen etwa ${seconds.toFixed(1)} s in der Aufnahme.`);
+});
+multitrack.on('reopen', ({ ok: reopened, error }) => {
+  if (!reopened) console.warn('Mehrspur: Gerät neu öffnen fehlgeschlagen:', error);
+});
+multitrack.on('device-error', ({ message }) => toast('error', `Mehrspur: ${message}`));
+multitrack.on('device-warning', ({ message }) => console.warn('Mehrspur:', message));
+multitrack.on('exit', ({ code, wasRecording }) => {
+  console.error('Mehrspur-Prozess beendet, Code', code);
+  if (!wasRecording) return;
+  toast('error', 'Der Mehrspur-Prozess ist abgestürzt. Die Aufnahme wurde beendet; die Spuren bis hierher sind gespeichert.');
+  if (session.mode === 'multitrack' && (session.status === 'recording' || session.status === 'paused')) session.stop();
+});
 
 function currentHealth() {
   const input = health.inputLost || health.chunksStale ? 'lost' : (health.silent ? 'silent' : 'ok');
@@ -93,7 +212,8 @@ function publishHealth() {
 let lastChunkAt = 0;
 const CHUNK_TIMEOUT_MS = 5000;
 setInterval(() => {
-  const stale = session.status === 'recording' && Date.now() - lastChunkAt > CHUNK_TIMEOUT_MS;
+  // Mehrspur: Die Blöcke kommen nicht über die Oberfläche, der Mehrspur-Prozess wacht selbst ('stall').
+  const stale = session.status === 'recording' && session.mode !== 'multitrack' && Date.now() - lastChunkAt > CHUNK_TIMEOUT_MS;
   if (stale !== Boolean(health.chunksStale)) {
     health.chunksStale = stale;
     publishHealth();
@@ -548,7 +668,9 @@ session.on('state', (s) => pushState(s));
 
 session.on('levels', (levels) => {
   send('levels', levels);
-  net.publishLevels(levels);
+  // Netzwerk: nur der Gesamtpegel (die Pegel aller Mehrspur-Kanäle und die Wellenform braucht dort niemand).
+  const { tracks, buckets, ...overall } = levels;
+  net.publishLevels(overall);
 
   // Stille: lange fast kein Pegel, obwohl aufgenommen wird (z. B. Mischpult stumm).
   const quiet = Math.max(levels.l, levels.r) < SILENT_LEVEL;
@@ -888,14 +1010,21 @@ ipcMain.handle('session:service', (_e, service) => {
   return ok({ state: session.snapshot() });
 });
 
-ipcMain.handle('rec:start', (_e, { sampleRate, channels } = {}) => {
-  try { return session.start({ sampleRate, channels }); } catch (err) { return fail(err); }
+ipcMain.handle('rec:start', async (_e, { sampleRate, channels } = {}) => {
+  try {
+    if (settings.get('recordingMode') === 'multitrack') return await startMultitrack();
+    return session.start({ sampleRate, channels });
+  } catch (err) { return fail(err); }
 });
 ipcMain.handle('rec:continue', async () => {
   try {
     await session.whenWritten();      // die Datei der eben beendeten Aufnahme erst fertig schreiben lassen
+    if (session.mode === 'multitrack') return await continueMultitrack();
     return session.continueRecording();
   } catch (err) { return fail(err); }
+});
+ipcMain.handle('multitrack:devices', async (_e, { simulate } = {}) => {
+  try { return ok(await multitrack.devices({ simulate: Boolean(simulate) })); } catch (err) { return fail(err); }
 });
 ipcMain.handle('rec:pause', () => {
   try { return session.pause(); } catch (err) { return fail(err); }
@@ -990,6 +1119,7 @@ ipcMain.handle('export:target', () => ok({ folder: exportTargetFolder() }));
 /** Ausgewählte Abschnitte nacheinander als MP3 speichern und als gesichert vermerken. */
 ipcMain.handle('export:batch', async (_e, { items } = {}) => {
   try {
+    if (session.mode === 'multitrack') return fail('Mehrspuraufnahmen werden nicht als MP3 exportiert.');
     if (!session.wavPath || !fs.existsSync(session.wavPath)) {
       return fail('Es ist keine Masteraufnahme vorhanden.');
     }
@@ -1057,6 +1187,7 @@ ipcMain.handle('file:reveal', (_e, { filePath } = {}) => {
   if (!filePath || !fs.existsSync(filePath)) return fail('Datei nicht gefunden.');
   const allowed = revealable.has(path.resolve(filePath))
     || isInside(filePath, settings.get('recordingsDir'))
+    || isInside(filePath, multitrackDir())
     || isInside(filePath, settings.get('exportDir'));
   if (!allowed) return fail('Dieser Ort wird nicht angezeigt.');
   shell.showItemInFolder(filePath);
@@ -1070,14 +1201,24 @@ ipcMain.handle('folder:open', () => {
 
 /* --- Aufnahmenliste / Wiederherstellung --- */
 
-function listSessions() {
-  const dir = settings.get('recordingsDir');
-  let files = [];
+/** Session-Dateien: Stereo direkt im Aufnahmeordner, Mehrspur je in einem Unterordner des Mehrspur-Ordners. */
+function sessionFiles() {
+  const list = (dir) => {
+    try { return fs.readdirSync(dir).filter((f) => f.endsWith('.session.json')).map((f) => path.join(dir, f)); } catch { return []; }
+  };
+  const files = list(settings.get('recordingsDir'));
+  const mdir = multitrackDir();
   try {
-    files = fs.readdirSync(dir).filter((f) => f.endsWith('.session.json'));
-  } catch { return []; }
-  return files.map((f) => {
-    const full = path.join(dir, f);
+    for (const entry of fs.readdirSync(mdir, { withFileTypes: true })) {
+      if (entry.isDirectory()) files.push(...list(path.join(mdir, entry.name)));
+    }
+  } catch { /* noch keine Mehrspuraufnahmen */ }
+  return files;
+}
+
+function listSessions() {
+  return sessionFiles().map((full) => {
+    const f = path.basename(full);
     try {
       const data = JSON.parse(fs.readFileSync(full, 'utf8'));
       return {
@@ -1090,8 +1231,12 @@ function listSessions() {
         sectionCount: Array.isArray(data.sections)
           ? data.sections.filter((x) => x.start != null).length
           : (data.markers || []).filter((m) => m.placed).length,
+        mode: data.mode === 'multitrack' ? 'multitrack' : 'stereo',
+        tracks: Array.isArray(data.tracks) ? data.tracks.length : 0,
         // Wie beim Öffnen: verschobene Aufnahmen über den Namen neben der Session-Datei finden.
-        wavExists: (data.wavPath && fs.existsSync(data.wavPath)) || fs.existsSync(full.replace(/\.session\.json$/, '.wav'))
+        wavExists: data.mode === 'multitrack'
+          ? Array.isArray(data.tracks) && data.tracks.some((t) => fs.existsSync(path.join(path.dirname(full), t.file)))
+          : (data.wavPath && fs.existsSync(data.wavPath)) || fs.existsSync(full.replace(/\.session\.json$/, '.wav'))
       };
     } catch {
       return null;

@@ -17,7 +17,7 @@
  * - Fehlen gegenüber der Uhr dauerhaft mehr als 0,25 s Audio (über ein 5-s-Fenster, damit
  *   Uhrendrift und verspätete Blöcke nicht zählen), folgt ebenfalls 'gap'.
  *
- * Ereignisse: 'levels' ({peaks, clips}), 'stall' ({at}), 'gap' ({at, seconds}), 'reopen' ({ok, error}),
+ * Ereignisse: 'levels' ({peaks, clips, buckets, seconds}), 'stall' ({at}), 'gap' ({at, seconds}), 'reopen' ({ok, error}),
  * 'device-error' / 'device-warning' ({type, message}), 'write-error', 'slow'.
  */
 
@@ -34,6 +34,7 @@ const GAP_MIN_SECONDS = 0.25;
 const DRIFT_WINDOW_MS = 5000;
 const CLIP = 2147483647 * 0.999;   // etwa -0,01 dBFS
 const DEFAULT_FRAME_SIZE = 512;
+const BUCKET_MS = 50;              // Wellenform: ein Spitzenwert je 50 ms (wie PEAK_BUCKET_MS der Session)
 const ERROR_DEBUG_WARNING = 1;     // RtAudioErrorType: 0 WARNING, 1 DEBUG_WARNING, ab 2 Fehler
 
 let audify = null;
@@ -84,6 +85,7 @@ class MultitrackEngine extends EventEmitter {
    * @param {number} [o.frameSize] 0 = Puffergröße des Treibers (bei ASIO so gewollt)
    * @param {{channel:number, file:string}[]} o.tracks
    * @param {boolean} [o.simulate]
+   * @param {boolean} [o.append] an die vorhandenen Spurdateien anhängen
    */
   start(o) {
     if (this.running) throw new Error('Mehrspuraufnahme läuft bereits.');
@@ -100,7 +102,7 @@ class MultitrackEngine extends EventEmitter {
     this.backend = backend;
 
     // Zuerst die Dateien: Scheitert das, wird das Gerät gar nicht erst geöffnet.
-    this.writer = new MultiWavWriter({ sampleRate, deviceChannels: this.inputs, tracks: o.tracks });
+    this.writer = new MultiWavWriter({ sampleRate, deviceChannels: this.inputs, tracks: o.tracks, append: !!o.append });
     this.writer.on('error', (e) => this.emit('write-error', e));
     this.writer.on('slow', (s) => this.emit('slow', s));
 
@@ -114,17 +116,26 @@ class MultitrackEngine extends EventEmitter {
     }
 
     this.running = true;
+    this.paused = false;
     this.framesIn = 0;
     this.gaps = [];
-    this.peaks = new Float32Array(this.inputs);
+    this.peaks = new Float64Array(this.inputs);
     this.clips = new Uint8Array(this.inputs);
+    this.armed = Int32Array.from(o.tracks.map((t) => t.channel));
+    this.bucketSize = Math.round((sampleRate * BUCKET_MS) / 1000);
+    this.bucketAcc = 0;
+    this.bucketFill = 0;
+    this.buckets = [];
     this.stalledAt = null;
     this.lastChunkAt = this.now();
     this.startedAt = this.lastChunkAt;
     this.history = [];
     this._levelTimer = setInterval(() => this._emitLevels(), LEVEL_EVERY_MS);
     this._watchTimer = setInterval(() => this._watch(), WATCH_EVERY_MS);
-    return { device: device.name, api: backend.getApi(), sampleRate, frameSize: this.frameSize, inputs: this.inputs, outputs: this.outputs };
+    return {
+      device: device.name, api: backend.getApi(), sampleRate, frameSize: this.frameSize,
+      inputs: this.inputs, outputs: this.outputs, seconds: this.writer.durationSeconds
+    };
   }
 
   _open() {
@@ -160,35 +171,71 @@ class MultitrackEngine extends EventEmitter {
       this.history = [];
       this._resetClock(t);
     }
-    this.writer.write(buf);
+    // In der Pause läuft das Gerät weiter (Pegel, Wächter), geschrieben wird nicht.
+    if (!this.paused) this.writer.write(buf);
     this.framesIn += buf.length / (this.inputs * 4);
     this._measure(buf);
   }
 
-  /** Spitzenpegel je Kanal seit der letzten Meldung. */
+  /**
+   * Spitzenpegel je Kanal seit der letzten Meldung; außerhalb der Pause zusätzlich die Wellenform
+   * (Spitzenwert über alle aufgenommenen Spuren je 50 ms, 0..255 wie bei der Stereoaufnahme).
+   */
   _measure(buf) {
     const ch = this.inputs;
     const view = buf.byteOffset % 4 === 0
       ? new Int32Array(buf.buffer, buf.byteOffset, buf.length >> 2)
       : new Int32Array(Uint8Array.from(buf).buffer);
-    const peaks = this.peaks;
-    for (let c = 0; c < ch; c++) {
-      let max = peaks[c] * 2147483648;
-      let clip = false;
-      for (let i = c; i < view.length; i += ch) {
-        const v = view[i] < 0 ? -view[i] : view[i];
-        if (v > max) max = v;
-        if (v >= CLIP) clip = true;
+    const frames = Math.floor(view.length / ch);
+    const { peaks, clips, armed } = this;
+    const wave = !this.paused;
+    for (let f = 0; f < frames; f++) {
+      const base = f * ch;
+      for (let c = 0; c < ch; c++) {
+        let v = view[base + c];
+        if (v < 0) v = -v;
+        if (v > peaks[c]) peaks[c] = v;
+        if (v >= CLIP) clips[c] = 1;
       }
-      peaks[c] = max / 2147483648;
-      if (clip) this.clips[c] = 1;
+      if (!wave) continue;
+      for (let a = 0; a < armed.length; a++) {
+        let v = view[base + armed[a]];
+        if (v < 0) v = -v;
+        if (v > this.bucketAcc) this.bucketAcc = v;
+      }
+      if (++this.bucketFill >= this.bucketSize) {
+        this.buckets.push(Math.min(255, Math.round((this.bucketAcc / 2147483648) * 255)));
+        this.bucketAcc = 0;
+        this.bucketFill = 0;
+      }
     }
   }
 
   _emitLevels() {
-    this.emit('levels', { peaks: Array.from(this.peaks, (p) => Math.round(p * 10000) / 10000), clips: Array.from(this.clips, Boolean), seconds: this.seconds });
+    this.emit('levels', {
+      peaks: Array.from(this.peaks, (p) => Math.round((p / 2147483648) * 10000) / 10000),
+      clips: Array.from(this.clips, Boolean),
+      buckets: this.buckets,
+      seconds: this.seconds
+    });
     this.peaks.fill(0);
     this.clips.fill(0);
+    this.buckets = [];
+  }
+
+  /** Pause: Gerät bleibt offen, es wird nur nicht geschrieben. */
+  pause() {
+    if (!this.running) return false;
+    this.paused = true;
+    this.bucketAcc = 0;
+    this.bucketFill = 0;
+    return true;
+  }
+
+  resume() {
+    if (!this.running) return false;
+    this.paused = false;
+    return true;
   }
 
   /** Aufgenommene Sekunden (je Spur). */

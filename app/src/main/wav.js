@@ -160,6 +160,7 @@ class WavWriter extends EventEmitter {
     // Datei synchron öffnen: Scheitert das (Ordner nicht beschreibbar …), merkt es der Aufrufer sofort.
     if (opts.append) {
       const info = readInfo(filePath);
+      if (info.bitsPerSample !== 16) throw new Error('An diese Datei kann nicht angehängt werden (keine 16-Bit-WAV).');
       this.layout = info.dataOffset === HEADER_BYTES && info.layout === 'ds64' ? 'ds64' : 'legacy';
       this.dataOffset = info.dataOffset;
       const blockAlign = channels * 2;
@@ -254,7 +255,7 @@ class WavWriter extends EventEmitter {
 }
 
 /**
- * Liest Kopfdaten einer WAV-Datei (nur 16-Bit-PCM). Versteht klassisches WAV (44-Byte-Kopf),
+ * Liest Kopfdaten einer WAV-Datei (16-Bit-PCM, für Mehrspur auch 24 Bit). Versteht klassisches WAV (44-Byte-Kopf),
  * WAV mit JUNK-Block und RF64. Die Datenlänge kommt aus der Dateigröße – so lassen sich auch
  * Dateien lesen, die gerade noch geschrieben werden oder deren Kopf nicht mehr aktuell ist.
  */
@@ -291,8 +292,8 @@ function readInfo(filePath) {
       pos += 8 + size + (size % 2);
     }
     if (!fmt || dataOffset == null) throw new Error('WAV-Datei ohne gültigen Kopf.');
-    if (fmt.bitsPerSample !== 16) throw new Error('Nur 16-Bit-WAV wird unterstützt.');
-    const blockAlign = fmt.channels * 2;
+    if (fmt.bitsPerSample !== 16 && fmt.bitsPerSample !== 24) throw new Error('Nur 16- und 24-Bit-WAV werden unterstützt.');
+    const blockAlign = fmt.channels * (fmt.bitsPerSample / 8);
     const fileSize = fs.fstatSync(fd).size;
     let raw = Math.max(0, fileSize - dataOffset);
     // Hängen Cue-Marker hinter den Audiodaten, gilt die Länge aus dem Kopf (sonst zählten sie als Audio).
@@ -306,7 +307,7 @@ function readInfo(filePath) {
     return {
       channels: fmt.channels,
       sampleRate: fmt.sampleRate,
-      bitsPerSample: 16,
+      bitsPerSample: fmt.bitsPerSample,
       dataOffset,
       layout,
       dataBytes,
@@ -396,6 +397,7 @@ function writeCues(filePath, points) {
  */
 function readFrames(filePath, startFrame, frameCount, info) {
   const meta = info || readInfo(filePath);
+  if (meta.bitsPerSample !== 16) throw new Error('Nur 16-Bit-WAV lässt sich hier lesen.');
   const bytesPerFrame = meta.channels * 2;
   const first = Math.max(0, Math.min(startFrame, meta.frames));
   const count = Math.max(0, Math.min(frameCount, meta.frames - first));

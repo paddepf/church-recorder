@@ -16,7 +16,7 @@
 
 const fs = require('fs');
 const { EventEmitter } = require('events');
-const { buildHeader, HEADER_BYTES } = require('../wav');
+const { buildHeader, readInfo, HEADER_BYTES } = require('../wav');
 
 const BYTES = 3;                               // 24 Bit
 const STAGE_SECONDS = 0.5;                     // so viel Audio wird je Spur gesammelt
@@ -30,8 +30,9 @@ class MultiWavWriter extends EventEmitter {
    * @param {number} o.sampleRate
    * @param {number} o.deviceChannels Kanäle je Frame im Eingangsblock
    * @param {{channel:number, file:string}[]} o.tracks channel = Index im Eingangsblock (0-basiert)
+   * @param {boolean} [o.append] an vorhandene Spuren anhängen („An Aufnahme anhängen“)
    */
-  constructor({ sampleRate, deviceChannels, tracks }) {
+  constructor({ sampleRate, deviceChannels, tracks, append = false }) {
     super();
     if (!tracks.length) throw new Error('Keine Spur ausgewählt.');
     this.sampleRate = sampleRate;
@@ -45,19 +46,44 @@ class MultiWavWriter extends EventEmitter {
     this.stageFrames = Math.max(1, Math.round(sampleRate * STAGE_SECONDS));
     this.staged = 0;
 
-    // Alle Dateien synchron öffnen: Scheitert eine, wird keine angelegt und der Aufrufer merkt es sofort.
+    for (const t of tracks) {
+      if (t.channel < 0 || t.channel >= deviceChannels) throw new Error(`Kanal ${t.channel + 1} gibt es am Gerät nicht.`);
+    }
+
+    // Anhängen: Alle Spuren müssen zusammenpassen; weitergeschrieben wird ab der kürzesten (sonst liefen sie auseinander).
+    if (append) {
+      let shortest = Infinity;
+      for (const t of tracks) {
+        const info = readInfo(t.file);
+        if (info.bitsPerSample !== 24 || info.channels !== 1 || info.dataOffset !== HEADER_BYTES) {
+          throw new Error(`„${t.file}“ ist keine Mehrspur-Datei von Ebbton.`);
+        }
+        if (info.sampleRate !== sampleRate) {
+          throw new Error(`Das Gerät läuft mit ${sampleRate} Hz, die Aufnahme hat ${info.sampleRate} Hz.`);
+        }
+        shortest = Math.min(shortest, info.dataBytes);
+      }
+      this.dataBytes = shortest - (shortest % BYTES);
+    }
+
+    // Alle Dateien synchron öffnen: Scheitert eine, bleibt nichts halb angelegt und der Aufrufer merkt es sofort.
     this.tracks = [];
     try {
       for (const t of tracks) {
-        if (t.channel < 0 || t.channel >= deviceChannels) throw new Error(`Kanal ${t.channel + 1} gibt es am Gerät nicht.`);
-        const fd = fs.openSync(t.file, 'wx');
+        const fd = fs.openSync(t.file, append ? 'r+' : 'wx');
         this.tracks.push({ channel: t.channel, file: t.file, fd, stage: Buffer.alloc(this.stageFrames * BYTES) });
-        const head = buildHeader('ds64', sampleRate, 1, 0, 24);
-        fs.writeSync(fd, head, 0, head.length, 0);
+        if (append) {
+          // Cue-Marker o. Ä. hinter den Audiodaten fallen weg, längere Spuren werden angeglichen.
+          fs.ftruncateSync(fd, HEADER_BYTES + this.dataBytes);
+        } else {
+          const head = buildHeader('ds64', sampleRate, 1, 0, 24);
+          fs.writeSync(fd, head, 0, head.length, 0);
+        }
       }
     } catch (err) {
       for (const t of this.tracks) {
-        try { fs.closeSync(t.fd); fs.unlinkSync(t.file); } catch { /* egal */ }
+        try { fs.closeSync(t.fd); } catch { /* egal */ }
+        if (!append) try { fs.unlinkSync(t.file); } catch { /* egal */ }
       }
       throw err;
     }

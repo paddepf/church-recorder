@@ -148,6 +148,8 @@
     // Die Oberfläche wurde mitten in einer Aufnahme neu geladen (Absturz o. Ä.): Die Aufnahme läuft im
     // Hauptprozess weiter, nur die Erfassung fehlt – sofort wieder mit dem Eingang verbinden.
     if (isLive()) {
+      // Mehrspur: Erfasst wird im Mehrspur-Prozess, die Oberfläche muss nichts wieder verbinden.
+      if (isMultitrack()) return;
       state.lastChunkAt = 0;
       toast('warn', 'Die Oberfläche wurde neu geladen – der Audioeingang wird wieder verbunden.', 8000);
       recoverCapture({ quiet: true });
@@ -392,12 +394,19 @@
       // Eine noch laufende Erfassung stammt nie von einer aktiven Aufnahme (deren Status wurde oben geprüft):
       // schließen, damit capture.start() wirklich neu öffnet und eine Abtastrate liefert.
       if (capture.running) await capture.stop();
-      const result = await capture.start(state.settings.inputDeviceId, state.settings.sampleRate);
-      state.sampleRate = result.sampleRate;
-      state.lastChunkAt = Date.now();
-      warnDeviceFallback(result);
-
-      const rec = await window.api.record.start({ sampleRate: result.sampleRate, channels: 2 });
+      // Mehrspur: Gerät und Dateien öffnet der Mehrspur-Prozess, die Oberfläche erfasst nichts.
+      const multi = state.settings.recordingMode === 'multitrack';
+      let rec;
+      if (multi) {
+        rec = await window.api.record.start({});
+        if (rec.ok) state.sampleRate = rec.sampleRate;
+      } else {
+        const result = await capture.start(state.settings.inputDeviceId, state.settings.sampleRate);
+        state.sampleRate = result.sampleRate;
+        state.lastChunkAt = Date.now();
+        warnDeviceFallback(result);
+        rec = await window.api.record.start({ sampleRate: result.sampleRate, channels: 2 });
+      }
       if (!rec.ok) {
         await capture.stop();
         toast('error', rec.error || 'Die Aufnahme konnte nicht gestartet werden.');
@@ -506,7 +515,7 @@
   }
 
   setInterval(() => {
-    if (state.session?.status !== 'recording' || state.starting || state.recovering) return;
+    if (state.session?.status !== 'recording' || state.starting || state.recovering || isMultitrack()) return;
     // Erfassung läuft nicht (z. B. nach Neuladen der Oberfläche) oder liefert keine Daten mehr.
     if (!capture.running || Date.now() - state.lastChunkAt > WATCHDOG_MS) recoverCapture();
   }, 1000);
@@ -514,6 +523,11 @@
   function isLive() {
     const st = state.session?.status;
     return st === 'recording' || st === 'paused';
+  }
+
+  /** Die angezeigte Aufnahme ist eine Mehrspuraufnahme (erfasst im Mehrspur-Prozess, nicht hier). */
+  function isMultitrack() {
+    return state.session?.mode === 'multitrack';
   }
 
   /** Ist das gewählte Gerät nicht verfügbar, nimmt der Browser still den Standardeingang – das deutlich melden. */
@@ -530,13 +544,15 @@
     $('btn-continue').disabled = true;
     try {
       const rate = state.session.sampleRate;
-      const result = await capture.start(state.settings.inputDeviceId, rate);
-      if (result.sampleRate !== rate) {
-        await capture.stop();
-        return toast('error', `Der Eingang läuft mit ${result.sampleRate} Hz, die Aufnahme hat ${rate} Hz – Fortsetzen nicht möglich.`);
+      if (!isMultitrack()) {
+        const result = await capture.start(state.settings.inputDeviceId, rate);
+        if (result.sampleRate !== rate) {
+          await capture.stop();
+          return toast('error', `Der Eingang läuft mit ${result.sampleRate} Hz, die Aufnahme hat ${rate} Hz – Fortsetzen nicht möglich.`);
+        }
+        state.sampleRate = result.sampleRate;
+        state.lastChunkAt = Date.now();
       }
-      state.sampleRate = result.sampleRate;
-      state.lastChunkAt = Date.now();
       const res = await window.api.record.continue();
       if (!res.ok) {
         await capture.stop();
@@ -1513,6 +1529,8 @@
       $('meter-l').style.width = Math.min(100, levels.l * 100) + '%';
       $('meter-r').style.width = Math.min(100, levels.r * 100) + '%';
       $('clip').dataset.on = String(Boolean(levels.clip));
+      // Mehrspur: Die Wellenform kommt fertig aus dem Mehrspur-Prozess (Stereo rechnet sie hier aus den Blöcken).
+      if (levels.buckets) for (const b of levels.buckets) state.peaks.push(b);
       state.duration = levels.duration;
       $('timecode').textContent = longTime(levels.duration);
       updateSectionElapsed();
@@ -1964,7 +1982,8 @@
       el.className = 'list-item' + (s.finalized ? '' : ' unfinished');
       el.innerHTML = '<span class="name"></span><span class="meta"></span>';
       el.querySelector('.name').textContent = s.name + (s.finalized ? '' : ' · unterbrochen');
-      el.querySelector('.meta').textContent = `${s.date} · ${fmt(s.duration)} · ${s.sectionCount} Abschnitte`;
+      const kind = s.mode === 'multitrack' ? ` · Mehrspur (${s.tracks} Spuren)` : '';
+      el.querySelector('.meta').textContent = `${s.date} · ${fmt(s.duration)} · ${s.sectionCount} Abschnitte${kind}`;
       el.addEventListener('click', () => openSession(s.path));
       list.appendChild(el);
     });
@@ -2020,6 +2039,49 @@
     applyOutputDevice();
   }
 
+  /**
+   * Auswahl des Mehrspur-Geräts. Gespeichert wird der Name; ein gewähltes, gerade nicht angeschlossenes
+   * Gerät (Mischpult aus) bleibt als Eintrag stehen. `devices` = null: nur die gespeicherte Wahl zeigen.
+   */
+  function fillMultitrackSelect(devices) {
+    const select = $('set-mt-device');
+    const wanted = select.value || state.settings.multitrackDevice || '';
+    select.innerHTML = '';
+    const add = (value, text) => {
+      const o = document.createElement('option');
+      o.value = value;
+      o.textContent = text;
+      select.appendChild(o);
+    };
+    add('', 'Automatisch (Gerät mit den meisten Eingängen)');
+    for (const d of devices || []) add(d.name, `${d.name} (${d.inputs} Eingänge)`);
+    if (wanted && ![...select.options].some((o) => o.value === wanted)) add(wanted, devices ? `${wanted} (nicht verbunden)` : wanted);
+    select.value = wanted;
+  }
+
+  /**
+   * Sucht Geräte für die Mehrspuraufnahme (im Mehrspur-Prozess, unter Windows ASIO). Nur auf Knopfdruck und
+   * nie während einer Aufnahme: Zum Suchen werden die ASIO-Treiber kurz geladen.
+   */
+  async function refreshMultitrackDevices() {
+    const info = $('mt-device-info');
+    if (isLive()) {
+      info.textContent = 'Während einer Aufnahme wird nicht nach Geräten gesucht.';
+      return;
+    }
+    info.textContent = 'Geräte werden gesucht …';
+    const res = await window.api.multitrack.devices(false);
+    if (!res.ok) {
+      info.textContent = `Geräte konnten nicht gelesen werden: ${res.error}`;
+      return;
+    }
+    const devices = res.devices.filter((d) => d.inputs > 0);
+    fillMultitrackSelect(devices);
+    info.textContent = devices.length
+      ? `Schnittstelle: ${res.api} · ${devices.length} Gerät(e) mit Eingängen`
+      : `Schnittstelle: ${res.api} · kein Gerät gefunden${navigator.platform.startsWith('Win') ? ' (ASIO-Treiber installiert, Mischpult an?)' : ''}`;
+  }
+
   /** Wendet das gewählte Ausgabegerät auf Mithören und Abspielen an. */
   function applyOutputDevice() {
     const id = state.settings.outputDeviceId || '';
@@ -2033,6 +2095,11 @@
   function applySettingsToForm() {
     const s = state.settings;
     $('set-samplerate').value = String(s.sampleRate);
+    $('set-rec-mode').value = s.recordingMode === 'multitrack' ? 'multitrack' : 'stereo';
+    $('set-mt-simulate').checked = Boolean(s.multitrackSimulate);
+    $('set-mt-device').value = s.multitrackDevice || '';
+    if (!$('set-mt-device').options.length || $('set-mt-device').value !== (s.multitrackDevice || '')) fillMultitrackSelect(null);
+    $('set-mt-dir').value = s.multitrackDir || '';
     $('set-dir').value = s.recordingsDir;
     loadTemplatesDraft();
     renderTemplateEditor();
@@ -2232,6 +2299,12 @@
       if (res.ok && res.path) $('set-export-dir').value = res.path;
     });
     $('btn-clear-export-dir').addEventListener('click', () => { $('set-export-dir').value = ''; });
+    $('btn-choose-mt-dir').addEventListener('click', async () => {
+      const res = await window.api.settings.chooseFolder('Ordner für Mehrspuraufnahmen wählen', $('set-mt-dir').value || $('set-dir').value);
+      if (res.ok && res.path) $('set-mt-dir').value = res.path;
+    });
+    $('btn-clear-mt-dir').addEventListener('click', () => { $('set-mt-dir').value = ''; });
+    $('btn-mt-refresh').addEventListener('click', () => refreshMultitrackDevices());
     $('btn-ct-test').addEventListener('click', async () => {
       $('ct-test-result').textContent = 'Wird geprüft …';
       await saveSettings(true);
@@ -2259,6 +2332,10 @@
       outputDeviceId: $('set-output').value,
       outputDeviceLabel: $('set-output').selectedOptions[0]?.textContent || '',
       sampleRate: Number($('set-samplerate').value),
+      recordingMode: $('set-rec-mode').value,
+      multitrackDevice: $('set-mt-device').value,
+      multitrackSimulate: $('set-mt-simulate').checked,
+      multitrackDir: $('set-mt-dir').value,
       recordingsDir: $('set-dir').value,
       exportDir: $('set-export-dir').value,
       ...readTemplatesForSave(),

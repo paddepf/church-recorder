@@ -81,11 +81,24 @@ class MultitrackManager extends EventEmitter {
     return result;
   }
 
+  pause() {
+    return this._call('pause');
+  }
+
+  resume() {
+    return this._call('resume');
+  }
+
   async stop() {
     if (!this.child) return null;
     const result = await this._call('stop');
     this.recording = false;
     return result;
+  }
+
+  /** Stellvertreter für den Schreiber der Session (nach erfolgreichem `start`). */
+  writer(info) {
+    return new TrackWriterProxy(this, info);
   }
 
   /** Beendet den Prozess (nur ohne laufende Aufnahme). */
@@ -97,4 +110,55 @@ class MultitrackManager extends EventEmitter {
   }
 }
 
-module.exports = { MultitrackManager };
+/**
+ * Steht in der Session an der Stelle des WAV-Schreibers (dieselben Teile der Schnittstelle, die die Session
+ * nutzt): Dauer, Pause, Schließen, Ereignisse 'error' und 'slow'. Das Audio selbst schreibt der Mehrspur-Prozess.
+ */
+class TrackWriterProxy extends EventEmitter {
+  constructor(manager, info = {}) {
+    super();
+    this.manager = manager;
+    this.sampleRate = info.sampleRate;
+    this.durationSeconds = info.seconds || 0;
+    this.closed = false;
+    this._listeners = {
+      levels: (l) => { if (!this.closed && l && typeof l.seconds === 'number') this.durationSeconds = l.seconds; },
+      'write-error': (e) => this.emit('error', e),
+      slow: (slow) => this.emit('slow', slow)
+    };
+    for (const [ev, fn] of Object.entries(this._listeners)) manager.on(ev, fn);
+  }
+
+  write() { /* Audio kommt nicht über den Hauptprozess */ }
+  updateHeader() { /* schreibt der Mehrspur-Prozess selbst alle 2 s */ }
+
+  pause() {
+    return this.manager.pause().catch((err) => this.emit('error', { message: err.message }));
+  }
+
+  resume() {
+    return this.manager.resume().catch((err) => this.emit('error', { message: err.message }));
+  }
+
+  /** Beendet die Aufnahme im Mehrspur-Prozess; erfüllt sich, wenn alles auf der Platte ist. */
+  close() {
+    if (this._closing) return this._closing;
+    this.closed = true;
+    const detach = () => {
+      for (const [ev, fn] of Object.entries(this._listeners)) this.manager.off(ev, fn);
+    };
+    this._closing = this.manager.stop().then((res) => {
+      if (res) this.durationSeconds = res.seconds;
+      this.result = res;
+      detach();
+      return res;
+    }, (err) => {
+      detach();
+      this.emit('error', { message: err.message });
+      return null;
+    });
+    return this._closing;
+  }
+}
+
+module.exports = { MultitrackManager, TrackWriterProxy };

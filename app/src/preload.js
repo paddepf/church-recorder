@@ -51,6 +51,11 @@ contextBridge.exposeInMainWorld('api', {
     chunk: (arrayBuffer) => ipcRenderer.send('audio:chunk', arrayBuffer)
   },
 
+  multitrack: {
+    /** Geräte für die Mehrspuraufnahme (unter Windows ASIO); simulate: nachgebautes 32-Kanal-Pult. */
+    devices: (simulate) => invoke('multitrack:devices', { simulate })
+  },
+
   section: {
     /** Abschnitt beginnen bzw. den laufenden beenden. */
     toggle: (params) => invoke('section:toggle', params),

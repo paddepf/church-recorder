@@ -66,6 +66,8 @@ Wird direkt nach der Anmeldung und bei jeder Änderung gesendet (max. 10×/s).
     "sampleRate": 48000,
     "channels": 2,
     "levels": { "l": 0.42, "r": 0.39, "clip": false },
+    "mode": "stereo",
+    "tracks": [],
     "sections": [
       { "id": "sec_x1", "label": "Predigt", "category": "Verkündigung", "color": 2,
         "start": 1420.5, "end": null, "source": "churchtools" },
@@ -102,6 +104,12 @@ zusätzlich alle 5 Sekunden, auch ohne Änderung.
 
 `status` ist einer von `idle`, `recording`, `paused`, `stopped`.
 Alle Zeitangaben sind Sekunden seit Aufnahmebeginn.
+
+`mode` ist `stereo` oder `multitrack` (Mehrspuraufnahme aller Kanäle des Mischpults, im Aufbau). Bei
+`multitrack` nennt `tracks` die aufgenommenen Kanäle (`[{ "channel": 0, "name": "Kanal 1" }, …]`, `channel`
+0-basiert), `wavPath` ist `null`, `channels` die Zahl der Spuren und `levels` der Pegel des lautesten
+aufgenommenen Kanals (in `l` und `r` gleich). `health.input` wird `lost`, wenn das Mischpult keine Daten mehr
+liefert. Befehle und Ereignisse sind in beiden Modi gleich.
 
 ### `levels` – Pegel
 

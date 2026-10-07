@@ -439,7 +439,7 @@ Der Ordnername des lokalen Klons ist egal.
 - Festlegungen: 32 Mono-WAVs, 24 Bit, Rate des Treibers, Ordner pro Aufnahme, Dateinamen nach Pultnamen; alle Kanäle
   scharf, einzeln abwählbar; Abschnitte laufen mit; eigener Ordner für Mehrspur-Aufnahmen; Raster mit 32
   Kanalstreifen ohne Wellenform. Kirchen-PC: Samsung PM981a NVMe 512 GB, etwa 16,6 GB je Stunde bei 32 Kanälen.
-- Reihenfolge: 1 Technik-Test (erledigt) → 2 Anbindung an die Session → 3 OSC/Routing mit Pult-Simulator →
+- Reihenfolge: 1 Technik-Test (erledigt) → 2 Anbindung an die Session (erledigt) → 3 OSC/Routing mit Pult-Simulator →
   4 Oberfläche → 5 Zurückspielen → 6 Test am Pult, erst dann Merge in `main`.
 - **Audio über `audify`** (MIT, RtAudio; N-API, also ohne Neubau für Electron; Windows-Builds mit ASIO). audify meldet
   Überläufe des Treibers nicht (Status im Callback wird ignoriert) und verwirft Blöcke mit abweichender Framezahl
@@ -461,6 +461,34 @@ Der Ordnername des lokalen Klons ist egal.
   ASIO (erst mit ASIO4ALL/FlexASIO ohne Pult, dann DN32-USB mit 32 Kanälen) und der Windows-Build im Release-Workflow.
   Der CI-Test „audify lädt“ prüft auf dem Windows-Runner, dass die ASIO-Schnittstelle vorhanden ist.
 - Gerätenamen von CoreAudio kommen bei Sonderzeichen verstümmelt an (audify); für ASIO („DN32-USB“) unerheblich.
+- **Anbindung an die Session (Schritt 2):** `session.mode` (`stereo`/`multitrack`), `tracks` (`{channel, name, file}`,
+  `file` nur Dateiname) und `trackDir`. Im Mehrspur-Modus steht statt des `WavWriter` ein `TrackWriterProxy`
+  (`manager.js`) in `session.writer`: Dauer aus den Pegelmeldungen, `pause()`/`resume()` (der Mehrspur-Prozess
+  verwirft in der Pause, das Gerät bleibt offen), `close()` = Stopp im Prozess. So laufen Start, Pause, Stopp,
+  Anhängen, Abschnitte, Autosave, Schlafsperre und `whenWritten` unverändert. Den Start macht der Hauptprozess
+  (`startMultitrack`/`continueMultitrack` in `main.js`): Gerät wählen, `session.multitrackTarget()` legt den Ordner
+  an, erst der Prozess die Dateien, dann `session.start({ multitrack })`; scheitert der Prozess, wird der leere
+  Ordner wieder entfernt. Die Oberfläche ruft weiter `rec:start`/`rec:continue`, startet im Mehrspur-Modus aber
+  keine eigene Erfassung, ihr Wächter und `recoverCapture` greifen dort nicht (`isMultitrack()`), ebenso nicht der
+  `chunksStale`-Wächter im Hauptprozess; stattdessen `stall`/`gap` des Prozesses → `health.inputLost` und Meldungen.
+- Mehrspur-Ablage: `<multitrackDir>/<Datum_Zeit_Gottesdienst>/` mit `NN_Kanalname.wav` und der Session-Datei; beim
+  Laden werden die Spuren neben der Session-Datei gesucht (Ordner darf verschoben werden). `listSessions` liest
+  zusätzlich die Unterordner des Mehrspur-Ordners. Gesucht wird nur auf Knopfdruck und nicht während einer
+  Aufnahme (`multitrack:devices`): RtAudio lädt dafür die ASIO-Treiber zur Probe, ob das eine laufende
+  WDM-Stereoaufnahme über denselben Treiber stört, ist ungeprüft.
+- Wellenform: Der Mehrspur-Prozess liefert je 50 ms den Spitzenwert über alle aufgenommenen Spuren (`buckets` in der
+  Pegelmeldung), Session und Oberfläche hängen sie an. Pegel der Session = lautester aufgenommener Kanal (`l` = `r`),
+  dazu `tracks: {peaks, clips}` aller Gerätekanäle für die Oberfläche; ins Netzwerk geht nur der Gesamtpegel.
+- Einstellungen: `recordingMode`, `multitrackDevice` (Name, leer = meiste Eingänge), `multitrackSimulate`,
+  `multitrackArmed` (0-basiert, `null` = alle), `multitrackDir` (leer = `Mehrspur` im Aufnahmeordner). Vorerst
+  in *Einstellungen → Audio*; Kanalwahl und Namen kommen mit Schritt 3/4 (bis dahin „Kanal n“).
+- Kein MP3-Export, kein Mithören, keine Cue-Marker bei Mehrspur (`export:batch` lehnt ab). Stürzt der Mehrspur-Prozess
+  während der Aufnahme ab, wird sie beendet (Spuren bleiben bis dahin lesbar); automatisches Neustarten und Anhängen
+  fehlt noch. Beim Stopp endet der laufende Abschnitt bei der zuletzt gemeldeten Dauer (bis etwa 50 ms vor Dateiende).
+- Geprüft (Mac, Simulator): Tests mit echter Engine (Session-Ablauf inkl. Laden/Anhängen) und die App per
+  WebSocket-Fernsteuerung sowie per Knöpfen (Start, Abschnitt, Pause, Stopp, Anhängen, Einstellungen).
+- Offen für Schritt 4: Kanalpegel schon vor dem Start (Gerät ohne Aufnahme öffnen), Kanalwahl, Export-Bereich
+  im Mehrspur-Modus ausblenden.
 
 ### Entfernt: Mitschrift
 Die lokale Transkription (whisper.cpp, Mitschrift-Panel, Einstellungen) wurde
