@@ -837,6 +837,17 @@
     const sections = new Map((session?.sections || []).map((x) => [x.id, x]));
     list.innerHTML = '';
 
+    // Beim Beenden einer Aufnahme sind alle Abschnitte zum Export vorausgewählt, auch schon gesicherte.
+    const status = session?.status;
+    const justStopped = status === 'stopped' && (state.exportPrevStatus === 'recording' || state.exportPrevStatus === 'paused');
+    state.exportPrevStatus = status;
+    if (justStopped) {
+      segments.forEach((seg) => {
+        state.exportSeen.add(seg.id);
+        if (seg.markerId && !seg.open) state.exportChecked.add(seg.id);
+      });
+    }
+
     if (segments.length === 0) {
       list.innerHTML = '<div class="empty">Abschnitt starten und beenden, um ihn zu exportieren.</div>';
       $('export-target').textContent = '';
@@ -877,15 +888,17 @@
         if (state.selectedSegmentId) wave.scrollTo(seg.start);
       });
       const len = Math.max(0, seg.end - seg.start - (seg.cutSeconds || 0));
-      row.querySelector('.meta').textContent = `${fmt(seg.start)}–${fmt(seg.end)} · ${fmt(len)}` +
+      const meta = row.querySelector('.meta');
+      meta.textContent = fmt(len);
+      meta.title = `${fmt(seg.start)}–${fmt(seg.end)}` +
         (seg.cutSeconds > 0.05 ? ` · ✂ −${fmt(seg.cutSeconds)}` : '');
 
       const mark = row.querySelector('.done');
       if (done) {
         const changed = exportChanged(done, seg);
-        mark.textContent = changed ? '✓ geändert seit Export' : '✓ gesichert';
+        mark.textContent = changed ? '⚠' : '✓';
         mark.classList.toggle('stale', changed);
-        mark.title = done.file;
+        mark.title = (changed ? 'Geändert seit Export: ' : 'Gesichert: ') + done.file;
       }
       list.appendChild(row);
     });

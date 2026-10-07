@@ -100,8 +100,8 @@ Windows erzeugen. Der mitgelieferte Workflow erledigt beides auf GitHub.
    Abschnitte anhaken (neue sind vorausgewählt, „Alle“/„Keine“ schalten um; ein
    Klick auf den Namen zeigt den Abschnitt in der Wellenform) und mit „Ausgewählte
    als MP3 speichern" exportieren. Bereits gesicherte Abschnitte tragen den
-   Vermerk „✓ gesichert“ (oder „✓ geändert seit Export“, wenn ihre Marken seitdem
-   verschoben wurden) und sind nicht mehr vorausgewählt. „Gesamte Aufnahme“ steht
+   Vermerk „✓“ (oder „⚠“ = geändert seit Export, wenn ihre Marken seitdem
+   verschoben wurden; Zeitraum und Datei im Tooltip, die Zeile zeigt die Länge) und sind nicht mehr vorausgewählt. „Gesamte Aufnahme“ steht
    ebenfalls zur Wahl. Ist ein Export-Oberordner eingestellt, wird ohne Rückfrage
    in dessen Unterordner `Datum_Gottesdienstname` gespeichert (bei gleichem Namen
    mit „ (2)“ usw.); ohne Oberordner wird ein Zielordner abgefragt. Die MP3s

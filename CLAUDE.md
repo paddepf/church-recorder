@@ -262,7 +262,7 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   beendeten Abschnitte plus „Gesamte Aufnahme“; ein Knopf „Ausgewählte als MP3
   speichern“ (`export:batch`, nacheinander, ein Fehler stoppt die übrigen nicht,
   `failed` in der Antwort). Vorausgewählt sind Abschnitte, die noch nicht gesichert
-  wurden. Fortschritt über `export-progress` mit `index`/`total`.
+  wurden; **beim Beenden einer Aufnahme alle** (`exportPrevStatus` erkennt den Wechsel recording/paused → stopped). Fortschritt über `export-progress` mit `index`/`total`.
 - Gesicherte Abschnitte werden in der Session gemerkt (`exports`, Schlüssel =
   Segment-ID, mit Datei und Zeitraum). Weichen Anfang/Ende später ab, zeigt die
   Liste „geändert seit Export“. `exports` wird bei einer neuen Aufnahme geleert.
@@ -311,8 +311,8 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   bei neuer/fortgesetzter Aufnahme), beendete Aufnahmen werden eingepasst (`fitZoom`). Der Zoom wird nicht
   mehr in den Einstellungen gespeichert.
 - Die drei unteren Bereiche sind bewusst groß ausgelegt (Zeilenschrift 16 px, Überschriften 17 px, Knöpfe
-  ✎/× 18 px, Eingabefelder 16 px); die Exportspalte ist 400 px breit, Exportzeilen sind zweizeilig
-  (Name / Zeitraum + „gesichert“). Beim Ändern der Größen im 1360×880-Fenster mit der Layout-Vorschau prüfen.
+  ✎/× 18 px, Eingabefelder 16 px); die Exportspalte ist 400 px breit, Exportzeilen sind einzeilig
+  (Häkchen, Name, Länge, ✓ gesichert / ⚠ geändert seit Export; Zeitraum und Datei im Tooltip). Beim Ändern der Größen im 1360×880-Fenster mit der Layout-Vorschau prüfen.
 - Kopfleiste, Transport und Werkzeugleiste sind ebenfalls groß (Dienstname 21 px, Aufnahmeknopf 18 px,
   Timer 60 px, Pegel 280 px breit). Für kleine Fenster gibt es zwei Abstufungen: `max-width: 1180px` (kleinere
   Schrift/Abstände, sonst läuft die Seite über) und `max-height: 820px` bzw. `720px` (Wellenform 150/120 px

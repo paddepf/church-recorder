@@ -586,30 +586,24 @@ label small { color: var(--muted); font-size: 11px; }
 .list-item:hover { border-color: var(--plan); }
 .list-item .meta { color: var(--muted); font-size: 12px; font-family: var(--sans); font-variant-numeric: tabular-nums; }
 .list-item.unfinished { border-color: rgba(255,176,32,.5); }
-.export-list { margin: 12px 14px 0; display: grid; gap: 6px; overflow-y: auto; flex: 0 1 auto; min-height: 72px; align-content: start; }
+.export-list { margin: 12px 14px 0; display: grid; gap: 4px; overflow-y: auto; flex: 0 1 auto; min-height: 72px; align-content: start; }
 .panel-export .segment-info, .panel-export .progress, .panel-export .export-result { flex-shrink: 0; }
 .export-item {
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  grid-template-areas: "box name name" "box meta done";
+  grid-template-columns: auto 1fr auto auto;
   align-items: center;
-  column-gap: 12px;
-  row-gap: 3px;
-  padding: 11px 14px;
+  column-gap: 10px;
+  padding: 6px 10px;
   border-radius: 6px;
   border-left: 4px solid hsl(var(--hue, 0), 55%, 62%);
   background: var(--panel-2);
-  font-size: 16px;
+  font-size: 15px;
 }
-.export-item input[type="checkbox"] { grid-area: box; }
-.export-item .name { grid-area: name; }
-.export-item .meta { grid-area: meta; }
-.export-item .done { grid-area: done; justify-self: end; }
 .export-item.selected { outline: 1px solid var(--plan); }
 .export-item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.export-item .meta { color: var(--muted); font-size: 14px; font-family: var(--sans); font-variant-numeric: tabular-nums; }
-.export-item .done { color: var(--manual); font-size: 13px; white-space: nowrap; }
-.export-item input[type="checkbox"] { width: 20px; height: 20px; flex-shrink: 0; accent-color: var(--plan); cursor: pointer; }
+.export-item .meta { color: var(--muted); font-size: 13px; font-family: var(--sans); font-variant-numeric: tabular-nums; }
+.export-item .done { color: var(--manual); font-size: 14px; white-space: nowrap; min-width: 14px; }
+.export-item input[type="checkbox"] { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--plan); cursor: pointer; margin: 0; }
 .export-item .done.stale { color: var(--amber); }
 .export-item input:disabled + .name { color: var(--muted); cursor: default; }
 .export-select { display: flex; gap: 2px; }
