@@ -94,6 +94,11 @@ function multitrackTrackCount() {
   return Array.isArray(armed) ? Math.max(1, armed.length) : (monitorState.info?.inputs || 32);
 }
 
+/** Meiste Eingänge zuerst, bei Gleichstand das Standard-Eingabegerät des Systems (nicht zufällig das erste der Liste). */
+function byInputsThenDefault(a, b) {
+  return b.inputs - a.inputs || Number(Boolean(b.isDefault)) - Number(Boolean(a.isDefault));
+}
+
 /** Gerät für die Mehrspuraufnahme: das gewählte (per Name) oder das mit den meisten Eingängen. */
 async function multitrackDevice() {
   const simulate = Boolean(settings.get('multitrackSimulate'));
@@ -102,7 +107,7 @@ async function multitrackDevice() {
   const withInputs = devices.filter((d) => d.inputs > 0);
   const device = wanted && !simulate
     ? withInputs.find((d) => d.name === wanted)
-    : withInputs.sort((a, b) => b.inputs - a.inputs)[0];
+    : withInputs.sort(byInputsThenDefault)[0];
   if (!device) {
     throw new Error(wanted ? `Das Mehrspur-Gerät „${wanted}“ ist nicht verfügbar – Mischpult eingeschaltet und per USB verbunden?` : 'Kein Audiogerät mit Eingängen gefunden.');
   }
@@ -180,6 +185,7 @@ let monitorState = { active: false, info: null, error: null, stalled: false };
 let monitorTimer = null;
 let monitorQueue = Promise.resolve();
 let multitrackExits = [];                      // Zeitpunkte der letzten Abstürze des Mehrspur-Prozesses
+let reopenFailLogged = false;                  // „neu öffnen fehlgeschlagen“ schon protokolliert
 const MONITOR_RETRY_MS = 10000;
 
 function sendMultitrack() {
@@ -296,7 +302,12 @@ multitrack.on('gap', ({ at, seconds, recording }) => {
   toast('warn', `Mehrspur: Eingang wieder da. Bei ${m}:${sec} fehlen etwa ${seconds.toFixed(1)} s in der Aufnahme.`);
 });
 multitrack.on('reopen', ({ ok: reopened, error }) => {
-  if (!reopened) console.warn('Mehrspur: Gerät neu öffnen fehlgeschlagen:', error);
+  // Nur den ersten Fehlschlag protokollieren (sonst alle 3 s dieselbe Zeile, solange das Gerät fehlt).
+  if (reopened) reopenFailLogged = false;
+  else if (!reopenFailLogged) {
+    reopenFailLogged = true;
+    console.warn('Mehrspur: Gerät neu öffnen fehlgeschlagen (weitere Versuche ohne Protokoll):', error);
+  }
 });
 multitrack.on('device-error', ({ message }) => toast('error', `Mehrspur: ${message}`));
 multitrack.on('playback', (p) => {

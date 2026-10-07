@@ -76,7 +76,8 @@ class MultitrackEngine extends EventEmitter {
         inputs: d.inputChannels,
         outputs: d.outputChannels,
         sampleRates: d.sampleRates,
-        preferredSampleRate: d.preferredSampleRate
+        preferredSampleRate: d.preferredSampleRate,
+        isDefault: Boolean(d.isDefaultInput)
       }))
     };
   }
@@ -195,6 +196,9 @@ class MultitrackEngine extends EventEmitter {
     const actual = b.openStream(output, input, FORMAT_SINT32, this.opts.sampleRate, frameSize, 'Ebbton',
       (buf) => this._onInput(buf), output ? () => this._onFrameOut() : null, 0,
       (type, message) => {
+        // RtAudio meldet beim Aufräumen nicht mehr benötigter Verbindungen „no open stream to close“ – harmlos
+        // (audify reicht Meldungen aller Verbindungen an den zuletzt gesetzten Empfänger weiter).
+        if (/no open stream to close/i.test(message)) return;
         this.emit(type > ERROR_DEBUG_WARNING ? 'device-error' : 'device-warning', { type, message });
       });
     try {

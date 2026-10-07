@@ -316,10 +316,7 @@
     $('next-name').hidden = !nextText;
     $('btn-next-item').title = 'Laufenden Abschnitt beenden und den nächsten Ablaufpunkt beginnen (N)' +
       (nextPoint ? ` – nächster: ${nextPoint.label}` : '');
-    // Mehrspur: Abspielen zum Pult nur bei beendeter Aufnahme, kein Mithören während der Aufnahme.
-    $('btn-play').disabled = session.mode === 'multitrack' ? !stopped : !((stopped && session.wavPath) || rec || paused);
-    $('loop-wrap').hidden = !(session.mode === 'multitrack' && stopped);
-    updatePlayButton();
+    applyPlayControls();
 
     if (stopped && session.wavPath) {
       const url = fileUrl(session.wavPath);
@@ -1014,7 +1011,7 @@
 
   /** Leertaste / Abspielen-Knopf: Wiedergabe der fertigen Datei oder Mithören der laufenden Aufnahme. */
   function togglePlayback() {
-    if (isMultitrack()) return toggleMultitrackPlayback();
+    if (isMultitrack()) return multitrackView() ? toggleMultitrackPlayback() : undefined;
     const status = state.session?.status;
     if (status === 'recording' || status === 'paused') {
       if (monitor.playing) return monitor.pause();
@@ -1031,10 +1028,30 @@
     if (player.paused) player.play(); else player.pause();
   }
 
+  /**
+   * Abspielen/Mithören und Schleife. Mehrspuraufnahmen spielen nur in der Mehrspur-Ansicht zum Pult (beendet, nicht
+   * während der Aufnahme); in der Stereo-Ansicht bleibt der Knopf mit Hinweis gesperrt, die Schleife ausgeblendet.
+   */
+  function applyPlayControls() {
+    const s = state.session;
+    if (!s) return;
+    const stopped = s.status === 'stopped';
+    const live = isLive();
+    const multi = s.mode === 'multitrack';
+    $('btn-play').disabled = multi ? !(stopped && multitrackView()) : !((stopped && s.wavPath) || live);
+    $('loop-wrap').hidden = !(multi && stopped && multitrackView());
+    updatePlayButton();
+  }
+
   function updatePlayButton() {
     const status = state.session?.status;
     const live = status === 'recording' || status === 'paused';
     if (state.session?.mode === 'multitrack') {
+      if (!multitrackView()) {
+        $('btn-play').textContent = 'Abspielen';
+        $('btn-play').title = 'Mehrspuraufnahme: zum Zurückspielen zum Pult oben auf „Mehrspur“ schalten';
+        return;
+      }
       $('btn-play').textContent = mt.play?.playing ? 'Stopp' : 'Zum Pult abspielen';
       $('btn-play').title = 'Spuren über die USB-Ausgänge zum Mischpult spielen, ab der Marke in der Wellenform (Leertaste)';
       return;
@@ -2199,6 +2216,7 @@
     $('btn-mode-multi').title = `Mehrspur: alle Kanäle des Mischpults einzeln (am Pult die USB-Ausgänge auf die Kanäle legen)${why}`;
     document.body.classList.toggle('mt', multitrackView());
     renderChannels();
+    applyPlayControls();
   }
 
   async function setRecordingMode(mode) {

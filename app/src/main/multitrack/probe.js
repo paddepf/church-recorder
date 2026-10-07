@@ -47,7 +47,7 @@ function run() {
         return;
       }
       const device = /^\d+$/.test(mode) ? devices.find((d) => d.id === Number(mode))
-        : devices.filter((d) => d.inputs > 0).sort((a, b) => b.inputs - a.inputs)[0];
+        : devices.filter((d) => d.inputs > 0).sort((a, b) => b.inputs - a.inputs || Number(b.isDefault) - Number(a.isDefault))[0];
       if (!device) throw new Error('Kein passendes Gerät gefunden.');
 
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ebbton-mt-probe-'));

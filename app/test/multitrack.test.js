@@ -379,3 +379,19 @@ test('Engine spielt im Takt des Geräts ab und hält am Ende an', async () => {
   assert.ok(got.slice(played.length).every((v) => v === 0), 'danach Stille');
   engine.unmonitor();
 });
+
+test('Engine reicht die Kennung des Standardgeräts weiter und unterdrückt „no open stream to close“', () => {
+  let errCb;
+  const sim = new SimulatedAudio({ channels: 2 });
+  const open = sim.openStream.bind(sim);
+  sim.openStream = (...a) => { errCb = a[9]; return open(...a); };
+  const engine = new MultitrackEngine({ createBackend: () => sim });
+  assert.equal(engine.devices({ simulate: true }).devices[0].isDefault, true);
+  const warnings = [];
+  engine.on('device-warning', (w) => warnings.push(w.message));
+  engine.monitor({ simulate: true, deviceId: SIM_DEVICE_ID });
+  errCb(0, 'RtApiCore::closeStream(): no open stream to close!');
+  errCb(0, 'etwas anderes');
+  assert.deepEqual(warnings, ['etwas anderes']);
+  engine.unmonitor();
+});

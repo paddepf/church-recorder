@@ -332,6 +332,7 @@ body[data-status="recording"] .timecode { color: var(--tally-text); }
 .wave-toolbar button { font-size: 16px; padding: 10px 20px; }
 .wave-toolbar .spacer { flex: 1; }
 .follow { color: var(--muted); font-size: 16px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.follow[hidden] { display: none; }   /* sonst gewinnt display: flex gegen das hidden-Attribut („Schleife“) */
 .follow input { width: 20px; height: 20px; accent-color: var(--plan); cursor: pointer; }
 .zoom { display: flex; gap: 8px; }
 .wave-toolbar .zoom button { font-size: 22px; padding: 6px 16px; }

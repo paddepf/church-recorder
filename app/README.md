@@ -468,7 +468,8 @@ Beenden, „An Aufnahme anhängen“, auch per Companion. Am Mischpult müssen d
 MP3-Export, Mithören während der Aufnahme und Cue-Marker gibt es bei Mehrspuraufnahmen nicht; das Mini-Fenster
 zeigt nach dem Beenden nur „Mehrspur: n Spuren gespeichert“.
 
-**Zurückspielen zum Pult** (virtueller Soundcheck, Nachmischen): Bei einer beendeten Mehrspuraufnahme spielt
+**Zurückspielen zum Pult** (virtueller Soundcheck, Nachmischen): Bei einer beendeten Mehrspuraufnahme (Umschalter
+auf „Mehrspur“; in der Stereo-Ansicht ist der Knopf gesperrt) spielt
 „Zum Pult abspielen“ (oder die Leertaste) die Spuren über die USB-Ausgänge – Spur von Kanal 5 auf USB-Ausgang 5 –,
 ab der Marke in der Wellenform. Klick in die Wellenform springt, Klick auf einen Abschnitt springt an dessen Anfang;
 mit „Schleife“ wird der gewählte Abschnitt (sonst die ganze Aufnahme) wiederholt. Im Kanal-Bereich steht die

@@ -351,6 +351,9 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   langer Gottesdienstname) die Spalte breiter als das Fenster. Knöpfe der Kopfzeile und des Transports brechen nicht um
   (`nowrap`), stattdessen wird der Gottesdienstname mit „…“ gekürzt. Ab 1340 px hat der Transport 20 px Spaltenabstand,
   sonst passten die Knöpfe bei 1360 px nicht in die Außenspalte und brachen um.
+- **Fallstrick `hidden`:** Eine Klasse mit eigenem `display` (z. B. `.follow { display: flex }`) überstimmt das
+  `hidden`-Attribut – das Element bleibt sichtbar, obwohl der Code `hidden = true` setzt (so bei „Schleife“). Für
+  solche Elemente eine Regel `.klasse[hidden] { display: none; }` ergänzen; prüfen mit `getComputedStyle(el).display`.
 - Zeitangaben (Marken, Listen, Zeitleiste der Wellenform) nutzen dieselbe
   Schrift wie der große Timer: `var(--sans)` mit `font-variant-numeric: tabular-nums`.
   Keine Monospace-Schrift verwenden (`--mono` gibt es nicht mehr).
@@ -461,6 +464,11 @@ Der Ordnername des lokalen Klons ist egal.
   ASIO (erst mit ASIO4ALL/FlexASIO ohne Pult, dann DN32-USB mit 32 Kanälen) und der Windows-Build im Release-Workflow.
   Der CI-Test „audify lädt“ prüft auf dem Windows-Runner, dass die ASIO-Schnittstelle vorhanden ist.
 - Gerätenamen von CoreAudio kommen bei Sonderzeichen verstümmelt an (audify); für ASIO („DN32-USB“) unerheblich.
+- „Automatisch“ (kein Mehrspur-Gerät gewählt): meiste Eingänge, bei Gleichstand das Standard-Eingabegerät
+  (`byInputsThenDefault`, `isDefault` aus `engine.devices`). Anlass: Auf dem Mac haben alle Eingänge einen Kanal,
+  gewählt wurde zufällig das iPhone-Mikrofon (Continuity), das dann verschwand. audify reicht Meldungen aller
+  RtAudio-Verbindungen an den zuletzt gesetzten Empfänger weiter; „no open stream to close“ (beim Aufräumen) wird
+  verworfen, „Gerät neu öffnen fehlgeschlagen“ nur einmal je Ausfall protokolliert (sonst alle 3 s).
 - **Anbindung an die Session (Schritt 2):** `session.mode` (`stereo`/`multitrack`), `tracks` (`{channel, name, file}`,
   `file` nur Dateiname) und `trackDir`. Im Mehrspur-Modus steht statt des `WavWriter` ein `TrackWriterProxy`
   (`manager.js`) in `session.writer`: Dauer aus den Pegelmeldungen, `pause()`/`resume()` (der Mehrspur-Prozess
@@ -526,6 +534,9 @@ Der Ordnername des lokalen Klons ist egal.
   (bevor die Erfassung den Eingang öffnet). Oberfläche: „Zum Pult abspielen“/„Stopp“ (`toggleMultitrackPlayback`),
   Wellenform-Klick/Abschnitt-Klick springen (`setPlayhead`), „Schleife“ (`#chk-loop`, `playbackLoop`: gewählter
   Abschnitt, sonst ganze Aufnahme), Position im Kanal-Bereich, einmaliger Hinweis auf die Quelle am Pult.
+  Knopf und Schleife gibt es nur in der Mehrspur-Ansicht (`applyPlayControls`); in der Stereo-Ansicht ist der Knopf bei
+  einer Mehrspuraufnahme gesperrt (Tooltip: auf „Mehrspur“ schalten), die Schleife ausgeblendet. Umschalten auf
+  Stereo gibt das Gerät frei und beendet damit ein laufendes Abspielen.
 - Eingangsquellen am Pult schaltet Ebbton weiterhin nicht um. **Ungeprüft:** echte Ausgabe über ASIO/DN32 (Latenz,
   ob audify bei ASIO die Ausgabe sauber taktet) – erst am Pult.
 - **Mischpult per OSC (Schritt 3, `src/main/mixer/`):** nur lesend, UDP 10023, eigenes kleines OSC (`osc.js`, keine
