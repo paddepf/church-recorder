@@ -18,10 +18,13 @@ const churchtools = require('./churchtools');
 const mp3 = require('./mp3');
 const RoleLogic = require('../shared/roles');
 const { MultitrackManager } = require('./multitrack/manager');
+const { MixerLink } = require('./mixer/link');
+const mixerDiscover = require('./mixer/client').discover;
 
 let win = null;
 const session = new Session();
 const multitrack = new MultitrackManager();
+const mixer = new MixerLink();
 const net = new NetServer();
 const updater = new Updater(() => session.status === 'recording' || session.status === 'paused');
 
@@ -117,9 +120,16 @@ async function startMultitrack() {
   const { device, simulate } = await multitrackDevice();
   const channels = multitrackChannels(device.inputs);
   if (!channels.length) return fail('Für die Mehrspuraufnahme ist kein Kanal ausgewählt.');
+  // Namen und Farben vom Pult; ist es nicht erreichbar, heißen die Spuren „Kanal n“.
+  if (mixer.state().configured && !mixer.connected) {
+    toast('info', 'Mischpult nicht erreichbar – die Spuren heißen „Kanal 1“, „Kanal 2“ … statt wie am Pult.');
+  }
+  const check = routingCheck('multitrack');
+  if (check.status === 'mismatch') toast('warn', routingWarning(check, 'multitrack'));
   const { folder, base } = session.multitrackTarget(multitrackDir());
   const tracks = channels.map((c) => {
-    const t = { channel: c, name: `Kanal ${c + 1}` };
+    const ch = mixer.channel(c);
+    const t = { channel: c, name: ch.name || `Kanal ${c + 1}`, color: ch.color };
     return { ...t, file: path.join(folder, trackFileName(t)) };
   });
   let info;
@@ -159,6 +169,46 @@ async function continueMultitrack() {
 }
 
 multitrack.on('levels', (l) => session.pushTrackLevels(l));
+
+/* ---------------------------------------------------------------------- Mischpult */
+
+/** Gerade gültige Aufnahmeart: die der laufenden Aufnahme, sonst die eingestellte. */
+function activeMode() {
+  if (session.status === 'recording' || session.status === 'paused') return session.mode;
+  return settings.get('recordingMode') === 'multitrack' ? 'multitrack' : 'stereo';
+}
+
+function routingCheck(mode = activeMode()) {
+  return mixer.evaluate(mode, settings.get('mixerRouting'));
+}
+
+function routingWarning(check, mode = activeMode()) {
+  return mode === 'multitrack'
+    ? 'Routing am Mischpult passt nicht: Ebbton nimmt Mehrspur auf, die USB-Ausgänge liefern aber die Stereo-Matrix. Am Pult die Kartenausgänge auf die Kanäle legen.'
+    : 'Routing am Mischpult passt nicht: Ebbton nimmt Stereo auf, die USB-Ausgänge liefern aber einzelne Kanäle. Am Pult die Matrix auf USB 1–2 legen oder in Ebbton auf Mehrspur umstellen.';
+}
+
+function mixerState() {
+  return { ...mixer.state(), check: routingCheck(), mode: activeMode(), learned: settings.get('mixerRouting') };
+}
+
+/** Pult-Zustand an die Oberfläche; Routing als Gesundheitswert (auch für Companion), Warnung beim Wechsel. */
+let lastRoutingStatus = null;
+function onMixerChange() {
+  send('mixer', mixerState());
+  const check = routingCheck();
+  if (check.status === 'mismatch' && lastRoutingStatus !== 'mismatch') toast('warn', routingWarning(check));
+  lastRoutingStatus = check.status;
+  health.routing = check.status === 'off' ? null : check.status;
+  publishHealth();
+}
+mixer.on('change', onMixerChange);
+
+/** Verbindung passend zu den Einstellungen; den Pult-Simulator gibt es nur zum simulierten Mehrspur-Gerät. */
+function configureMixer() {
+  const simulate = settings.get('recordingMode') === 'multitrack' && Boolean(settings.get('multitrackSimulate'));
+  return mixer.configure({ host: settings.get('mixerHost'), simulate }).then(onMixerChange, (err) => console.warn('Mischpult:', err.message));
+}
 multitrack.on('stall', () => {
   health.inputLost = true;
   publishHealth();
@@ -185,6 +235,7 @@ multitrack.on('exit', ({ code, wasRecording }) => {
 
 function currentHealth() {
   const input = health.inputLost || health.chunksStale ? 'lost' : (health.silent ? 'silent' : 'ok');
+  const routing = health.routing || null;
   const write = health.writeError ? 'error' : (health.writeSlow ? 'slow' : 'ok');
   const d = health.disk;
   const diskLevel = !d ? 'ok' : (d.hoursLeft < 0.5 ? 'low' : (d.hoursLeft < 3 ? 'warn' : 'ok'));
@@ -192,6 +243,7 @@ function currentHealth() {
     input,
     write,
     writeMessage: health.writeError || null,
+    routing,
     disk: d ? { freeBytes: d.freeBytes, hoursLeft: d.hoursLeft, level: diskLevel } : null
   };
 }
@@ -696,6 +748,7 @@ function preventSleep(on) {
 }
 
 session.on('recording-started', () => {
+  onMixerChange();                            // Aufnahmeart der laufenden Aufnahme gilt jetzt
   preventSleep(true);
   silentSince = null;
   health.silent = false;
@@ -707,6 +760,7 @@ session.on('recording-started', () => {
 });
 
 session.on('recording-stopped', (info) => {
+  onMixerChange();
   preventSleep(false);
   silentSince = null;
   health.silent = false;
@@ -877,6 +931,7 @@ ipcMain.handle('settings:set', (_e, patch) => {
     }
     settings.save(clean);
     if (clean.recordingsDir) fs.mkdirSync(clean.recordingsDir, { recursive: true });
+    if (['mixerHost', 'recordingMode', 'multitrackSimulate'].some((k) => k in clean)) configureMixer();
     if (networkChanged) {
       const result = settings.get('networkEnabled') ? net.restart() : (net.stop(), { ok: true });
       if (!result.ok) toast('warn', result.error);
@@ -1023,6 +1078,28 @@ ipcMain.handle('rec:continue', async () => {
     return session.continueRecording();
   } catch (err) { return fail(err); }
 });
+ipcMain.handle('mixer:state', () => ok({ mixer: mixerState() }));
+ipcMain.handle('mixer:discover', async () => {
+  try { return ok({ found: await mixerDiscover() }); } catch (err) { return fail(err); }
+});
+/** Aktuelles Routing der Kartenausgänge als Stereo- bzw. Mehrspur-Routing merken. */
+ipcMain.handle('mixer:learn', (_e, { mode } = {}) => {
+  if (mode !== 'stereo' && mode !== 'multitrack') return fail('Unbekannte Aufnahmeart.');
+  const st = mixer.state();
+  if (st.status !== 'connected' || !st.routing) return fail('Das Routing des Mischpults ist nicht bekannt (nicht verbunden?).');
+  const learned = { stereo: null, multitrack: null, ...(settings.get('mixerRouting') || {}), [mode]: st.routing };
+  const other = mode === 'stereo' ? 'multitrack' : 'stereo';
+  if (learned[other] && learned[other].every((v, i) => v === st.routing[i])) learned[other] = null;   // eindeutig halten
+  settings.save({ mixerRouting: learned });
+  onMixerChange();
+  return ok({ mixer: mixerState() });
+});
+ipcMain.handle('mixer:forget', () => {
+  settings.save({ mixerRouting: { stereo: null, multitrack: null } });
+  onMixerChange();
+  return ok({ mixer: mixerState() });
+});
+ipcMain.handle('mixer:simulateRouting', (_e, { kind } = {}) => (mixer.simulateRouting(kind) ? ok() : fail('Kein simuliertes Pult.')));
 ipcMain.handle('multitrack:devices', async (_e, { simulate } = {}) => {
   try { return ok(await multitrack.devices({ simulate: Boolean(simulate) })); } catch (err) { return fail(err); }
 });
@@ -1311,6 +1388,7 @@ if (!singleInstance) {
     updater.init();
     refreshDisk();
     setInterval(refreshDisk, 30000);   // Speicherplatz regelmäßig prüfen und an Netzwerk-Clients melden
+    configureMixer();
 
     // macOS verlangt zusätzlich zur Chromium-Freigabe eine Systemfreigabe.
     if (process.platform === 'darwin') {

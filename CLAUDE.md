@@ -439,7 +439,7 @@ Der Ordnername des lokalen Klons ist egal.
 - Festlegungen: 32 Mono-WAVs, 24 Bit, Rate des Treibers, Ordner pro Aufnahme, Dateinamen nach Pultnamen; alle Kanäle
   scharf, einzeln abwählbar; Abschnitte laufen mit; eigener Ordner für Mehrspur-Aufnahmen; Raster mit 32
   Kanalstreifen ohne Wellenform. Kirchen-PC: Samsung PM981a NVMe 512 GB, etwa 16,6 GB je Stunde bei 32 Kanälen.
-- Reihenfolge: 1 Technik-Test (erledigt) → 2 Anbindung an die Session (erledigt) → 3 OSC/Routing mit Pult-Simulator →
+- Reihenfolge: 1 Technik-Test (erledigt) → 2 Anbindung an die Session (erledigt) → 3 OSC/Routing mit Pult-Simulator (erledigt) →
   4 Oberfläche → 5 Zurückspielen → 6 Test am Pult, erst dann Merge in `main`.
 - **Audio über `audify`** (MIT, RtAudio; N-API, also ohne Neubau für Electron; Windows-Builds mit ASIO). audify meldet
   Überläufe des Treibers nicht (Status im Callback wird ignoriert) und verwirft Blöcke mit abweichender Framezahl
@@ -489,6 +489,28 @@ Der Ordnername des lokalen Klons ist egal.
   WebSocket-Fernsteuerung sowie per Knöpfen (Start, Abschnitt, Pause, Stopp, Anhängen, Einstellungen).
 - Offen für Schritt 4: Kanalpegel schon vor dem Start (Gerät ohne Aufnahme öffnen), Kanalwahl, Export-Bereich
   im Mehrspur-Modus ausblenden.
+- **Mischpult per OSC (Schritt 3, `src/main/mixer/`):** nur lesend, UDP 10023, eigenes kleines OSC (`osc.js`, keine
+  Abhängigkeit). `client.js` liest `/ch/NN/config/name|color` und `/config/routing/CARD/1-8 … 25-32`, meldet sich mit
+  `/xremote` an (alle 8 s erneuern, Änderungen am Pult kommen sofort), Lebenszeichen per `/xinfo`; 12 s ohne Antwort
+  → `lost`, dann alle 5 s `/xinfo`, beim Wiederkommen alles neu lesen. Ein Lesevorgang, während dessen die Verbindung
+  abriss (`_epoch`), oder bei dem nicht alle Kanalnamen antworteten, zählt nicht (sonst blieben nach einem
+  Szenenwechsel bei ausgeschaltetem Pult alte Namen stehen – im Test gefunden). Routing-Antworten zählen dafür nicht
+  mit, damit falsche Adressen kein Dauer-Nachlesen auslösen. Pultsuche: `/xinfo` per Broadcast.
+- **Adressen und Routing-Werte sind nicht am echten M32 geprüft** (aus der inoffiziellen X32-OSC-Doku: Wert 0–19 =
+  Eingangsblöcke AN/A/B/CARD, 20/21 = OUT1-8/OUT9-16 …). Deshalb Anlernen (`mixerRouting` `{stereo, multitrack}`,
+  je vier Werte, `mixer:learn`): gemerkte Werte haben Vorrang vor der Faustregel „Block 1–8 führt Ausgänge = Stereo,
+  Eingänge = Mehrspur“ (`m32.routingKind`). Am Pult prüfen, dann ggf. `ROUTING_SOURCES` korrigieren.
+- Spur k = Pultkanal k (so beschrieben: im Mehrspur-Routing liefern die USB-Ausgänge die Kanäle 1–32). Name leer →
+  „Kanal n“; Pult nicht erreichbar → Hinweis beim Start. Namen/Farben werden beim Start übernommen (`tracks[].color`),
+  spätere Umbenennungen am Pult ändern laufende Aufnahmen nicht.
+- Routing-Prüfung (`main.js`: `routingCheck`, `onMixerChange`): verglichen wird mit der Aufnahmeart der laufenden
+  Aufnahme, sonst der eingestellten (`activeMode`). Ergebnis als `health.routing` (`ok`/`mismatch`/`unknown`, `null` ohne
+  Pult), Warnung beim Wechsel zu `mismatch` und beim Mehrspur-Start, Warnbalken in der Oberfläche auch vor dem Start.
+  Gilt auch im Stereo-Modus (Mehrspur-Routing vergessen zurückzustellen → Aufnahme hätte nur Kanal 1/2 roh).
+- Pult-Simulator (`mixer/simulator.js`, Beispielnamen und -farben): läuft in der App nur bei Aufnahmeart Mehrspur mit
+  „Simuliertes Pult“ und leerer IP (`configureMixer`); im Stereo-Modus nie, sonst meldete er ständig falsches Routing.
+  Umschalten seines Routings über Knöpfe in *Einstellungen → Mischpult* (`mixer:simulateRouting`).
+- Companion-Modul zeigt `health.routing` noch nicht (bräuchte neue Modulversion).
 
 ### Entfernt: Mitschrift
 Die lokale Transkription (whisper.cpp, Mitschrift-Panel, Einstellungen) wurde

@@ -93,7 +93,7 @@ class Session extends EventEmitter {
     this._colorSeq = 0;
     this.peaks = [];                    // 0..255 je 50 ms
     this.mode = 'stereo';               // stereo | multitrack (Mehrspuraufnahme, siehe multitrack/)
-    this.tracks = [];                   // Mehrspur: {channel (0-basiert), name, file (Dateiname im Spurordner)}
+    this.tracks = [];                   // Mehrspur: {channel (0-basiert), name, color (Pultfarbe 0–15), file (Dateiname im Spurordner)}
     this.trackDir = null;               // Mehrspur: Ordner mit Spuren und Session-Datei
     this.writer = null;
     this.basePath = null;               // ohne Endung
@@ -180,7 +180,7 @@ class Session extends EventEmitter {
       channels: this.channels,
       levels: this.levels,
       mode: this.mode,
-      tracks: this.tracks.map(({ channel, name }) => ({ channel, name })),
+      tracks: this.tracks.map(({ channel, name, color }) => ({ channel, name, color: color ?? null })),
       sections: this.sections,
       exports: this.exports,
       cuts: this.cuts,
@@ -673,7 +673,9 @@ class Session extends EventEmitter {
     this.channels = ch;
     this.basePath = base;
     this.mode = multitrack ? 'multitrack' : 'stereo';
-    this.tracks = multitrack ? multitrack.tracks.map(({ channel, name, file }) => ({ channel, name, file: path.basename(file) })) : [];
+    this.tracks = multitrack
+      ? multitrack.tracks.map(({ channel, name, color, file }) => ({ channel, name, color: color ?? null, file: path.basename(file) }))
+      : [];
     this.trackDir = multitrack ? multitrack.folder : null;
     this.wavPath = multitrack ? null : `${base}.wav`;
     this.writer = writer;

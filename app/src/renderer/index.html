@@ -144,6 +144,7 @@
       <div class="settings-layout">
       <nav class="settings-nav" role="tablist" aria-label="Bereiche">
         <button type="button" data-tab="audio" aria-selected="true">Audio</button>
+        <button type="button" data-tab="mischpult" aria-selected="false">Mischpult</button>
         <button type="button" data-tab="ablage" aria-selected="false">Ablage &amp; Export</button>
         <button type="button" data-tab="churchtools" aria-selected="false">ChurchTools</button>
         <button type="button" data-tab="vorlagen" aria-selected="false">Vorlagen</button>
@@ -184,6 +185,42 @@
             <small id="mt-device-info"></small>
           </label>
           <label class="check"><input type="checkbox" id="set-mt-simulate" /> Simuliertes Pult (32 Kanäle, zum Ausprobieren ohne Mischpult)</label>
+        </fieldset>
+
+        <fieldset data-tab="mischpult">
+          <legend>Mischpult (Midas M32)</legend>
+          <label>Adresse (IP) des Pults
+            <span class="row">
+              <input id="set-mixer-host" type="text" placeholder="z. B. 192.168.1.62 – leer: keine Verbindung" />
+              <button id="btn-mixer-discover" class="secondary" type="button">Suchen</button>
+            </span>
+            <small id="mixer-found"></small>
+          </label>
+          <div id="mixer-status" class="mixer-line"></div>
+          <small>Ebbton liest vom Pult nur: die Kanalnamen und -farben (Namen der Spuren bei Mehrspur) und das Routing
+            der USB-Kartenausgänge. Am Pult wird nichts verstellt.</small>
+        </fieldset>
+
+        <fieldset data-tab="mischpult">
+          <legend>Routing der USB-Ausgänge</legend>
+          <div id="mixer-routing" class="mixer-line"></div>
+          <small>Ebbton warnt, wenn das Routing nicht zur Aufnahmeart passt. Am sichersten: am Pult das Stereo-Routing
+            einstellen und „Als Stereo merken“, dann das Mehrspur-Routing einstellen und „Als Mehrspur merken“.
+            Ohne das gilt: Liegen auf USB 1–8 Ausgänge des Pults (Matrix), ist es Stereo, liegen dort Eingänge, Mehrspur.</small>
+          <span class="row">
+            <button id="btn-mixer-learn-stereo" class="secondary" type="button">Als Stereo merken</button>
+            <button id="btn-mixer-learn-multi" class="secondary" type="button">Als Mehrspur merken</button>
+            <button id="btn-mixer-forget" class="secondary" type="button">Gemerktes vergessen</button>
+          </span>
+          <span class="row" id="mixer-sim-row" hidden>
+            <button id="btn-mixer-sim-stereo" class="secondary" type="button">Simulator: Stereo-Routing</button>
+            <button id="btn-mixer-sim-multi" class="secondary" type="button">Simulator: Mehrspur-Routing</button>
+          </span>
+        </fieldset>
+
+        <fieldset data-tab="mischpult">
+          <legend>Kanäle am Pult</legend>
+          <div id="mixer-channels" class="mixer-channels"></div>
         </fieldset>
 
         <fieldset data-tab="ablage">

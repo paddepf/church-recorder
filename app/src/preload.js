@@ -56,6 +56,18 @@ contextBridge.exposeInMainWorld('api', {
     devices: (simulate) => invoke('multitrack:devices', { simulate })
   },
 
+  mixer: {
+    /** Verbindung, Kanalnamen, Routing der Kartenausgänge und dessen Bewertung. */
+    state: () => invoke('mixer:state'),
+    /** Pulte im Netz suchen. */
+    discover: () => invoke('mixer:discover'),
+    /** Aktuelles Routing als 'stereo' bzw. 'multitrack' merken. */
+    learn: (mode) => invoke('mixer:learn', { mode }),
+    forget: () => invoke('mixer:forget'),
+    /** Nur Pult-Simulator: Routing umstellen ('stereo' | 'multitrack'). */
+    simulateRouting: (kind) => invoke('mixer:simulateRouting', { kind })
+  },
+
   section: {
     /** Abschnitt beginnen bzw. den laufenden beenden. */
     toggle: (params) => invoke('section:toggle', params),
@@ -114,7 +126,7 @@ contextBridge.exposeInMainWorld('api', {
 
   on: (channel, handler) => {
     const allowed = ['state', 'levels', 'toast', 'command', 'menu', 'health', 'compact',
-      'network-status', 'update-status', 'export-progress'];
+      'network-status', 'update-status', 'export-progress', 'mixer'];
     if (!allowed.includes(channel)) return () => {};
     const listener = (_event, payload) => handler(payload);
     ipcRenderer.on(channel, listener);

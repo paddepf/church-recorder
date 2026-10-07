@@ -22,6 +22,10 @@ const DEFAULTS = {
   multitrackArmed: null,        // aufgenommene Kanäle (0-basiert); null = alle
   multitrackDir: '',            // leer = Unterordner „Mehrspur“ im Aufnahmeordner
 
+  // Mischpult (OSC, nur lesend): Kanalnamen, Routing-Prüfung
+  mixerHost: '',                // IP des M32; leer = keine Verbindung (mit simuliertem Mehrspur-Gerät: Pult-Simulator)
+  mixerRouting: { stereo: null, multitrack: null },   // angelerntes Routing der Kartenausgänge je Aufnahmeart
+
   // Ablage
   recordingsDir: '',            // wird beim ersten Start gesetzt
   fileNamePattern: '{interpret}_{abschnitt}_{gottesdienst}_{datum}',

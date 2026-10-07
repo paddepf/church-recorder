@@ -418,6 +418,12 @@ src/main/        Hauptprozess
     host.js      Einstieg des eigenen Mehrspur-Prozesses (Electron utilityProcess)
     manager.js   Hauptprozess-Seite: startet den Prozess, Befehle und Ereignisse
     probe.js     Technik-Test (siehe unten)
+  mixer/         Verbindung zum Mischpult (M32, OSC, nur lesend)
+    osc.js       OSC kodieren/lesen
+    m32.js       Adressen, Farben, Routing-Werte und -Bewertung des M32
+    client.js    Verbindung (Namen, Farben, Routing, /xremote), Pultsuche
+    simulator.js nachgebautes M32 für Entwicklung und Tests
+    link.js      Verbindung passend zu den Einstellungen, Routing-Prüfung
 src/shared/      Von Hauptprozess und Oberfläche gemeinsam genutzt
   sections.js    Regeln für Abschnitte (Verschieben ohne Überlappung)
   roles.js       Zuordnung Dienst (ChurchTools) zu Programmpunkt
@@ -452,6 +458,16 @@ Beenden, „An Aufnahme anhängen“, auch per Companion. Am Mischpult müssen d
 1–32 liegen. Die Spuren landen je Aufnahme in einem Unterordner des Mehrspur-Ordners (*Ablage & Export*, sonst
 `Mehrspur` im Aufnahmeordner), zusammen mit der Session-Datei; die Liste „Aufnahmen“ zeigt sie mit an.
 MP3-Export, Mithören und Cue-Marker gibt es bei Mehrspuraufnahmen nicht.
+
+**Mischpult (Einstellungen → Mischpult):** IP des M32 eintragen oder „Suchen“ (findet Pulte im selben Netz).
+Ebbton liest dann per OSC – nur lesend – die Kanalnamen und -farben (die Spuren heißen wie am Pult,
+z. B. `01_Predigt.wav`; ist das Pult nicht erreichbar, „Kanal 1“ …) und das Routing der USB-Kartenausgänge. Passt
+das Routing nicht zur Aufnahmeart (Mehrspur eingestellt, aber Matrix auf USB 1–2, oder umgekehrt), erscheint ein
+Warnbalken, auch vor dem Start, und Companion sieht `health.routing = mismatch`. Am zuverlässigsten wird die Prüfung,
+wenn man beide Routings einmal anlernt: am Pult Stereo einstellen → „Als Stereo merken“, Mehrspur einstellen →
+„Als Mehrspur merken“. Ohne Anlernen gilt die Faustregel „Ausgänge des Pults auf USB 1–8 = Stereo, Eingänge = Mehrspur“.
+Mit „Simuliertes Pult“ (Audio) und ohne IP läuft ein eingebauter Pult-Simulator mit Beispielnamen; dessen Routing
+lässt sich zum Ausprobieren der Warnung umschalten.
 
 **Technik-Test**, läuft statt der App und prüft Gerät, Prozess und Schreiben – auch mit der installierten App:
 

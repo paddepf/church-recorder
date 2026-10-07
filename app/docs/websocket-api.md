@@ -87,6 +87,7 @@ Wird direkt nach der Anmeldung und bei jeder Änderung gesendet (max. 10×/s).
       "input": "ok",
       "write": "ok",
       "writeMessage": null,
+      "routing": "ok",
       "disk": { "freeBytes": 52000000000, "hoursLeft": 75.2, "level": "ok" }
     }
   }
@@ -97,6 +98,9 @@ Wird direkt nach der Anmeldung und bei jeder Änderung gesendet (max. 10×/s).
 Schnitt läuft). `health.input` ist `ok`, `silent` (seit über 20 s kaum Pegel) oder `lost`
 (Eingang ausgefallen, wird neu verbunden); `health.write` ist `ok`, `slow` (Laufwerk kommt nicht
 hinterher, Audio wird gepuffert) oder `error` (Schreibfehler, z. B. Platte voll – Text in `writeMessage`);
+`health.routing` sagt, ob das Routing der USB-Ausgänge am Mischpult zur Aufnahmeart passt: `ok`, `mismatch`
+(z. B. Mehrspur eingestellt, Pult liefert aber die Stereo-Matrix), `unknown` (Pult nicht erreichbar oder Routing
+nicht eindeutig) oder `null` (keine Pult-Verbindung eingerichtet).
 `health.disk.level` ist `ok`, `warn` (unter
 3 Stunden Platz) oder `low` (unter 30 Minuten). `health` ändert sich unabhängig von der
 Aufnahme; der Speicherwert wird alle 30 Sekunden erneuert. Während einer Aufnahme kommt der Zustand
@@ -109,7 +113,8 @@ Alle Zeitangaben sind Sekunden seit Aufnahmebeginn.
 `multitrack` nennt `tracks` die aufgenommenen Kanäle (`[{ "channel": 0, "name": "Kanal 1" }, …]`, `channel`
 0-basiert), `wavPath` ist `null`, `channels` die Zahl der Spuren und `levels` der Pegel des lautesten
 aufgenommenen Kanals (in `l` und `r` gleich). `health.input` wird `lost`, wenn das Mischpult keine Daten mehr
-liefert. Befehle und Ereignisse sind in beiden Modi gleich.
+liefert. Befehle und Ereignisse sind in beiden Modi gleich. Spuren tragen zusätzlich `color` (Kanalfarbe am Pult,
+0–15 wie beim X32/M32, ab 8 invertiert; `null`, wenn das Pult nicht erreichbar war).
 
 ### `levels` – Pegel
 

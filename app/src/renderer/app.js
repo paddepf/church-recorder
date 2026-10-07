@@ -130,6 +130,7 @@
     setInterval(refreshDisk, 30000);
     await refreshDevices();
     applySettingsToForm();
+    window.api.mixer.state().then((r) => { if (r.ok) renderMixer(r.mixer); });
     await updateBadges(info);
     $('version-info').textContent = `Version ${info.version}`;
     if (info.update) {
@@ -462,6 +463,12 @@
       showAudioWarning(true, `Audio kann nicht gespeichert werden – Laufwerk prüfen! (${h.writeMessage || 'Schreibfehler'})`, 'lost');
     } else if (h && h.write === 'slow' && isLive()) {
       showAudioWarning(true, 'Das Laufwerk ist zu langsam – die Aufnahme wird im Speicher gepuffert.', 'silent');
+    } else if (h && h.routing === 'mismatch') {
+      // Auch vor dem Start: genau dann soll es auffallen.
+      const multi = state.mixer?.mode === 'multitrack';
+      showAudioWarning(true, multi
+        ? 'Mischpult-Routing passt nicht: Die USB-Ausgänge liefern die Stereo-Matrix, Ebbton nimmt aber Mehrspur auf.'
+        : 'Mischpult-Routing passt nicht: Die USB-Ausgänge liefern einzelne Kanäle, Ebbton nimmt aber Stereo auf.', 'silent');
     } else if (h && h.input === 'silent' && state.session?.status === 'recording') {
       showAudioWarning(true, 'Seit über 20 Sekunden kaum Pegel – Mischpult oder Kabel prüfen?', 'silent');
     } else {
@@ -1538,6 +1545,7 @@
     });
 
     window.api.on('health', (h) => applyHealth(h));
+    window.api.on('mixer', (m) => renderMixer(m));
 
     window.api.on('toast', ({ level, message }) => toast(level, message));
 
@@ -2039,6 +2047,65 @@
     applyOutputDevice();
   }
 
+  /** Pultfarben (Wert 0–15, ab 8 invertiert) als Name für CSS. */
+  const MIXER_COLORS = ['off', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'];
+
+  /** Einstellungen → Mischpult: Verbindung, Routing samt Bewertung, Kanalnamen. */
+  function renderMixer(m) {
+    state.mixer = m;
+    if (!m) return;
+    const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const st = $('mixer-status');
+    if (!m.configured) {
+      st.textContent = 'Keine Verbindung eingerichtet.';
+    } else if (m.status === 'connected') {
+      const i = m.info || {};
+      st.innerHTML = `<span class="ok">● Verbunden</span>: ${esc(i.model || 'Pult')} „${esc(i.name || '')}“ · Firmware ${esc(i.version || '?')} · ${esc(i.ip || m.host)}${m.simulated ? ' (simuliert)' : ''}`;
+    } else if (m.status === 'lost') {
+      st.innerHTML = `<span class="bad">● ${esc(m.host)} antwortet nicht mehr</span> (Pult aus oder Netzwerk getrennt?)`;
+    } else {
+      st.innerHTML = `<span class="bad">● Verbinde mit ${esc(m.host)} …</span> (antwortet bisher nicht – Pult aus?)`;
+    }
+
+    const kinds = { stereo: 'Stereo', multitrack: 'Mehrspur', unknown: 'unbekannt' };
+    const r = $('mixer-routing');
+    const c = m.check || {};
+    const learned = m.learned || {};
+    const learnedText = `Gemerkt: Stereo ${learned.stereo ? '✓' : '–'}, Mehrspur ${learned.multitrack ? '✓' : '–'}`;
+    if (!m.configured || m.status !== 'connected' || !c.labels) {
+      r.innerHTML = `Routing unbekannt (nicht verbunden).<br>${learnedText}`;
+    } else {
+      const verdict = c.status === 'ok'
+        ? `<span class="ok">passt zur Aufnahmeart ${kinds[m.mode]}</span>`
+        : c.status === 'mismatch'
+          ? `<span class="bad">passt NICHT zur Aufnahmeart ${kinds[m.mode]}</span>`
+          : '<span class="bad">nicht eindeutig – bitte anlernen</span>';
+      r.innerHTML = `USB-Ausgänge ${c.labels.map(esc).join(' · ')}<br>`
+        + `Erkannt: <b>${kinds[c.kind]}</b> (${c.learned ? 'gemerkt' : 'Faustregel'}) – ${verdict}<br>${learnedText}`;
+    }
+    $('btn-mixer-learn-stereo').disabled = !c.labels;
+    $('btn-mixer-learn-multi').disabled = !c.labels;
+    $('mixer-sim-row').hidden = !m.simulated;
+    // Warnbalken sofort richtig, auch wenn noch keine Gesundheitsmeldung kam (z. B. direkt nach dem Start).
+    state.health = { ...(state.health || {}), routing: c.status && c.status !== 'off' ? c.status : null };
+
+    const list = $('mixer-channels');
+    list.innerHTML = '';
+    const channels = m.status === 'connected' ? (m.channels || []) : [];
+    if (!channels.length) {
+      list.textContent = m.configured ? 'Keine Kanalnamen (nicht verbunden).' : 'Ohne Verbindung heißen die Spuren „Kanal 1“, „Kanal 2“ …';
+    }
+    channels.forEach((ch, i) => {
+      const el = document.createElement('div');
+      el.className = 'mixer-ch';
+      if (Number.isInteger(ch.color)) el.dataset.color = MIXER_COLORS[ch.color % 8];
+      el.innerHTML = `<b>${i + 1}</b><span>${esc(ch.name || '–')}</span>`;
+      el.title = ch.name || `Kanal ${i + 1} (ohne Namen)`;
+      list.appendChild(el);
+    });
+    applyHealth(state.health);
+  }
+
   /**
    * Auswahl des Mehrspur-Geräts. Gespeichert wird der Name; ein gewähltes, gerade nicht angeschlossenes
    * Gerät (Mischpult aus) bleibt als Eintrag stehen. `devices` = null: nur die gespeicherte Wahl zeigen.
@@ -2100,6 +2167,7 @@
     $('set-mt-device').value = s.multitrackDevice || '';
     if (!$('set-mt-device').options.length || $('set-mt-device').value !== (s.multitrackDevice || '')) fillMultitrackSelect(null);
     $('set-mt-dir').value = s.multitrackDir || '';
+    $('set-mixer-host').value = s.mixerHost || '';
     $('set-dir').value = s.recordingsDir;
     loadTemplatesDraft();
     renderTemplateEditor();
@@ -2305,6 +2373,28 @@
     });
     $('btn-clear-mt-dir').addEventListener('click', () => { $('set-mt-dir').value = ''; });
     $('btn-mt-refresh').addEventListener('click', () => refreshMultitrackDevices());
+    $('btn-mixer-discover').addEventListener('click', async () => {
+      const out = $('mixer-found');
+      out.textContent = 'Suche im Netz …';
+      const res = await window.api.mixer.discover();
+      if (!res.ok) { out.textContent = `Suche fehlgeschlagen: ${res.error}`; return; }
+      if (!res.found.length) { out.textContent = 'Kein Pult gefunden. Eingeschaltet und im selben Netz? Sonst die IP vom Pult (Setup → Network) eintragen.'; return; }
+      out.textContent = 'Gefunden: ' + res.found.map((f) => `${f.model} „${f.name}“ (${f.ip})`).join(', ') + ' – übernommen, bitte speichern.';
+      $('set-mixer-host').value = res.found[0].ip;
+    });
+    const learn = async (mode) => {
+      const res = await window.api.mixer.learn(mode);
+      if (!res.ok) toast('error', res.error);
+      else renderMixer(res.mixer);
+    };
+    $('btn-mixer-learn-stereo').addEventListener('click', () => learn('stereo'));
+    $('btn-mixer-learn-multi').addEventListener('click', () => learn('multitrack'));
+    $('btn-mixer-forget').addEventListener('click', async () => {
+      const res = await window.api.mixer.forget();
+      if (res.ok) renderMixer(res.mixer);
+    });
+    $('btn-mixer-sim-stereo').addEventListener('click', () => window.api.mixer.simulateRouting('stereo'));
+    $('btn-mixer-sim-multi').addEventListener('click', () => window.api.mixer.simulateRouting('multitrack'));
     $('btn-ct-test').addEventListener('click', async () => {
       $('ct-test-result').textContent = 'Wird geprüft …';
       await saveSettings(true);
@@ -2336,6 +2426,7 @@
       multitrackDevice: $('set-mt-device').value,
       multitrackSimulate: $('set-mt-simulate').checked,
       multitrackDir: $('set-mt-dir').value,
+      mixerHost: $('set-mixer-host').value.trim(),
       recordingsDir: $('set-dir').value,
       exportDir: $('set-export-dir').value,
       ...readTemplatesForSave(),

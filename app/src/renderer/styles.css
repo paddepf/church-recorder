@@ -601,6 +601,22 @@ label small { color: var(--muted); font-size: 11px; }
 .row input { flex: 1; }
 .row button { flex-shrink: 0; }
 .inline-result { font-size: 12px; color: var(--muted); }
+
+/* Einstellungen → Mischpult */
+.mixer-line { font-size: 14px; line-height: 1.5; }
+.mixer-line .ok { color: var(--manual); }
+.mixer-line .bad { color: var(--amber); }
+.mixer-channels { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 12px; font-size: 13px; }
+.mixer-ch { display: flex; gap: 6px; align-items: baseline; min-width: 0; border-left: 4px solid var(--line); padding-left: 6px; }
+.mixer-ch b { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+.mixer-ch span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mixer-ch[data-color="red"] { border-left-color: #E5484D; }
+.mixer-ch[data-color="green"] { border-left-color: #30A46C; }
+.mixer-ch[data-color="yellow"] { border-left-color: #F5D90A; }
+.mixer-ch[data-color="blue"] { border-left-color: #3E63DD; }
+.mixer-ch[data-color="magenta"] { border-left-color: #D6409F; }
+.mixer-ch[data-color="cyan"] { border-left-color: #05A2C2; }
+.mixer-ch[data-color="white"] { border-left-color: #EDEDED; }
 .divider { text-align: center; color: var(--muted); font-size: 12px; }
 
 .list { display: grid; gap: 6px; max-height: 46vh; overflow-y: auto; }
