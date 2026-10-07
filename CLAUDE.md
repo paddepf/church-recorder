@@ -354,6 +354,10 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - **Fallstrick `hidden`:** Eine Klasse mit eigenem `display` (z. B. `.follow { display: flex }`) überstimmt das
   `hidden`-Attribut – das Element bleibt sichtbar, obwohl der Code `hidden = true` setzt (so bei „Schleife“). Für
   solche Elemente eine Regel `.klasse[hidden] { display: none; }` ergänzen; prüfen mit `getComputedStyle(el).display`.
+- Der rote Punkt im Aufnahmeknopf hat `flex-shrink: 0`: Im großen Fenster (1360 px, beendete Aufnahme mit „An Aufnahme
+  anhängen“) war der Knopf so knapp, dass der Punkt auf 0 px schrumpfte (sah aus wie verschwunden, kam beim Ziehen am
+  Fenster wieder). Kleine feste Elemente in Flex-Knöpfen immer mit `flex-shrink: 0`; nachgemessen wird im echten
+  Zustand (Aufnahme starten/beenden), nicht nur mit nachgestellter Fenstergröße – dort trat es nicht auf.
 - Zeitangaben (Marken, Listen, Zeitleiste der Wellenform) nutzen dieselbe
   Schrift wie der große Timer: `var(--sans)` mit `font-variant-numeric: tabular-nums`.
   Keine Monospace-Schrift verwenden (`--mono` gibt es nicht mehr).
