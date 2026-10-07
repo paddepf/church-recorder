@@ -335,8 +335,11 @@ Die App hieß früher „ChurchRecorder“ und heißt jetzt **Ebbton** (Ton + EB
 Pfungstadt). Kennungen: `appId` `de.ebbp.ebbton`, Companion-Modul `ebbton` (Variablen `$(ebbton:…)`), WebSocket-`app`-Feld
 `ebbton`, Repo `paddepf/ebbton`. Electron legt die Einstellungen unter `userData/<name aus package.json>` ab, also
 `~/Library/Application Support/ebbton` (Windows `%APPDATA%\ebbton`); beim Umbenennen musste der alte Ordner
-`church-recorder` von Hand umbenannt werden, sonst startet die App mit leeren Einstellungen. Der Ordnername des
-lokalen Klons ist egal.
+`church-recorder` von Hand umbenannt werden, sonst startet die App mit leeren Einstellungen. Auch der ChurchTools-Token
+ging dabei verloren: Er ist mit `safeStorage` verschlüsselt, dessen Schlüssel in der Schlüsselbundverwaltung unter dem
+App-Namen liegt; unter neuem Namen gibt es einen neuen Schlüssel (Meldung „Token konnte nicht entschlüsselt werden“),
+der Token musste in den Einstellungen neu eingetragen werden. Bei einer weiteren Umbenennung wieder daran denken.
+Der Ordnername des lokalen Klons ist egal.
 
 ### Entfernt: Mitschrift
 Die lokale Transkription (whisper.cpp, Mitschrift-Panel, Einstellungen) wurde
