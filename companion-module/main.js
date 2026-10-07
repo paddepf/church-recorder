@@ -1,25 +1,28 @@
-import { InstanceBase, InstanceStatus, Regex, runEntrypoint, combineRgb } from '@companion-module/base'
+import { InstanceBase, InstanceStatus, Regex, combineRgb } from '@companion-module/base'
 import WebSocket from 'ws'
 
 const PROTOCOL_VERSION = 1 // muss zu app/src/main/netserver.js passen
 
-class GottesdienstRecorderInstance extends InstanceBase {
-	async init(config) {
+// Companion-API 2.x: die Klasse wird exportiert statt über runEntrypoint gestartet.
+export default class EbbtonInstance extends InstanceBase {
+	async init(config, _isFirstInit, secrets) {
 		this.config = config
+		this.secrets = secrets
 		this.state = null
 		this.msgId = 0
 
 		this.setActionDefinitions(this.buildActions())
 		this.setFeedbackDefinitions(this.buildFeedbacks())
 		this.setVariableDefinitions(this.buildVariables())
-		this.setPresetDefinitions(this.buildPresets())
+		this.setPresetDefinitions(this.buildPresetStructure(), this.buildPresets())
 		this.resetVariables()
 
 		this.connect()
 	}
 
-	async configUpdated(config) {
+	async configUpdated(config, secrets) {
 		this.config = config
+		this.secrets = secrets
 		this.authFailed = false
 		this.disconnect()
 		this.connect()
@@ -58,7 +61,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				max: 65535,
 			},
 			{
-				// verdeckt angezeigt und nicht im Klartext exportiert
+				// verdeckt angezeigt; der Wert liegt im Secrets-Speicher, nicht in der Konfiguration
 				type: 'secret-text',
 				id: 'password',
 				label: 'Passwort für Steuerung',
@@ -70,12 +73,17 @@ class GottesdienstRecorderInstance extends InstanceBase {
 
 	/* ------------------------------------------------------------ Verbindung */
 
+	/** Passwort aus dem Secrets-Speicher (API 2.x), ältere Verbindungen hatten es in der Konfiguration. */
+	get password() {
+		return this.secrets?.password || this.config?.password || ''
+	}
+
 	connect() {
 		if (!this.config?.host || !this.config?.port) {
 			this.updateStatus(InstanceStatus.BadConfig, 'Adresse oder Port fehlt')
 			return
 		}
-		if (!this.config.password) {
+		if (!this.password) {
 			this.updateStatus(InstanceStatus.BadConfig, 'Passwort fehlt')
 			return
 		}
@@ -93,7 +101,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 
 		this.ws.on('open', () => {
 			this.lastError = null
-			this.send({ type: 'auth', password: this.config.password })
+			this.send({ type: 'auth', password: this.password })
 			this.startHeartbeat()
 		})
 
@@ -159,7 +167,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 	clearState() {
 		this.state = null
 		this.resetVariables()
-		this.checkFeedbacks()
+		this.checkAllFeedbacks()
 	}
 
 	disconnect() {
@@ -270,23 +278,23 @@ class GottesdienstRecorderInstance extends InstanceBase {
 	/* -------------------------------------------------------------- Variablen */
 
 	buildVariables() {
-		return [
-			{ variableId: 'status', name: 'Aufnahmestatus (Text)' },
-			{ variableId: 'timecode', name: 'Laufzeit' },
-			{ variableId: 'service_name', name: 'Name des Gottesdienstes' },
-			{ variableId: 'current_item', name: 'Aktueller Programmpunkt' },
-			{ variableId: 'next_item', name: 'Nächster offener Programmpunkt' },
-			{ variableId: 'marker_count', name: 'Anzahl gesetzter Abschnitte' },
-			{ variableId: 'pending_count', name: 'Anzahl offener Programmpunkte' },
-			{ variableId: 'level_left', name: 'Pegel links (0-100)' },
-			{ variableId: 'level_right', name: 'Pegel rechts (0-100)' },
-			{ variableId: 'clipping', name: 'Übersteuerung (ja/nein)' },
-			{ variableId: 'input_status', name: 'Eingang (ok / leise / ausgefallen)' },
-			{ variableId: 'write_status', name: 'Speichern (ok / langsam / Fehler)' },
-			{ variableId: 'disk_free', name: 'Freier Speicherplatz (GB)' },
-			{ variableId: 'disk_hours', name: 'Aufnahmestunden, die noch Platz haben' },
-			{ variableId: 'cut_open', name: 'Schnitt läuft gerade (ja/nein)' },
-		]
+		return {
+			status: { name: 'Aufnahmestatus (Text)' },
+			timecode: { name: 'Laufzeit' },
+			service_name: { name: 'Name des Gottesdienstes' },
+			current_item: { name: 'Aktueller Programmpunkt' },
+			next_item: { name: 'Nächster offener Programmpunkt' },
+			marker_count: { name: 'Anzahl gesetzter Abschnitte' },
+			pending_count: { name: 'Anzahl offener Programmpunkte' },
+			level_left: { name: 'Pegel links (0-100)' },
+			level_right: { name: 'Pegel rechts (0-100)' },
+			clipping: { name: 'Übersteuerung (ja/nein)' },
+			input_status: { name: 'Eingang (ok / leise / ausgefallen)' },
+			write_status: { name: 'Speichern (ok / langsam / Fehler)' },
+			disk_free: { name: 'Freier Speicherplatz (GB)' },
+			disk_hours: { name: 'Aufnahmestunden, die noch Platz haben' },
+			cut_open: { name: 'Schnitt läuft gerade (ja/nein)' },
+		}
 	}
 
 	resetVariables() {
@@ -396,8 +404,9 @@ class GottesdienstRecorderInstance extends InstanceBase {
 						useVariables: true,
 					},
 				],
-				callback: async (action, context) => {
-					const label = (await context.parseVariablesInString(action.options.label || '')).trim()
+				// Variablen setzt Companion selbst ein (useVariables), parseVariablesInString gibt es nicht mehr.
+				callback: (action) => {
+					const label = String(action.options.label ?? '').trim()
 					this.command('marker.add', label ? { label } : {})
 				},
 			},
@@ -432,8 +441,8 @@ class GottesdienstRecorderInstance extends InstanceBase {
 						useVariables: true,
 					},
 				],
-				callback: async (action, context) => {
-					const name = await context.parseVariablesInString(action.options.name || '')
+				callback: (action) => {
+					const name = String(action.options.name ?? '').trim()
 					this.command('template.apply', name ? { name } : {})
 				},
 			},
@@ -542,6 +551,16 @@ class GottesdienstRecorderInstance extends InstanceBase {
 
 	/* ---------------------------------------------------------------- Presets */
 
+	/** Gliederung der Presets in Companion (API 2.x: getrennt von den Definitionen). */
+	buildPresetStructure() {
+		return [
+			{ id: 'aufnahme', name: 'Aufnahme', definitions: ['record_toggle', 'pause'] },
+			{ id: 'abschnitte', name: 'Abschnitte', definitions: ['marker', 'marker_predigt', 'cut', 'undo'] },
+			{ id: 'ablaufplan', name: 'Ablaufplan', definitions: ['next_item'] },
+			{ id: 'anzeige', name: 'Anzeige', definitions: ['status', 'health'] },
+		]
+	}
+
 	buildPresets() {
 		// Boolean-Feedbacks brauchen in Presets einen eigenen Stil, sonst färbt sich die Taste nicht.
 		const feedbackDefs = this.buildFeedbacks()
@@ -554,64 +573,56 @@ class GottesdienstRecorderInstance extends InstanceBase {
 
 		return {
 			record_toggle: {
-				type: 'button',
-				category: 'Aufnahme',
+				type: 'simple',
 				name: 'Aufnahme starten/beenden',
 				style: { ...base, text: 'REC\\n$(ebbton:timecode)' },
 				steps: [{ down: [{ actionId: 'record_toggle' }], up: [] }],
 				feedbacks: [fb('recording')],
 			},
 			pause: {
-				type: 'button',
-				category: 'Aufnahme',
+				type: 'simple',
 				name: 'Pause umschalten',
 				style: { ...base, text: 'Pause' },
 				steps: [{ down: [{ actionId: 'record_pause_toggle' }], up: [] }],
 				feedbacks: [fb('paused')],
 			},
 			marker: {
-				type: 'button',
-				category: 'Abschnitte',
+				type: 'simple',
 				name: 'Abschnitt starten / beenden',
 				style: { ...base, text: 'Abschnitt\\nStart/Ende' },
 				steps: [{ down: [{ actionId: 'marker_add', options: { label: '' } }], up: [] }],
 				feedbacks: [],
 			},
 			marker_predigt: {
-				type: 'button',
-				category: 'Abschnitte',
+				type: 'simple',
 				name: 'Abschnitt „Predigt“ starten / beenden',
 				style: { ...base, text: 'Predigt' },
 				steps: [{ down: [{ actionId: 'marker_add', options: { label: 'Predigt' } }], up: [] }],
 				feedbacks: [],
 			},
 			next_item: {
-				type: 'button',
-				category: 'Ablaufplan',
+				type: 'simple',
 				name: 'Nächster Programmpunkt',
 				style: { ...base, text: 'Weiter\\n$(ebbton:next_item)' },
 				steps: [{ down: [{ actionId: 'marker_next' }], up: [] }],
 				feedbacks: [fb('has_pending')],
 			},
 			cut: {
-				type: 'button',
-				category: 'Abschnitte',
+				type: 'simple',
 				name: 'Schnitt starten / beenden',
 				style: { ...base, text: 'Schnitt\\nStart/Ende' },
 				steps: [{ down: [{ actionId: 'cut_toggle' }], up: [] }],
 				feedbacks: [fb('cut_open')],
 			},
 			undo: {
-				type: 'button',
-				category: 'Abschnitte',
+				type: 'simple',
 				name: 'Rückgängig',
 				style: { ...base, text: 'Rück-\\ngängig' },
 				steps: [{ down: [{ actionId: 'undo' }], up: [] }],
 				feedbacks: [],
 			},
 			health: {
-				type: 'button',
-				category: 'Anzeige',
+				type: 'simple',
 				name: 'Eingang und Speicher',
 				style: {
 					...base,
@@ -622,8 +633,7 @@ class GottesdienstRecorderInstance extends InstanceBase {
 				feedbacks: [fb('input_problem'), fb('write_problem'), fb('disk_warn'), fb('disk_low')],
 			},
 			status: {
-				type: 'button',
-				category: 'Anzeige',
+				type: 'simple',
 				name: 'Statusanzeige',
 				style: {
 					...base,
@@ -637,4 +647,4 @@ class GottesdienstRecorderInstance extends InstanceBase {
 	}
 }
 
-runEntrypoint(GottesdienstRecorderInstance, [])
+export const UpgradeScripts = []

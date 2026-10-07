@@ -1,9 +1,11 @@
 {
+  "$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
+  "type": "connection",
   "id": "ebbton",
   "name": "ebbton",
   "shortname": "Ebbton",
   "description": "Steuert Ebbton: Aufnahme, Abschnitte, Schnitte und Ablaufplan",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "license": "MIT",
   "repository": "git+https://github.com/paddepf/ebbton.git",
   "bugs": "https://github.com/paddepf/ebbton/issues",
@@ -16,7 +18,7 @@
   "runtime": {
     "type": "node22",
     "api": "nodejs-ipc",
-    "apiVersion": "1.11.0",
+    "apiVersion": "0.0.0",
     "entrypoint": "../main.js"
   },
   "manufacturer": "Eigenentwicklung",

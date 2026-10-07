@@ -3,35 +3,28 @@
 Steuert Ebbton aus Bitfocus Companion heraus und zeigt den
 Aufnahmestatus auf den Tasten an.
 
-## Einbinden
+## Voraussetzung
 
-Companion lädt Module aus einem frei wählbaren Ordner für Entwicklermodule:
+**Companion ab 5.0.** Das Modul nutzt die Modul-API 2.1 (`@companion-module/base` 2.1). Companion 4.x und
+älter laden es nicht; dafür bräuchte es den Stand vor Version 2.0.0 des Moduls (API 1.11, Git-Verlauf).
+API 2.2 (Companion 5.1) wird bewusst noch nicht genutzt, damit das Modul auch auf 5.0.x läuft.
 
-1. Im **Startfenster von Companion** (dem kleinen Launcher-Fenster, nicht in der
-   Weboberfläche) über das Zahnrad bzw. die erweiterten Einstellungen den Ordner für
-   **Developer Modules** auswählen.
-2. Diesen Ordner hier hineinkopieren und die Abhängigkeiten installieren:
+## Installieren
 
-```bash
-npm install
-```
-
-3. Companion neu starten. Das Modul erscheint unter **Connections** als
-   „Ebbton“.
-
-### Als Paket installieren (ohne Entwicklerordner)
-
-Für die Weitergabe an andere Rechner lässt sich ein Paket erzeugen:
+Paket bauen (auf einem Rechner mit Node 22 oder neuer):
 
 ```bash
 npm install
-npm run package      # erzeugt pkg.tgz
+npm run package      # erzeugt ebbton-<version>.tgz
 ```
 
-In Companion (ab 3.5/4.x) unter **Modules** → **Import module package** die `.tgz`-Datei wählen. Das Paket
-enthält alles gebündelt, `npm install` ist auf dem Zielrechner nicht nötig.
-`@companion-module/tools` ist bewusst auf `~2.1.0` festgelegt: Neuere 2.x-Versionen verlangen
-`@companion-module/base` ab 1.12 und lassen sich mit dem hier verwendeten 1.11 nicht installieren.
+In Companion unter **Modules** → **Import module package** die `.tgz`-Datei wählen, danach unter
+**Connections** eine Verbindung „Ebbton“ anlegen. Das Paket enthält alles gebündelt, auf dem
+Companion-Rechner ist kein `npm install` nötig.
+
+Zum Entwickeln kann Companion den Ordner auch direkt laden: im Startfenster von Companion (nicht in der
+Weboberfläche) den Ordner für **Developer Modules** wählen, diesen Ordner hineinkopieren, `npm install`
+ausführen und Companion neu starten.
 
 ## Konfiguration
 
@@ -39,7 +32,7 @@ enthält alles gebündelt, `npm install` ist auf dem Zielrechner nicht nötig.
 |---|---|
 | Adresse | IP oder Hostname des Aufnahmerechners |
 | Port | Standard 8765, siehe Recorder-Einstellungen |
-| Passwort | das Passwort für die **Steuerung** (nicht das Mitlese-Passwort) |
+| Passwort | das Passwort für die **Steuerung** (nicht das Mitlese-Passwort); liegt im Secrets-Speicher von Companion, nicht in der exportierten Konfiguration |
 
 Das Modul verbindet sich selbstständig neu, wenn die App noch nicht läuft oder
 die Verbindung abbricht.
@@ -52,7 +45,7 @@ die Verbindung abbricht.
 | Aufnahme beenden | beendet und speichert |
 | Aufnahme starten/beenden | eine Taste für beides |
 | Aufnahme pausieren / fortsetzen / Pause umschalten | Pause steuern |
-| Abschnitt starten / beenden | erster Druck setzt den Anfang eines Abschnitts (Bezeichnung frei wählbar, Variablen erlaubt), der nächste Druck das Ende |
+| Abschnitt starten / beenden | erster Druck setzt den Anfang eines Abschnitts (Bezeichnung frei wählbar, Variablen und Ausdrücke erlaubt – Companion setzt sie selbst ein), der nächste Druck das Ende |
 | Nächster Programmpunkt beginnt hier | beendet den laufenden Abschnitt und beginnt den nächsten offenen Ablaufpunkt des ChurchTools-Plans |
 | Schnitt starten / beenden | erster Druck beginnt einen Schnitt, der nächste beendet ihn; die Stelle fehlt in den MP3-Exporten |
 | Rückgängig / Wiederholen | letzte Änderung an Abschnitten oder Schnitten zurücknehmen bzw. wiederholen |

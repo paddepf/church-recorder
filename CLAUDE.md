@@ -363,6 +363,19 @@ App-Namen liegt; unter neuem Namen gibt es einen neuen Schlüssel (Meldung „To
 der Token musste in den Einstellungen neu eingetragen werden. Bei einer weiteren Umbenennung wieder daran denken.
 Der Ordnername des lokalen Klons ist egal.
 
+### Companion-Modul (API 2.1, Oktober 2026)
+- Auf Modul-API 2.1 umgestellt (`@companion-module/base` ~2.1.3, Tools 3, Modulversion 2.0.0), weil am Kirchen-PC
+  Companion 5.0.7 läuft. **Nicht auf API 2.2 heben, solange dort Companion 5.0.x läuft** (2.2 braucht Companion 5.1);
+  vorher Companion-Version erfragen. Companion 4.x lädt das Modul nicht mehr.
+- Unterschiede zu 1.x, die beim Weiterarbeiten zählen: Klasse wird `export default` exportiert (kein `runEntrypoint`),
+  `export const UpgradeScripts`; Passwort (`secret-text`) kommt als drittes Argument von `init`/`configUpdated` im
+  Secrets-Objekt (Getter `password` nimmt zur Sicherheit auch das alte `config.password`); Variablen als Objekt;
+  `parseVariablesInString` gibt es nicht mehr (Companion setzt Variablen in `useVariables`-Feldern selbst ein);
+  Presets `type: 'simple'` ohne `category`, Gliederung in `buildPresetStructure()`; `checkAllFeedbacks()` statt
+  `checkFeedbacks()` ohne Argument. `apiVersion` im Manifest trägt das Build-Werkzeug ein.
+- Paket: `npm install && npm run package` im Ordner `companion-module/` → `ebbton-<version>.tgz`, in Companion über
+  „Import module package“. Die `.tgz` wird nicht eingecheckt.
+
 ### Entfernt: Mitschrift
 Die lokale Transkription (whisper.cpp, Mitschrift-Panel, Einstellungen) wurde
 bewusst wieder ausgebaut, weil sie keinen Mehrwert brachte. Nicht neu einbauen,
