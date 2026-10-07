@@ -183,7 +183,7 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - **Fernbefehle mit echter Antwort:** `record.start/stop/toggle` warten auf `recording-started/-stopped`
   (`waitForRemote`, 8 s); die Oberfläche meldet Fehlschläge über `remote:result`.
 - **Netzwerk:** Origin-Header → nur `monitor`; 5 Fehlversuche → 60 s Sperre (`auth_locked`); `monitor` bekommt
-  den Zustand ohne Pfade/Namen (`_forRole`). „Im Ordner zeigen“ nur in Aufnahme-/Exportordner oder für eben
+  den Zustand ohne Pfade/Namen (`_forRole`), Ereignisse ohne `wavPath`/`file` (`publishEvent`). „Im Ordner zeigen“ nur in Aufnahme-/Exportordner oder für eben
   exportierte Dateien (`revealable`). Passwortfelder verdeckt.
 - **ChurchTools:** `requestAll` folgt der Paginierung; Kalender-Filter `churchToolsCalendarIds` (Auswahl in den
   Einstellungen, `ct:calendars`; Termine ohne Kalenderangabe bleiben); flache Überschriften im Ablaufplan

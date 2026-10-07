@@ -74,3 +74,27 @@ test('Anmeldung, Rollen, Schutz', async (t) => {
   assert.equal(c.msgs.find((m) => m.type === 'error').code, 'auth_locked');
   c.ws.close();
 });
+
+test('Ereignisse: Mitlesende ohne Dateipfade', async (t) => {
+  const net = new NetServer();
+  assert.equal(net.start().ok, true);
+  t.after(() => net.stop());
+
+  const mon = await connect();
+  mon.ws.send(JSON.stringify({ type: 'auth', password: 'lesen' }));
+  const ctl = await connect();
+  ctl.ws.send(JSON.stringify({ type: 'auth', password: 'geheim' }));
+  await sleep(150);
+
+  net.publishEvent('recording.stopped', { wavPath: '/pfad.wav', duration: 12 });
+  net.publishEvent('export.finished', { file: '/x.mp3', label: 'Predigt' });
+  await sleep(150);
+
+  const events = (c) => c.msgs.filter((m) => m.type === 'event');
+  assert.deepEqual(events(mon).map((m) => m.payload), [{ duration: 12 }, { label: 'Predigt' }]);
+  assert.deepEqual(events(ctl).map((m) => m.payload), [
+    { wavPath: '/pfad.wav', duration: 12 }, { file: '/x.mp3', label: 'Predigt' }
+  ]);
+  mon.ws.close();
+  ctl.ws.close();
+});

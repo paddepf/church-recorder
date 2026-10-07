@@ -304,8 +304,13 @@ class NetServer extends EventEmitter {
     this.broadcast({ type: 'levels', payload: levels });
   }
 
+  /** Ereignisse – Mitlesende bekommen sie wie den Zustand ohne Dateipfade. */
   publishEvent(name, payload) {
-    this.broadcast({ type: 'event', event: name, payload });
+    const forMonitor = payload ? { ...payload, wavPath: undefined, file: undefined } : payload;
+    this.clients.forEach((info, ws) => {
+      if (!info.authed) return;
+      this._send(ws, { type: 'event', event: name, payload: info.role === 'monitor' ? forMonitor : payload });
+    });
   }
 }
 

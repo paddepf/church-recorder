@@ -28,7 +28,8 @@ Ist kein Monitor-Passwort gesetzt, existiert die Rolle nicht.
 - Nach **5 Fehlversuchen** von derselben Adresse ist die Anmeldung dort 60 Sekunden gesperrt
   (Fehler `auth_locked`).
 - Die Rolle `monitor` bekommt den Zustand **ohne Dateipfade und Personennamen** (`wavPath`, `artist`,
-  `service.suggestions` und die Dateinamen in `exports` fehlen).
+  `service.suggestions` und die Dateinamen in `exports` fehlen). Auch in Ereignissen fehlen für sie
+  `wavPath` und `file`.
 
 ```json
 { "type": "auth", "password": "geheim" }
@@ -119,7 +120,11 @@ Getrennt vom Zustand und auf 5×/s gedrosselt, damit das Netz nicht geflutet wir
 { "type": "event", "event": "recording.started", "payload": { "wavPath": "…" } }
 ```
 
-Ereignisse: `recording.started`, `recording.stopped`, `export.finished`.
+| Ereignis | `payload` für `control` | für `monitor` |
+|---|---|---|
+| `recording.started` | `{ wavPath }` | `{}` |
+| `recording.stopped` | `{ wavPath, duration }` | `{ duration }` |
+| `export.finished` | `{ file, label }` | `{ label }` |
 
 ### Weitere
 
