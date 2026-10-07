@@ -256,6 +256,16 @@
     document.body.classList.toggle('review', session.status === 'stopped' && Boolean(session.wavPath));
     $('service-name').textContent = session.service?.name || 'Kein Gottesdienst gewählt';
     $('service-date').textContent = session.service?.date || '';
+    {
+      // Herkunft des Ablaufplans: aus den Quellen der Punkte abgeleitet (Standardpunkte/Vorlage = `plan`).
+      const plan = (session.sections || []).filter((x) => x.source !== 'manual');
+      const el = $('plan-source');
+      el.hidden = plan.length === 0;
+      if (plan.length) {
+        const ct = plan.some((x) => x.source === 'churchtools');
+        el.textContent = ct ? 'Aus ChurchTools geladen' : 'Aus Vorlage – kein Ablaufplan aus ChurchTools';
+      }
+    }
 
     const rec = session.status === 'recording';
     const paused = session.status === 'paused';
@@ -1027,6 +1037,7 @@
     $('btn-settings').addEventListener('click', () => openModal('modal-settings'));
     $('btn-library').addEventListener('click', openLibrary);
     $('btn-service').addEventListener('click', openServicePicker);
+    $('btn-plan-service').addEventListener('click', openServicePicker);
     $('btn-compact').addEventListener('click', () => toggleCompact());
     $('current-item').addEventListener('click', (e) => {
       const cur = state.session?.currentSegment;

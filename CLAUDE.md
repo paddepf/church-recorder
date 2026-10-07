@@ -97,6 +97,9 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Kinderbeitrag, Predigt, Abschluss), und meldet `usedDefaults` und `templateName`. Der Termin wird dabei trotzdem gesetzt. `session:service` (ohne
   ChurchTools) trägt dieselbe Vorlage ein, wenn noch keine Abschnitte existieren. Ein vorhandener ChurchTools-Ablaufplan
   hat immer Vorrang.
+- Ablaufplan-Kachel: Knopf „ChurchTools …“ neben der Vorlagenwahl öffnet denselben Termin-Dialog wie der Klick auf den
+  Gottesdienst in der Kopfzeile (`openServicePicker`); `#plan-source` zeigt die Herkunft („Aus ChurchTools geladen“ bzw.
+  „Aus Vorlage“), abgeleitet aus `source` der Nicht-`manual`-Abschnitte (kein eigenes Feld, kein Vorlagenname).
 - Ablaufplan-Kachel: Punkt hinzufügen (`section:add`), entfernen (`section:delete`), umsortieren per Drag in der
   Liste (`section:reorder`, setzt `order` der offenen Punkte neu). Dieselbe Drag-Quelle (`text/marker-id`) dient
   weiter zum Ablegen auf der Wellenform, das Ziel unterscheidet.

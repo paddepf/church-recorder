@@ -85,8 +85,12 @@
     <div class="panel panel-plan">
       <div class="panel-head">
         <h2>Ablaufplan</h2>
-        <select id="plan-template" class="select" title="Vorlage mit Programmpunkten laden" aria-label="Vorlage laden"></select>
+        <div class="head-actions">
+          <button id="btn-plan-service" class="secondary" title="Gottesdienst aus ChurchTools wählen">ChurchTools …</button>
+          <select id="plan-template" class="select" title="Vorlage mit Programmpunkten laden" aria-label="Vorlage laden"></select>
+        </div>
       </div>
+      <div id="plan-source" class="plan-source" hidden></div>
       <ol id="pending-list" class="pending"></ol>
       <div class="add-row">
         <input id="plan-new" type="text" aria-label="Neuen Programmpunkt hinzufügen" />

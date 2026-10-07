@@ -356,6 +356,9 @@ canvas.wave {
   border-bottom: 1px solid var(--line);
 }
 .panel-head h2 { font-size: 17px; margin: 0; font-weight: 600; }
+.head-actions { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.head-actions .secondary { font-size: 14px; padding: 5px 9px; white-space: nowrap; }
+.plan-source { color: var(--muted); font-size: 13px; padding: 6px 16px; border-bottom: 1px solid var(--line); }
 .hint { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .panel-head h2 { white-space: nowrap; }
 
