@@ -70,8 +70,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Mac-Releases sind vorerst abgeschaltet (kein Bedarf). Wieder einschalten: Repository-Variable
+  # MAC_RELEASE = true (Settings → Secrets and variables → Actions → Variables).
   macos:
     needs: vorbereiten
+    if: vars.MAC_RELEASE == 'true'
     runs-on: macos-latest
     permissions:
       contents: write
@@ -111,10 +114,12 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
-  # Erst wenn beide Builds hochgeladen sind, wird der Entwurf veröffentlicht. So sehen die
-  # Aufnahmerechner nie ein Release, dem noch Dateien (z. B. latest-mac.yml) fehlen.
+  # Erst wenn alle Builds hochgeladen sind, wird der Entwurf veröffentlicht. So sehen die
+  # Aufnahmerechner nie ein Release, dem noch Dateien (z. B. latest.yml) fehlen. Ein übersprungener
+  # Mac-Build (MAC_RELEASE nicht gesetzt) hält die Freigabe nicht auf, ein fehlgeschlagener schon.
   veroeffentlichen:
     needs: [windows, macos]
+    if: always() && needs.windows.result == 'success' && (needs.macos.result == 'success' || needs.macos.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: write

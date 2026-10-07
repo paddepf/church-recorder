@@ -332,8 +332,13 @@ Der Dialog öffnet sich dann nicht von selbst, die Knöpfe sind mit Hinweis gesp
    `git tag v1.2.3` und `git push --tags`.
 3. Der Workflow `.github/workflows/release.yml` prüft, ob Tag und Version
    übereinstimmen, lässt die Tests laufen, legt einen Release-Entwurf an, baut
-   Windows- und Mac-Version hinein und gibt das Release erst frei, wenn beide
-   vollständig sind. Ohne Mac-Zertifikat wird die Mac-App ad hoc signiert.
+   die Windows-Version hinein und gibt das Release erst frei, wenn sie vollständig ist.
+   **Mac-Releases sind vorerst abgeschaltet.** Wieder einschalten: auf GitHub unter
+   *Settings → Secrets and variables → Actions → Variables* die Variable `MAC_RELEASE`
+   mit dem Wert `true` anlegen; dann baut der Workflow auch die Mac-Version (ohne
+   Zertifikat ad hoc signiert) und wartet mit der Freigabe auf beide. Ohne Mac-Release
+   meldet eine installierte Mac-App bei „Jetzt nach Update suchen“ einen Fehler
+   (`latest-mac.yml` fehlt); neue Mac-Versionen lokal mit `npm run dist:mac` bauen.
 
 Der Windows-Installer lässt sich auf einem Mac mit Apple Silicon nur mit Rosetta
 bauen (das NSIS-Werkzeug von electron-builder ist ein Intel-Programm); verlässlich

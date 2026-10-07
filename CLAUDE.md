@@ -200,6 +200,11 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Leere Secrets kommen als leere Umgebungsvariablen an: `CSC_LINK=""` hält electron-builder für einen Dateipfad
   („app not a file“), deshalb `unset CSC_LINK CSC_KEY_PASSWORD` im Zweig ohne Zertifikat.
 
+### Releases nur für Windows (Oktober 2026)
+- Mac-Releases vorerst abgeschaltet (kein Bedarf): Job `macos` in `release.yml` läuft nur mit Repository-Variable
+  `MAC_RELEASE == 'true'`; `veroeffentlichen` gibt frei, wenn Windows erfolgreich und Mac erfolgreich **oder**
+  übersprungen ist. Mac-Konfiguration in `package.json` und der Job bleiben stehen, damit das Einschalten reicht.
+
 ### Electron-Stand (Oktober 2026)
 - Vor dem ersten Release von Electron 33 (ohne Sicherheitsupdates) auf **Electron 44** gehoben (Node 24, Chromium 152),
   dazu electron-builder 26 und electron-updater 6.8. Keine Erstveröffentlichung auf einem nicht mehr gepflegten
