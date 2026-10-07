@@ -901,6 +901,14 @@
       });
     }
 
+    // Angezeigt wird eine Mehrspuraufnahme (Umschalter auf Stereo): kein MP3-Export, dafür ein Hinweis.
+    if (session?.mode === 'multitrack') {
+      list.innerHTML = '<div class="empty">Mehrspuraufnahmen werden nicht als MP3 exportiert – die Spuren liegen als WAV im Aufnahmeordner.</div>';
+      $('export-target').textContent = '';
+      $('btn-export').disabled = true;
+      return;
+    }
+
     if (segments.length === 0) {
       list.innerHTML = '<div class="empty">Abschnitt starten und beenden, um ihn zu exportieren.</div>';
       $('export-target').textContent = '';
@@ -2169,9 +2177,13 @@
     return state.settings?.recordingMode === 'multitrack' ? 'multitrack' : 'stereo';
   }
 
-  /** Mehrspur-Ansicht (Kanäle statt Export): Mehrspur eingestellt oder eine Mehrspuraufnahme angezeigt. */
+  /**
+   * Mehrspur-Ansicht (Kanäle statt Export): folgt dem Umschalter; während einer Aufnahme gilt deren Art
+   * (der Umschalter ist dann gesperrt).
+   */
   function multitrackView() {
-    return settingMode() === 'multitrack' || state.session?.mode === 'multitrack';
+    if (isLive()) return state.session.mode === 'multitrack';
+    return settingMode() === 'multitrack';
   }
 
   /** Umschalter in der Kopfzeile und Ansicht passend zur Aufnahmeart. */

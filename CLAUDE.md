@@ -489,10 +489,12 @@ Der Ordnername des lokalen Klons ist egal.
   WebSocket-Fernsteuerung sowie per Knöpfen (Start, Abschnitt, Pause, Stopp, Anhängen, Einstellungen).
 - **Oberfläche (Schritt 4):** Umschalter „Stereo | Mehrspur“ in der Kopfzeile (`.mode-switch`, `setRecordingMode`,
   speichert `recordingMode`; während der Aufnahme gesperrt, im Mini-Fenster ausgeblendet). `body.mt`
-  (`multitrackView()`: Mehrspur eingestellt **oder** eine Mehrspuraufnahme angezeigt) ersetzt den Export-Bereich durch
+  (`multitrackView()`: folgt dem Umschalter, während einer Aufnahme deren Art) ersetzt den Export-Bereich durch
   den Bereich „Kanäle“ (`renderChannels`, `channelModel`, `applyTrackLevels`); die Spalte ist dann breiter
-  (`minmax(380px, 1.25fr)`, kompakt 330 px), damit die Namen passen. Wird bei Mehrspur-Einstellung eine beendete
-  Stereo-Aufnahme angezeigt, fehlt der Export; Hinweis im Kanal-Bereich „zum Exportieren auf Stereo schalten“.
+  (`minmax(380px, 1.25fr)`, kompakt 330 px), damit die Namen passen. Passen Umschalter und angezeigte Aufnahme nicht
+  zusammen: Stereo-Aufnahme bei „Mehrspur“ → Hinweis im Kanal-Bereich „zum Exportieren auf Stereo schalten“;
+  Mehrspuraufnahme bei „Stereo“ → Export-Bereich mit Hinweis „werden nicht als MP3 exportiert“. (Früher blieb der
+  Kanal-Bereich bei angezeigter Mehrspuraufnahme stehen, egal wie der Umschalter stand – wirkte wie ein Fehler.)
   Gemessen: kein Überlauf, Timer gleich in beiden Modi, keine gekürzten Kanalnamen bei 1360×880, 1024×680, kompakt
   960×640 und 760×520.
 - **Abhören vor dem Start:** `engine.monitor()` öffnet das Gerät ohne Aufnahme; `start()` übernimmt den offenen Strom
