@@ -979,3 +979,16 @@ body.dense .alert::before { font-size: 20px; }
   body.dense .keybar { display: none; }        /* Kürzel weiter über „?“ */
 }
 body.compact .topbar .view-switch button { font-size: 11px; padding: 2px 6px; }
+
+/* ---------------------------------------------------------------- Updates */
+
+.update-btn { background: var(--plan); border-color: var(--plan); color: var(--on-accent); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.update-btn:hover { filter: brightness(1.1); }
+.update-btn[data-state="blocked"] { background: transparent; border-color: var(--plan); color: var(--plan); }
+.update-progress .progress { height: 8px; margin: 0; width: 100%; border-radius: 4px; }
+.update-progress-text { margin-top: 6px; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.update-note { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--panel-2); font-size: 14px; }
+.update-note[data-level="error"] { color: var(--cut-text); }
+.update-notes { white-space: pre-wrap; max-height: 220px; overflow-y: auto; margin-top: 8px; font-size: 14px; color: var(--muted); }
+#version-info[data-level="error"] { color: var(--cut-text); }
+#update-page { margin-right: auto; }

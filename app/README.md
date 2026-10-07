@@ -302,13 +302,25 @@ Das Companion-Modul liegt im Ordner `companion-module/` dieses Repositorys.
 
 ## Updates
 
-Die App prüft beim Start und danach alle sechs Stunden, ob im GitHub-Repository
-ein neues Release liegt, und lädt es im Hintergrund herunter. Ist es fertig,
-erscheint oben „Update installieren“.
+Die App sucht kurz nach dem Start und danach alle zwei Stunden, ob im GitHub-Repository
+ein neues Release liegt (abschaltbar in den Einstellungen; dort auch „Jetzt nach Update suchen“
+mit Ergebnis und Zeitpunkt der letzten Suche). Jeder Schritt braucht eine Zustimmung:
 
-**Während einer laufenden oder pausierten Aufnahme wird nie installiert oder neu
-gestartet.** Der Knopf verweigert in diesem Fall mit einem Hinweis; das Update
-wird spätestens beim nächsten regulären Beenden eingespielt.
+1. **Gefunden:** Ein Dialog nennt die neue und die installierte Version samt „Was ist neu?“ und
+   fragt, ob heruntergeladen werden soll. „Später“ lässt oben den Knopf „Update … verfügbar“ stehen.
+2. **Download:** Fortschrittsbalken mit Prozent, MB, Geschwindigkeit und Restzeit; der Dialog kann
+   geschlossen werden („Im Hintergrund weiter“), der Kopfzeilen-Knopf zählt mit.
+3. **Bereit:** Zweite Rückfrage „Jetzt installieren und neu starten?“. Danach wird Ebbton beendet,
+   das Update unter Windows ohne Installer-Fragen eingespielt und Ebbton von selbst neu gestartet
+   (etwa eine halbe Minute). Nach dem Neustart meldet die App „aktualisiert: alt → neu“.
+
+Beim Beenden der App wird nie ungefragt installiert. Fehler beim Download oder bei der Installation
+erscheinen im Dialog mit „Erneut versuchen“ und Link zur Download-Seite; schlägt nur die automatische
+Suche fehl (kein Internet), gibt es keine Meldung, nur einen Vermerk in den Einstellungen. Protokoll:
+`logs/updater.log` im Einstellungsordner (`%APPDATA%\ebbton` bzw. `~/Library/Application Support/ebbton`).
+
+**Während einer laufenden oder pausierten Aufnahme wird weder gesucht, heruntergeladen noch installiert.**
+Der Dialog öffnet sich dann nicht von selbst, die Knöpfe sind mit Hinweis gesperrt.
 
 ### Neue Version veröffentlichen
 

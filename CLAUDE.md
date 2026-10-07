@@ -159,7 +159,7 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   eine pausierte Aufnahme. Startbefehle setzen den Status lokal sofort auf `recording`, damit ein Doppeldruck die
   laufende Erfassung nicht beendet. Gehaltene Tasten (`e.repeat`) werden ignoriert.
 - Einstellungen speichern startet die Netzwerkschnittstelle nur bei geänderten Werten neu. `settings:chooseFolder`
-  wählt nur aus (speichert nichts). Der Updater sucht während einer Aufnahme nicht automatisch.
+  wählt nur aus (speichert nichts). Der Updater sucht während einer Aufnahme nicht automatisch (siehe „Updates“).
 
 ### Umgesetzte Review-Vorschläge (Oktober 2026)
 - **Schreiben in eigenem Thread** (`wav.js`): `WavWriter` öffnet die Datei synchron (Fehler sofort sichtbar),
@@ -266,6 +266,21 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - Gesicherte Abschnitte werden in der Session gemerkt (`exports`, Schlüssel =
   Segment-ID, mit Datei und Zeitraum). Weichen Anfang/Ende später ab, zeigt die
   Liste „geändert seit Export“. `exports` wird bei einer neuen Aufnahme geleert.
+
+### Updates (Oktober 2026)
+- Anlass: Am Kirchen-PC musste die Suche von Hand angestoßen werden, dann startete irgendwann der Installer ohne
+  Ankündigung (`autoDownload` + `autoInstallOnAppQuit`, assistierter NSIS-Installer mit Seiten). Jetzt:
+  `autoDownload = false`, `autoInstallOnAppQuit = false`; Ablauf Suche → Dialog „herunterladen?“ (`update:download`)
+  → Fortschritt (`progress` in `update-status`) → Dialog „installieren?“ → `quitAndInstall(true, true)` (still, gleicher
+  Ordner, Neustart). `install()` wartet 2,5 s (`installing` sichtbar) und prüft danach erneut auf Aufnahme.
+- Nach dem Neustart: `lastVersion` in den Einstellungen ≠ laufende Version → `justUpdated`, Hinweis-Toast.
+- Automatische Suche alle 2 h (Einstellung wird bei jedem Termin gelesen), nicht während Aufnahme, nicht wenn schon
+  etwas gefunden/geladen ist. Fehler der automatischen Suche (offline) → kein Fehlerzustand, nur Vermerk in den
+  Einstellungen; manuelle Suche, Download- und Installationsfehler öffnen den Dialog. „Später“ merkt sich Zustand+Version
+  (`state.updateDismissed`), im Mini-Fenster wird der Dialog bis zum Verlassen aufgeschoben (`state.updatePrompt`).
+- Protokoll `userData/logs/updater.log` (eigener kleiner Logger, max. 1 MB). Nicht gepackt (`npm run dev`) ist der
+  Updater `unavailable`. Mac ohne Zertifikat: `manual` mit Knopf „Download-Seite öffnen“ (`update:openPage`).
+- Tests: `test/updater.test.js` mit nachgebautem `autoUpdater` (Option `autoUpdater` im Konstruktor).
 
 ### Mithören
 - Klick in die Wellenform setzt während der Aufnahme einen Hörcursor, Leertaste =

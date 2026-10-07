@@ -21,7 +21,7 @@
     <div class="top-actions">
       <span id="disk-badge" class="badge" data-level="ok" title="Freier Speicherplatz auf dem Laufwerk der Aufnahmen">Speicher</span>
       <span id="net-badge" class="badge" title="Netzwerkschnittstelle">Netzwerk</span>
-      <button id="btn-update" class="ghost" hidden>Update bereit</button>
+      <button id="btn-update" class="update-btn" hidden title="Update anzeigen">Update</button>
       <button id="btn-library" class="ghost" title="Frühere Aufnahmen">Aufnahmen</button>
       <button id="btn-settings" class="ghost" title="Einstellungen">Einstellungen</button>
       <label class="ontop compact-only" title="Das Mini-Fenster bleibt über anderen Programmen"><input type="checkbox" id="chk-ontop" checked /> <span class="ontop-long">Immer </span>oben</label>
@@ -326,6 +326,32 @@
   </div>
 
   <!-- Bestätigung (z. B. vor dem Überschreiben der angezeigten Aufnahme) -->
+  <div id="modal-update" class="modal" hidden>
+    <div class="modal-card narrow">
+      <div class="modal-head">
+        <h2 id="update-title">Update</h2>
+        <button id="update-close" class="icon close" title="Schließen">×</button>
+      </div>
+      <div class="modal-body">
+        <p id="update-text"></p>
+        <div id="update-progress-box" class="update-progress" hidden>
+          <div class="progress"><i id="update-bar"></i></div>
+          <div id="update-progress-text" class="update-progress-text"></div>
+        </div>
+        <p id="update-note" class="update-note" hidden></p>
+        <details id="update-notes-box" hidden>
+          <summary>Was ist neu?</summary>
+          <div id="update-notes" class="update-notes"></div>
+        </details>
+      </div>
+      <div class="modal-foot">
+        <button id="update-page" class="secondary" hidden>Download-Seite öffnen</button>
+        <button id="update-later" class="secondary">Später</button>
+        <button id="update-action" class="primary">OK</button>
+      </div>
+    </div>
+  </div>
+
   <div id="modal-confirm" class="modal" hidden>
     <div class="modal-card narrow">
       <div class="modal-head">

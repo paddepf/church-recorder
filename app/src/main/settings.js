@@ -40,6 +40,7 @@ const DEFAULTS = {
 
   // Updates
   autoUpdateCheck: true,
+  lastVersion: '',             // zuletzt gestartete Version; ändert sie sich, meldet die App „aktualisiert“
 
   // UI
   theme: 'dark',                // 'dark' | 'light' | 'system'

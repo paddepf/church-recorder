@@ -575,6 +575,7 @@ session.on('recording-started', () => {
   health.writeSlow = false;
   refreshDisk();
   net.publishEvent('recording.started', { wavPath: session.wavPath });
+  send('update-status', updater.status());   // Download/Installation sperren
 });
 
 session.on('recording-stopped', (info) => {
@@ -584,6 +585,7 @@ session.on('recording-stopped', (info) => {
   health.inputLost = false;
   refreshDisk();
   net.publishEvent('recording.stopped', info);
+  send('update-status', updater.status());   // Download/Installation wieder möglich
 });
 
 session.on('error-notice', (message) => toast('error', message));
@@ -694,7 +696,7 @@ net.on('command', ({ action, params, reply }) => {
   }
 });
 
-updater.on('status', (s) => send('update-status', { ...s, ...updater.status() }));
+updater.on('status', (s) => send('update-status', s));
 
 /* ------------------------------------------------------------------- IPC-API */
 
@@ -1127,10 +1129,15 @@ ipcMain.handle('net:restart', () => {
 });
 
 ipcMain.handle('update:check', () => updater.check({ manual: true }));
+ipcMain.handle('update:download', () => {
+  const result = updater.download();
+  return result.ok ? ok() : fail(result.error);
+});
 ipcMain.handle('update:install', () => {
   const result = updater.install();
   return result.ok ? ok() : fail(result.error);
 });
+ipcMain.handle('update:openPage', () => { shell.openExternal(updater.status().releasesUrl); return ok(); });
 ipcMain.handle('update:status', () => ok(updater.status()));
 
 /* --------------------------------------------------------------- App-Start */

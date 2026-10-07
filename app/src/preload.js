@@ -101,7 +101,9 @@ contextBridge.exposeInMainWorld('api', {
 
   update: {
     check: () => invoke('update:check'),
+    download: () => invoke('update:download'),
     install: () => invoke('update:install'),
+    openPage: () => invoke('update:openPage'),
     status: () => invoke('update:status')
   },
 

@@ -132,6 +132,12 @@
     applySettingsToForm();
     await updateBadges(info);
     $('version-info').textContent = `Version ${info.version}`;
+    if (info.update) {
+      applyUpdateStatus({ ...info.update, currentVersion: info.update.currentVersion || info.version });
+      // Nach dem Neustart durch ein Update bestätigen, dass es geklappt hat (sonst sieht man es nirgends).
+      const ju = info.update.justUpdated;
+      if (ju) toast('success', `Ebbton wurde aktualisiert: Version ${ju.from} → ${ju.to}.`, 10000);
+    }
 
     const st = await window.api.session.state();
     if (st.ok) {
@@ -1087,6 +1093,7 @@
       m.addEventListener('click', (e) => { if (e.target === m) m.hidden = true; }));
 
     bindSettingsForm();
+    bindUpdateUi();
     bindShortcuts();
   }
 
@@ -1113,6 +1120,8 @@
     applyDense();
     if (wave) wave.resize();           // Zeichenfläche passt sich an die neue Ansicht an (sonst gestreckt)
     if (typeof onTop === 'boolean') $('chk-ontop').checked = onTop;
+    // Im Mini-Fenster aufgeschobene Update-Frage jetzt zeigen
+    if (!state.compact && state.updatePrompt && !state.update?.busy) setTimeout(openUpdateDialog, 300);
   }
 
   /** Kompakte Ansicht: dieselben Bereiche, nur dichter. Im Mini-Fenster ohne Wirkung (eigene Regeln). */
@@ -1196,6 +1205,211 @@
     if (res.change === 'discarded') toast('info', 'Schnitt zu kurz – verworfen.', 3000);
   }
 
+  /* ---------------------------------------------------------------- Updates */
+
+  // Ablauf: gefunden → Rückfrage „herunterladen?“ → Fortschritt → Rückfrage „installieren?“ → Installation → Neustart.
+  // Der Dialog öffnet sich von selbst, wenn eine neue Version gefunden wurde oder der Download fertig ist –
+  // aber nie während einer Aufnahme und nicht im Mini-Fenster (dann bleibt der Knopf in der Kopfzeile).
+
+  function fmtMB(bytes) {
+    return (bytes / 1048576).toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' MB';
+  }
+
+  function updateProgressText(p) {
+    if (!p) return '';
+    const parts = [`${p.percent} %`];
+    if (p.total) parts.push(`${fmtMB(p.transferred)} von ${fmtMB(p.total)}`);
+    if (p.bytesPerSecond && p.total && p.percent < 100) {
+      parts.push(`${fmtMB(p.bytesPerSecond)}/s`);
+      const rest = Math.max(0, Math.round((p.total - p.transferred) / p.bytesPerSecond));
+      parts.push(rest >= 60 ? `noch etwa ${Math.ceil(rest / 60)} min` : `noch etwa ${Math.max(1, rest)} s`);
+    }
+    return parts.join(' · ');
+  }
+
+  function applyUpdateStatus(s) {
+    const prev = state.update || {};
+    s = { ...prev, ...s };
+    state.update = s;
+    const busy = Boolean(s.busy);
+
+    // Knopf in der Kopfzeile
+    const btn = $('btn-update');
+    const labels = {
+      available: `Update ${s.version} verfügbar`,
+      downloading: `Update lädt … ${s.progress?.percent ?? 0} %`,
+      ready: `Update ${s.version} installieren`,
+      installing: 'Update wird installiert …'
+    };
+    let label = labels[s.state];
+    if (s.state === 'error' && s.errorDuring !== 'check' && s.version) label = `Update ${s.version}: Fehler`;
+    if (s.state === 'manual' && s.version) label = `Update ${s.version} verfügbar`;
+    btn.hidden = !label;
+    if (label) btn.textContent = label;
+    btn.dataset.state = busy && ['available', 'ready'].includes(s.state) ? 'blocked' : s.state;
+    btn.title = busy && ['available', 'ready'].includes(s.state)
+      ? 'Wird nach der Aufnahme heruntergeladen bzw. installiert'
+      : 'Update anzeigen';
+
+    // Zeile in den Einstellungen
+    const vi = $('version-info');
+    const cur = `Version ${s.currentVersion || ''}`.trim();
+    const infoText = {
+      checking: `${cur} – Suche nach Updates …`,
+      current: `${cur} – aktuell`,
+      available: `${cur} – Version ${s.version} verfügbar`,
+      downloading: `${cur} – Version ${s.version} wird heruntergeladen (${s.progress?.percent ?? 0} %)`,
+      ready: `${cur} – Version ${s.version} bereit zur Installation`,
+      installing: `${cur} – Update wird installiert …`,
+      error: `${cur} – ${s.errorDuring === 'download' ? 'Download' : s.errorDuring === 'install' ? 'Installation' : 'Suche'} fehlgeschlagen: ${s.error}`,
+      manual: `${cur} – ${s.error || ''}`
+    }[s.state];
+    if (infoText) vi.textContent = infoText;
+    else if (s.state === 'idle' && s.error) vi.textContent = `${cur} – letzte Suche ohne Verbindung`;
+    vi.dataset.level = s.state === 'error' ? 'error' : '';
+    vi.title = s.error || (s.lastCheck ? `Zuletzt gesucht: ${new Date(s.lastCheck).toLocaleString('de-DE')}` : '');
+
+    // Dialog: von selbst öffnen bei neuer Version / fertigem Download / Fehler beim Download
+    const modal = $('modal-update');
+    const changed = prev.state !== s.state;
+    const dismissed = state.updateDismissed === `${s.state}:${s.version}`;
+    let autoOpen = false;
+    if (changed && s.state === 'available') autoOpen = !dismissed || s.manual;
+    if (changed && s.state === 'ready') autoOpen = !dismissed;
+    if (changed && s.state === 'manual' && s.version) autoOpen = !dismissed || s.manual;
+    if (changed && s.state === 'error' && (s.errorDuring !== 'check' || s.manual)) autoOpen = true;
+    if (autoOpen && !busy) {
+      if (state.compact) state.updatePrompt = true;   // nach dem Verlassen des Mini-Fensters zeigen
+      else openUpdateDialog();
+    }
+    if (!modal.hidden) renderUpdateDialog();
+  }
+
+  function openUpdateDialog() {
+    state.updatePrompt = false;
+    renderUpdateDialog();
+    openModal('modal-update');
+    $('update-action').focus();
+  }
+
+  function renderUpdateDialog() {
+    const s = state.update || {};
+    const busy = Boolean(s.busy);
+    const set = (id, text) => { $(id).textContent = text; };
+    const note = (text, level) => {
+      $('update-note').hidden = !text;
+      $('update-note').textContent = text || '';
+      $('update-note').dataset.level = level || '';
+    };
+    const action = $('update-action');
+    const later = $('update-later');
+    action.hidden = false;
+    action.disabled = false;
+    later.hidden = false;
+    later.textContent = 'Später';
+    $('update-page').hidden = true;
+    $('update-progress-box').hidden = true;
+    note('');
+    $('update-notes-box').hidden = !s.notes || !['available', 'downloading', 'ready', 'manual'].includes(s.state);
+    $('update-notes').textContent = s.notes || '';
+    const recNote = 'Während einer Aufnahme wird nichts heruntergeladen oder installiert. Erst die Aufnahme beenden.';
+
+    switch (s.state) {
+      case 'available':
+        set('update-title', `Neue Version ${s.version}`);
+        set('update-text', `Für Ebbton gibt es die Version ${s.version} (installiert ist ${s.currentVersion}). `
+          + 'Soll sie jetzt heruntergeladen werden? Installiert wird erst nach einer weiteren Rückfrage.');
+        action.textContent = 'Herunterladen';
+        if (busy) { action.disabled = true; note(recNote); }
+        break;
+      case 'downloading':
+        set('update-title', `Version ${s.version} wird heruntergeladen`);
+        set('update-text', 'Der Download läuft. Ebbton kann währenddessen normal benutzt werden.');
+        $('update-progress-box').hidden = false;
+        $('update-bar').style.width = `${s.progress?.percent ?? 0}%`;
+        set('update-progress-text', updateProgressText(s.progress) || 'Verbindung wird aufgebaut …');
+        action.hidden = true;
+        later.textContent = 'Im Hintergrund weiter';
+        break;
+      case 'ready':
+        set('update-title', `Version ${s.version} ist bereit`);
+        set('update-text', `Das Update ist heruntergeladen. Zum Installieren wird Ebbton beendet, Version ${s.version} `
+          + 'ohne weitere Fragen eingespielt und danach von selbst wieder gestartet. Das dauert etwa eine halbe Minute. '
+          + 'Jetzt installieren?');
+        $('update-progress-box').hidden = false;
+        $('update-bar').style.width = '100%';
+        set('update-progress-text', s.progress?.total ? `Heruntergeladen: ${fmtMB(s.progress.total)}` : 'Heruntergeladen');
+        action.textContent = 'Jetzt installieren und neu starten';
+        later.textContent = 'Später installieren';
+        if (busy) { action.disabled = true; note(recNote); }
+        break;
+      case 'installing':
+        set('update-title', `Version ${s.version} wird installiert`);
+        set('update-text', 'Ebbton wird gleich beendet. Das Update wird im Hintergrund installiert, danach startet '
+          + 'Ebbton von selbst neu. Bitte den Rechner bis dahin nicht ausschalten.');
+        action.hidden = true;
+        later.hidden = true;
+        break;
+      case 'manual':
+        set('update-title', s.version ? `Neue Version ${s.version}` : 'Update');
+        set('update-text', s.error || 'Die neue Version bitte von der Download-Seite laden.');
+        $('update-page').hidden = false;
+        action.hidden = true;
+        later.textContent = 'Schließen';
+        break;
+      case 'error':
+        set('update-title', s.errorDuring === 'install' ? 'Installation fehlgeschlagen'
+          : s.errorDuring === 'download' ? 'Download fehlgeschlagen' : 'Suche fehlgeschlagen');
+        set('update-text', s.errorDuring === 'check'
+          ? 'Es konnte nicht nach Updates gesucht werden. Besteht eine Internetverbindung?'
+          : 'Das Update konnte nicht eingespielt werden. Die bisherige Version läuft unverändert weiter.');
+        note(s.error, 'error');
+        $('update-page').hidden = false;
+        action.textContent = s.errorDuring === 'install' && s.downloaded ? 'Erneut installieren'
+          : s.errorDuring === 'download' && s.version ? 'Erneut herunterladen' : 'Erneut suchen';
+        if (busy && s.errorDuring !== 'check') { action.disabled = true; note(`${s.error}\n${recNote}`, 'error'); }
+        later.textContent = 'Schließen';
+        break;
+      case 'checking':
+        set('update-title', 'Update');
+        set('update-text', 'Es wird nach einer neuen Version gesucht …');
+        action.hidden = true;
+        later.textContent = 'Schließen';
+        break;
+      default:
+        set('update-title', 'Update');
+        set('update-text', s.state === 'current'
+          ? `Ebbton ist auf dem neuesten Stand (Version ${s.currentVersion}).`
+          : 'Zurzeit liegt kein Update vor.');
+        action.textContent = 'Erneut suchen';
+        later.textContent = 'Schließen';
+    }
+  }
+
+  async function updateAction() {
+    const s = state.update || {};
+    let res;
+    if (s.state === 'available') res = await window.api.update.download();
+    else if (s.state === 'ready' || (s.state === 'error' && s.errorDuring === 'install' && s.downloaded)) res = await window.api.update.install();
+    else if (s.state === 'error' && s.errorDuring === 'download' && s.version) res = await window.api.update.download();
+    else res = await window.api.update.check();
+    if (res && !res.ok) toast('warn', res.error);
+  }
+
+  function bindUpdateUi() {
+    $('btn-update').addEventListener('click', () => openUpdateDialog());
+    $('update-action').addEventListener('click', () => updateAction());
+    $('update-page').addEventListener('click', () => window.api.update.openPage());
+    const close = () => {
+      const s = state.update || {};
+      // „Später“ merkt sich die Frage, damit sie bei der nächsten automatischen Suche nicht sofort wiederkommt.
+      if (['available', 'ready', 'manual'].includes(s.state)) state.updateDismissed = `${s.state}:${s.version}`;
+      $('modal-update').hidden = true;
+    };
+    $('update-later').addEventListener('click', close);
+    $('update-close').addEventListener('click', close);
+  }
+
   function bindShortcuts() {
     document.addEventListener('keydown', (e) => {
       // Nur echte Texteingaben ausnehmen; Checkboxen dürfen die Kürzel nicht blockieren.
@@ -1203,8 +1417,8 @@
       const textTypes = ['text', 'password', 'number', 'date', 'search', 'email', 'url'];
       const typing = t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || (t.tagName === 'INPUT' && textTypes.includes(t.type));
       if (typing) return;
-      // Esc schließt einen offenen Dialog, "?" schließt die Kürzelliste wieder.
-      const openModalEl = document.querySelector('.modal:not([hidden])');
+      // Esc schließt den obersten offenen Dialog, "?" schließt die Kürzelliste wieder.
+      const openModalEl = [...document.querySelectorAll('.modal:not([hidden])')].pop();
       if (openModalEl) {
         if (e.key === 'Escape' || (e.key === '?' && openModalEl.id === 'modal-keys')) {
           e.preventDefault();
@@ -1320,20 +1534,7 @@
         : (info.passwordSet ? 'Nicht aktiv.' : 'Kein Passwort gesetzt – die Schnittstelle bleibt aus.');
     });
 
-    window.api.on('update-status', (s) => {
-      const btn = $('btn-update');
-      btn.hidden = s.state !== 'ready';
-      if (s.state === 'ready') {
-        btn.textContent = `Update ${s.version} installieren`;
-        btn.onclick = async () => {
-          const res = await window.api.update.install();
-          if (!res.ok) toast('warn', res.error);
-        };
-      }
-      if (s.state === 'error') $('version-info').title = s.message || '';
-      // Mac ohne Zertifikat: kein Fehler, sondern ein Hinweis in den Einstellungen
-      if (s.state === 'manual') $('version-info').textContent = `${$('version-info').textContent.split(' – ')[0]} – ${s.message}`;
-    });
+    window.api.on('update-status', (s) => applyUpdateStatus(s));
 
     window.api.on('export-progress', ({ progress, index, total }) => {
       const bars = [$('export-progress'), $('ce-progress')];
@@ -2022,7 +2223,10 @@
 
     $('btn-check-update').addEventListener('click', async () => {
       const res = await window.api.update.check();
-      toast(res.ok ? 'info' : 'warn', res.ok ? 'Es wird nach einem Update gesucht.' : res.error);
+      if (!res.ok) {
+        $('version-info').dataset.level = 'error';
+        $('version-info').textContent = `Version ${state.update?.currentVersion || ''} – ${res.error}`;
+      }
     });
 
     $('btn-save-settings').addEventListener('click', () => saveSettings(false));
