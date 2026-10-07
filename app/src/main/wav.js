@@ -134,6 +134,14 @@ parentPort.on('message', (msg) => {
 });
 `;
 
+/** Latin-1 kennt „ “ ‚ ‘ – … nicht (Bytes würden abgeschnitten, Steuerzeichen): durch ASCII ersetzen, Rest wird „?“. */
+function toLatin1(text) {
+  return String(text || '')
+    .replace(/[„“”‟«»]/g, '"').replace(/[‚‘’‛]/g, "'")
+    .replace(/[–—‐‑]/g, '-').replace(/…/g, '...')
+    .replace(/[^\u0000-\u00ff]/g, '?');
+}
+
 /**
  * Schreibt eine WAV-Datei fortlaufend. Ereignisse: 'error' ({message, code}), 'slow' (true/false).
  */
@@ -342,7 +350,7 @@ function writeCues(filePath, points) {
         cue.writeUInt32LE(0, at + 12);          // dwChunkStart
         cue.writeUInt32LE(0, at + 16);          // dwBlockStart
         cue.writeUInt32LE(frame, at + 20);      // dwSampleOffset
-        const text = Buffer.concat([Buffer.from(String(pt.label || ''), 'latin1'), Buffer.from([0])]);
+        const text = Buffer.concat([Buffer.from(toLatin1(pt.label), 'latin1'), Buffer.from([0])]);
         const labl = Buffer.alloc(8 + 4 + text.length + (text.length % 2));
         labl.write('labl', 0, 'ascii');
         labl.writeUInt32LE(4 + text.length, 4);

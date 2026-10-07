@@ -173,7 +173,7 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   weiter im alten Format geschrieben (gedeckelt).
 - **Cue-Marker in der WAV:** Nach dem Beenden (und bei jeder späteren Änderung der Abschnitte, über `save()`)
   schreibt `Session._syncCues` die Abschnitte per `wav.writeCues` hinter den `data`-Block: `cue `-Chunk plus
-  `LIST/adtl` mit `labl` (Name, bei Interpret „Name (Interpret)“, Latin-1) und `ltxt` (Region mit Länge). Die Session-Datei
+  `LIST/adtl` mit `labl` (Name, bei Interpret „Name (Interpret)“, Latin-1); typografische Anführungszeichen/Striche werden vorher zu ASCII (`toLatin1`), sonst entstünden Steuerzeichen und `ltxt` (Region mit Länge). Die Session-Datei
   bleibt maßgeblich. `readInfo` erkennt nachgestellte `cue `/`LIST`-Chunks und nimmt dann die Datenlänge aus dem Kopf
   statt der Dateigröße (sonst zählten sie als Audio). `WavWriter` mit `append` schneidet sie ab (`ftruncate`), beim
   erneuten Beenden kommen sie neu. RF64-Dateien (> 4 GB) bekommen keine Marker. Bei Aufnahmen, die nie beendet
