@@ -158,6 +158,8 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - Fernstart (`record.start` von Companion) startet ohne Rückfrage (`remote: true`); `record.toggle` beendet auch
   eine pausierte Aufnahme. Startbefehle setzen den Status lokal sofort auf `recording`, damit ein Doppeldruck die
   laufende Erfassung nicht beendet. Gehaltene Tasten (`e.repeat`) werden ignoriert.
+- Der Netzwerkstatus steht nicht in der Kopfzeile (zu unwichtig), sondern nur in den Einstellungen unter „Netzwerk“
+  (`#net-info`: Port, verbundene Clients).
 - Einstellungen speichern startet die Netzwerkschnittstelle nur bei geänderten Werten neu. `settings:chooseFolder`
   wählt nur aus (speichert nichts). Der Updater sucht während einer Aufnahme nicht automatisch (siehe „Updates“).
 
@@ -374,8 +376,9 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - Layout unter der Wellenform: drei Bereiche (Ablaufplan | Abschnitte | Export), ganz
   unten die Tastenleiste (`.keybar`). Die Kürzelliste steht zentral in `shortcutList()`
   (`app.js`) und speist Leiste und Dialog (`?`): neue Kürzel dort eintragen.
-  Speicherplatz zeigt `#disk-badge` in der Kopfleiste (`disk:free`, `fs.statfsSync`;
-  Stunden aus der Abtastrate, 16 Bit Stereo); orange < 3 h, rot < 30 min.
+  Speicherplatz (`disk:free`, `fs.statfsSync`; Stunden aus der Abtastrate, 16 Bit Stereo) steht dauerhaft nur in den
+  Einstellungen unter „Ablage“ (`#disk-info`); `#disk-badge` in der Kopfleiste erscheint nur bei knappem Platz
+  (orange < 3 h, rot < 30 min).
 - Layout-Vorschau ohne Electron: statischer Server auf `app/src` und eine Seite mit
   Mock-`window.api` (CSP verbietet Inline-Skripte, Mock als eigene Datei laden). Die
   Bildschirmfotos funktionieren im frisch geöffneten Tab ohne `resize_window`; mit gesetzter

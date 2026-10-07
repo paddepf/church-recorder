@@ -184,6 +184,7 @@ input[readonly] { color: var(--muted); }
 .badge[data-on="true"] { color: var(--manual); border-color: rgba(43,179,163,.4); }
 .badge[data-on="warn"] { color: var(--amber); border-color: rgba(255,176,32,.4); }
 .badge[data-level="ok"] { color: var(--muted); }
+#disk-badge[data-level="ok"] { display: none; }   /* nur bei knappem Platz sichtbar, sonst steht es in den Einstellungen */
 .badge[data-level="warn"] { color: var(--amber); border-color: rgba(255,176,32,.4); }
 .badge[data-level="low"] { color: var(--tally-text); border-color: var(--tally); }
 

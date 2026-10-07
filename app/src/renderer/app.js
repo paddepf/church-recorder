@@ -185,12 +185,8 @@
   async function updateBadges(info) {
     const net = await window.api.net.status();
     if (net.ok) {
-      $('net-badge').dataset.on = net.running ? 'true' : 'false';
-      $('net-badge').textContent = net.running
-        ? `Netzwerk · Port ${net.port} · ${net.clients}`
-        : 'Netzwerk aus';
       $('net-info').textContent = net.running
-        ? `Läuft auf Port ${net.port}.`
+        ? `Läuft auf Port ${net.port}. Verbundene Clients: ${net.clients}.`
         : (net.passwordSet ? 'Nicht aktiv.' : 'Kein Passwort gesetzt – die Schnittstelle bleibt aus.');
     }
   }
@@ -1535,8 +1531,6 @@
     window.api.on('compact', ({ on, onTop }) => applyCompact(on, onTop));
 
     window.api.on('network-status', (info) => {
-      $('net-badge').dataset.on = info.running ? 'true' : 'false';
-      $('net-badge').textContent = info.running ? `Netzwerk · Port ${info.port} · ${info.clients}` : 'Netzwerk aus';
       $('net-info').textContent = info.running
         ? `Läuft auf Port ${info.port}. Verbundene Clients: ${info.clients}.`
         : (info.passwordSet ? 'Nicht aktiv.' : 'Kein Passwort gesetzt – die Schnittstelle bleibt aus.');
@@ -1747,17 +1741,19 @@
     return `${Math.max(0, Math.round(h * 60))} Min.`;
   }
 
-  /** Aktualisiert die Speicheranzeige in der Kopfleiste; gibt die Stunden zurück, die noch Platz haben. */
+  /** Aktualisiert die Speicheranzeige (Einstellungen; die Kopfleiste zeigt sie nur bei knappem Platz); gibt die Stunden zurück, die noch Platz haben. */
   async function refreshDisk() {
     const res = await window.api.app.diskFree();
     const badge = $('disk-badge');
     if (!res.ok) {
       badge.textContent = 'Speicher unbekannt';
       badge.dataset.level = 'ok';
+      $('disk-info').textContent = 'Freier Speicherplatz unbekannt.';
       return null;
     }
     badge.textContent = `${formatBytes(res.freeBytes)} frei · ca. ${formatHours(res.hoursLeft)}`;
     badge.title = `Freier Speicherplatz auf ${res.dir}: reicht für ca. ${formatHours(res.hoursLeft)} Aufnahme`;
+    $('disk-info').textContent = `Frei: ${formatBytes(res.freeBytes)} – reicht für ca. ${formatHours(res.hoursLeft)} Aufnahme.`;
     badge.dataset.level = res.hoursLeft < DISK_LOW_HOURS ? 'low' : (res.hoursLeft < DISK_WARN_HOURS ? 'warn' : 'ok');
 
     if (res.hoursLeft < DISK_LOW_HOURS && state.session?.status === 'recording' && !diskLowToastShown) {
