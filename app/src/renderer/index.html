@@ -73,15 +73,39 @@
       <button id="btn-marker" class="secondary" disabled title="Abschnitt an der aktuellen Stelle beginnen bzw. beenden (M) – Namen danach per Doppelklick oder ✎ ändern">Abschnitt starten</button>
       <button id="btn-next-item" class="secondary" disabled title="Laufenden Abschnitt beenden und den nächsten Ablaufpunkt beginnen (N)"><span class="nb-label">Nächster Ablaufpunkt</span><span id="next-name" class="nb-name" hidden></span></button>
       <div class="spacer"></div>
-      <button id="btn-play" class="secondary" disabled title="Abspielen bzw. während der Aufnahme ab dem Cursor mithören (Leertaste)">Abspielen</button>
-      <label class="follow" id="loop-wrap" hidden title="Beim Zurückspielen zum Pult den gewählten Abschnitt (sonst die ganze Aufnahme) wiederholen"><input type="checkbox" id="chk-loop" /> Schleife</label>
-      <label class="follow"><input type="checkbox" id="chk-follow" checked /> Ansicht folgt</label>
-      <div class="zoom">
-        <button id="btn-zoom-out" class="icon" title="Herauszoomen" aria-label="Herauszoomen">−</button>
-        <button id="btn-zoom-in" class="icon" title="Hineinzoomen" aria-label="Hineinzoomen">+</button>
+      <button id="btn-play" class="secondary play-btn" data-icon="play" disabled aria-label="Abspielen" title="Abspielen bzw. während der Aufnahme ab dem Cursor mithören (Leertaste)">
+        <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+        <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="5.5" width="3.8" height="13" rx="1"/><rect x="13.7" y="5.5" width="3.8" height="13" rx="1"/></svg>
+        <svg class="i-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="1.5"/></svg>
+        <svg class="i-listen" viewBox="0 0 24 24" aria-hidden="true"><path class="line" d="M4.5 14v-2a7.5 7.5 0 0 1 15 0v2"/><rect x="3.5" y="13" width="4.5" height="7" rx="1.6"/><rect x="16" y="13" width="4.5" height="7" rx="1.6"/></svg>
+        <span id="play-label" class="play-label" hidden></span>
+      </button>
+      <div class="zoom" role="group" aria-label="Zoom">
+        <button id="btn-zoom-out" class="secondary" title="Herauszoomen (Strg+Mausrad)" aria-label="Herauszoomen">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M8 10.5h5"/></svg>
+        </button>
+        <button id="btn-zoom-in" class="secondary" title="Hineinzoomen (Strg+Mausrad)" aria-label="Hineinzoomen">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M8 10.5h5M10.5 8v5"/></svg>
+        </button>
       </div>
     </div>
-    <canvas id="wave" class="wave"></canvas>
+    <div class="wave-wrap">
+      <div class="wave-chips">
+        <label class="wave-chip chip-loud loud-toggle" id="loudness-wrap" title="Lautheit (LUFS) als Linie über der Wellenform: Short-term (Mittel der letzten 3 s), dazu Momentary (0,4 s) und integriert (gesamt bzw. Abschnitt)">
+          <input type="checkbox" id="chk-loudness" checked />
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15c2.5 0 3-6 5.5-6s3 8 5.5 8 3-11 5.5-11"/></svg><span>LUFS</span>
+        </label>
+        <label class="wave-chip chip-follow" title="Die Ansicht folgt der Live-Stelle der Aufnahme (Ausschalten, um in Ruhe zurückzuscrollen)">
+          <input type="checkbox" id="chk-follow" checked />
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h12M12 7l5 5-5 5M20 5v14"/></svg><span>Folgen</span>
+        </label>
+        <label class="wave-chip chip-loop" id="loop-wrap" hidden title="Beim Zurückspielen zum Pult den gewählten Abschnitt (sonst die ganze Aufnahme) wiederholen">
+          <input type="checkbox" id="chk-loop" />
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3l3 3-3 3"/><path d="M4 12V9a3 3 0 0 1 3-3h13"/><path d="M7 21l-3-3 3-3"/><path d="M20 12v3a3 3 0 0 1-3 3H4"/></svg><span>Schleife</span>
+        </label>
+      </div>
+      <canvas id="wave" class="wave"></canvas>
+    </div>
   </section>
 
   <section id="compact-export" class="compact-export" aria-label="Export">
@@ -288,6 +312,16 @@
               <option value="320">320 kbit/s</option>
             </select>
           </label>
+          <label>Lautstärke angleichen
+            <select id="set-loudness" class="select">
+              <option value="0">Aus (wie aufgenommen)</option>
+              <option value="-14">−14 LUFS (laut, Streaming)</option>
+              <option value="-16">−16 LUFS (Podcast, empfohlen)</option>
+              <option value="-19">−19 LUFS (leiser)</option>
+              <option value="-23">−23 LUFS (Rundfunk)</option>
+            </select>
+            <small>Jede MP3-Datei wird auf dieselbe Lautheit gebracht (höchstens +20 dB), Spitzen werden sanft auf −1 dBFS begrenzt. Die Masteraufnahme bleibt unverändert.</small>
+          </label>
         </fieldset>
 
         <fieldset data-tab="churchtools">
@@ -348,6 +382,12 @@
             <input id="set-monitor-pass" type="password" autocomplete="off" />
           </label>
           <div id="net-info" class="inline-result"></div>
+          <div id="net-status-page" class="net-status-page" hidden>
+            <strong>Statusseite für Handy und Tablet</strong>
+            <span id="net-status-urls" class="net-status-urls"></span>
+            <small>Im selben Netz im Browser öffnen und mit dem Passwort zum Mitlesen (oder dem für Steuerung) anmelden.
+              Die Seite zeigt Zustand, Laufzeit, aktuellen und nächsten Ablaufpunkt und Warnungen; steuern lässt sich dort nichts.</small>
+          </div>
         </fieldset>
 
         <fieldset data-tab="programm">
@@ -396,13 +436,24 @@
 
   <!-- Aufnahmen -->
   <div id="modal-library" class="modal" hidden>
-    <div class="modal-card narrow">
+    <div class="modal-card library">
       <div class="modal-head">
-        <h2>Frühere Aufnahmen</h2>
+        <h2>Aufnahmen</h2>
         <button class="icon close" data-close>×</button>
       </div>
       <div class="modal-body">
-        <div id="library-list" class="list"></div>
+        <div class="library-tools">
+          <input id="library-search" type="search" placeholder="Suchen: Gottesdienst, Datum, Interpret, Abschnitt …" autocomplete="off" />
+          <select id="library-filter" class="select" title="Nur bestimmte Aufnahmen zeigen">
+            <option value="all">Alle</option>
+            <option value="unsaved">Nicht vollständig gesichert</option>
+            <option value="stereo">Stereo</option>
+            <option value="multitrack">Mehrspur</option>
+            <option value="unfinished">Unterbrochen</option>
+          </select>
+        </div>
+        <div id="library-list" class="library-list"></div>
+        <div id="library-count" class="library-count"></div>
       </div>
       <div class="modal-foot">
         <button id="btn-open-folder" class="secondary">Ordner öffnen</button>
@@ -467,6 +518,7 @@
   </div>
 
   <script src="../shared/sections.js"></script>
+  <script src="../shared/loudness-curve.js"></script>
   <script src="../shared/roles.js"></script>
   <script src="capture.js"></script>
   <script src="monitor.js"></script>

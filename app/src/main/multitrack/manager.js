@@ -167,13 +167,26 @@ class TrackWriterProxy extends EventEmitter {
     return this.manager.resume().catch((err) => this.emit('error', { message: err.message }));
   }
 
+  _detach() {
+    for (const [ev, fn] of Object.entries(this._listeners)) this.manager.off(ev, fn);
+  }
+
+  /**
+   * Der Mehrspur-Prozess ist abgestürzt: Dieser Stellvertreter gilt nicht mehr (Dauer bleibt stehen, `close` hat
+   * nichts mehr zu beenden). Ein neu gestarteter Prozess bekommt einen eigenen (`Session.replaceWriter`).
+   */
+  abandon() {
+    if (this._closing) return;
+    this.closed = true;
+    this._detach();
+    this._closing = Promise.resolve(null);
+  }
+
   /** Beendet die Aufnahme im Mehrspur-Prozess; erfüllt sich, wenn alles auf der Platte ist. */
   close() {
     if (this._closing) return this._closing;
     this.closed = true;
-    const detach = () => {
-      for (const [ev, fn] of Object.entries(this._listeners)) this.manager.off(ev, fn);
-    };
+    const detach = () => this._detach();
     this._closing = this.manager.stop().then((res) => {
       if (res) this.durationSeconds = res.seconds;
       this.result = res;

@@ -13,6 +13,9 @@
   --amber: #FFB020;
   --plan: #6C7CE0;
   --manual: #2BB3A3;
+  --loud: #F2C14E;                /* Lautheitslinie in der Wellenform */
+  --loud-grid: rgba(242,193,78,0.13);
+  --loud-box: rgba(16,20,25,0.84);
   --wave: #4E6C8A;
   --hover-border: #3B4A5C;
   --hover-bg: #26323F;
@@ -49,6 +52,9 @@
   --amber: #C77F00;
   --plan: #4F5FD0;
   --manual: #178A7D;
+  --loud: #B7791F;
+  --loud-grid: rgba(183,121,31,0.16);
+  --loud-box: rgba(255,255,255,0.9);
   --wave: #6F8CAB;
   --hover-border: #B5C0CD;
   --hover-bg: #DDE3EA;
@@ -335,8 +341,62 @@ body[data-status="recording"] .timecode { color: var(--tally-text); }
 .follow { color: var(--muted); font-size: 16px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .follow[hidden] { display: none; }   /* sonst gewinnt display: flex gegen das hidden-Attribut („Schleife“) */
 .follow input { width: 20px; height: 20px; accent-color: var(--plan); cursor: pointer; }
-.zoom { display: flex; gap: 8px; }
-.wave-toolbar .zoom button { font-size: 22px; padding: 6px 16px; }
+/* Abspielen als runder Symbolknopf (Symbol je Zustand über data-icon), Zoom als zusammenhängende Gruppe */
+.wave-toolbar .play-btn {
+  --size: 44px;
+  width: var(--size); height: var(--size); padding: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  color: var(--text); flex-shrink: 0;
+}
+.wave-toolbar .play-btn.with-label { width: auto; border-radius: 999px; padding: 0 18px 0 12px; }
+.play-btn svg { width: 22px; height: 22px; display: none; flex-shrink: 0; fill: currentColor; }
+.play-btn .i-listen { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.play-btn .i-listen rect { fill: currentColor; stroke: none; }
+.play-btn[data-icon="play"] .i-play, .play-btn[data-icon="pause"] .i-pause,
+.play-btn[data-icon="stop"] .i-stop, .play-btn[data-icon="listen"] .i-listen { display: block; }
+.play-btn[data-icon="play"] .i-play { transform: translateX(1px); }   /* optisch mittig */
+.play-btn:not(:disabled):hover { color: var(--plan); border-color: var(--plan); }
+.play-btn[data-icon="pause"], .play-btn[data-icon="stop"] { color: var(--plan); border-color: var(--plan); }
+.play-label { font-size: 15px; font-weight: 600; white-space: nowrap; }
+.play-label[hidden] { display: none; }
+
+.zoom { display: flex; flex-shrink: 0; }
+.wave-toolbar .zoom button {
+  width: 44px; height: 44px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; color: var(--muted);
+}
+.wave-toolbar .zoom button:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+.wave-toolbar .zoom button:last-child { border-radius: 0 var(--radius) var(--radius) 0; margin-left: -1px; }
+.wave-toolbar .zoom button:hover { color: var(--text); }
+.zoom svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; }
+
+/* Schalter direkt in der Wellenform, unten links (rechts stehen Live-Stelle, Skala und Messwerte) */
+.wave-wrap { position: relative; }
+.wave-chips {
+  position: absolute; left: 8px; bottom: 8px; z-index: 2;
+  display: flex; gap: 6px; pointer-events: none;
+}
+.wave-chip {
+  pointer-events: auto;
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; padding: 0 10px 0 8px; border-radius: 999px;
+  font-size: 12.5px; font-weight: 600; letter-spacing: .02em;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(4px);
+  cursor: pointer; user-select: none;
+  transition: color .12s, border-color .12s, background-color .12s;
+}
+.wave-chip[hidden] { display: none; }
+.wave-chip:hover { color: var(--text); }
+.wave-chip input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+.wave-chip svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.wave-chip:has(input:focus-visible) { outline: 2px solid var(--plan); outline-offset: 1px; }
+.wave-chip:has(input:checked) { --chip: var(--plan); color: var(--chip); border-color: color-mix(in srgb, var(--chip) 60%, transparent); background: color-mix(in srgb, var(--chip) 14%, var(--panel)); }
+.chip-loud:has(input:checked) { --chip: var(--loud); }
+.chip-loop:has(input:checked) { --chip: var(--manual); }
+body.compact .wave-chips { display: none; }
 
 canvas.wave {
   width: 100%;
@@ -603,9 +663,15 @@ label small { color: var(--muted); font-size: 11px; }
 .row input { flex: 1; }
 .row button { flex-shrink: 0; }
 .inline-result { font-size: 12px; color: var(--muted); }
+.net-status-page { display: grid; gap: 4px; margin-top: 10px; font-size: 13px; }
+.net-status-page[hidden] { display: none; }
+.net-status-urls { font-family: var(--sans); font-variant-numeric: tabular-nums; user-select: text; color: var(--text); font-size: 15px; }
+.net-status-page small { color: var(--muted); }
 
 /* Mehrspur: Kanal-Bereich statt Export (body.mt) */
 body.mt .panel-export { display: none; }
+/* Lautheit gibt es nur für Stereo (Mehrspur hat keinen Mix) */
+body.mt .loud-toggle { display: none; }
 body:not(.mt) .panel-channels { display: none; }
 .panel-channels { padding: 0; }
 .ch-status { margin: 10px 14px 0; color: var(--muted); font-size: 13px; line-height: 1.4; flex-shrink: 0; }
@@ -700,6 +766,46 @@ body.dense .ch-list { padding: 8px 10px 10px; gap: 2px 6px; }
 .list-item.current { border-color: var(--plan); }
 .list-head { color: var(--muted); font-size: 12px; font-weight: 500; padding: 6px 2px 0; }
 
+/* Archiv der Aufnahmen */
+.modal-card.library { width: min(860px, 100%); height: min(680px, 100%); }
+.modal-card.library .modal-body { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.library-tools { display: flex; gap: 8px; margin-bottom: 10px; flex-shrink: 0; }
+.library-tools input { flex: 1; min-width: 0; }
+.library-tools select { width: 230px; flex: 0 0 auto; }
+.library-list { flex: 1; min-height: 0; overflow-y: auto; display: grid; gap: 6px; align-content: start; }
+.library-month { color: var(--muted); font-size: 13px; font-weight: 600; padding: 8px 2px 0; position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.library-item {
+  display: grid;
+  grid-template-columns: 124px minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 14px;
+  padding: 9px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.library-item:hover, .library-item:focus-visible { border-color: var(--plan); outline: none; }
+.library-item.unfinished { border-color: rgba(255,176,32,.5); }
+.library-item .when { font-variant-numeric: tabular-nums; line-height: 1.25; }
+.library-item .when b { display: block; font-weight: 600; white-space: nowrap; }
+.library-item .when small { color: var(--muted); font-size: 12px; }
+.library-item .what { min-width: 0; }
+.library-item .what .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.library-item .what .meta { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.library-item .tags { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.library-item .tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.library-item .tag.ok { color: var(--manual); border-color: color-mix(in srgb, var(--manual) 50%, transparent); }
+.library-item .tag.warn { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 50%, transparent); }
+.library-item .tag.mt { color: var(--plan); border-color: color-mix(in srgb, var(--plan) 50%, transparent); }
+.library-item .reveal { margin: 0; width: auto; padding: 4px 8px; border: none; background: transparent; color: var(--muted); font-size: 16px; }
+.library-item .reveal:hover { color: var(--text); }
+.library-count { color: var(--muted); font-size: 12px; padding-top: 8px; flex-shrink: 0; }
+@media (max-width: 760px) {
+  .library-item { grid-template-columns: 124px minmax(0, 1fr) auto; }
+  .library-item .tags { grid-column: 2 / -1; justify-content: flex-start; }
+}
+
 /* ---------------------------------------------------------------- Toasts */
 
 .toasts {
@@ -788,7 +894,7 @@ body.dense .ch-list { padding: 8px 10px 10px; gap: 2px 6px; }
   .wave-section { padding-top: 8px; }
   .wave-toolbar { padding-bottom: 8px; }
   .wave-toolbar button { padding: 7px 16px; }
-  .wave-toolbar .zoom button { padding: 3px 14px; }
+  .wave-toolbar .zoom button, .wave-toolbar .play-btn { --size: 38px; width: 38px; height: 38px; }
   canvas.wave { height: 150px; }
   .panels { padding-top: 10px; padding-bottom: 12px; }
 }
@@ -991,7 +1097,14 @@ body.dense .meter-label, body.dense .clip { font-size: 11px; }
 body.dense .wave-section { padding: 6px 12px 0; }
 body.dense .wave-toolbar { gap: 6px; padding-bottom: 6px; }
 body.dense .wave-toolbar button { font-size: 13px; padding: 4px 10px; }
-body.dense .wave-toolbar .zoom button { font-size: 16px; padding: 1px 10px; }
+body.dense .wave-toolbar .zoom button, body.dense .wave-toolbar .play-btn { --size: 30px; width: 30px; height: 30px; padding: 0; }
+body.dense .wave-toolbar .play-btn.with-label { width: auto; padding: 0 12px 0 8px; }
+body.dense .play-btn svg { width: 17px; height: 17px; }
+body.dense .zoom svg { width: 17px; height: 17px; }
+body.dense .play-label { font-size: 13px; }
+body.dense .wave-chip { height: 22px; font-size: 11.5px; padding: 0 8px 0 6px; }
+body.dense .wave-chip svg { width: 13px; height: 13px; }
+body.dense .wave-chips { left: 6px; bottom: 6px; }
 body.dense .zoom { gap: 4px; }
 body.dense .follow { font-size: 13px; gap: 5px; }
 body.dense .follow input { width: 15px; height: 15px; }

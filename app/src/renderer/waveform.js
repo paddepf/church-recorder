@@ -7,10 +7,21 @@
 
   const BUCKET_SEC = 0.05;   // Auflösung der Peak-Daten (muss zu session.js passen)
   const RULER_H = 22;
+  const PAN_THRESHOLD = 4;   // ab so vielen Pixeln Bewegung ist ein Klick ein Ziehen (Ansicht verschieben)
   const FLAG_H = 26;
   // Dezente, gut unterscheidbare Farbtöne für die Abschnitte (Reihenfolge der Anlage).
   const HUES = [212, 28, 150, 300, 48, 182, 346, 262];
   const hueOf = (section) => HUES[(section.color || 0) % HUES.length];
+
+  // Bereich der Lautheitsanzeige (LUFS)
+  const LOUD_MIN = -50;
+  const LOUD_MAX = -5;
+
+  /** LUFS-Wert für die Anzeige: „−19,4“ (Stille „–“); digits = Nachkommastellen. */
+  function lufsText(v, digits = 1) {
+    if (!Number.isFinite(v) || v <= -70) return '–';
+    return v.toFixed(digits).replace('.', ',').replace('-', '−');
+  }
 
   function fmt(t) {
     if (!isFinite(t) || t < 0) t = 0;
@@ -42,6 +53,12 @@
       this.hoverTime = null;
       this.dragging = null;
       this.colors = opts.colors || {};
+      // Lautheit (LUFS): Kurve (window.LoudnessCurve.Curve), an/aus, Ziel (Export) und ob die Aufnahme läuft/pausiert
+      this.loudness = null;
+      this.loudnessOn = false;
+      this.loudnessTarget = null;
+      this.loudnessLive = false;
+      this._loudCache = null;
 
       this.onEdgeMove = opts.onEdgeMove || (() => {});
       this.onEdgeMoveEnd = opts.onEdgeMoveEnd || (() => {});
@@ -171,9 +188,146 @@
       ctx.stroke();
 
       this._drawCuts(laneTop, h);
+      if (this.loudnessOn && this.loudness) this._drawLoudness(laneTop, laneH);
       this._drawHandles(laneTop, h);
       this._drawPlayhead(h);
       this._drawHover(h);
+    }
+
+    /* ------------------------------------------------------------ Lautheit */
+
+    /** y-Lage eines LUFS-Werts in der Wellenform-Fläche (−50 unten … −5 oben). */
+    _loudY(v, laneTop, laneH) {
+      const top = laneTop + 8;
+      const bottom = laneTop + laneH - 6;
+      const f = (LOUD_MAX - Math.max(LOUD_MIN, Math.min(LOUD_MAX, v))) / (LOUD_MAX - LOUD_MIN);
+      return top + f * (bottom - top);
+    }
+
+    /**
+     * Short-term-Lautheit (3 s) als Linie über der Wellenform, mit Skala, Ziellinie (Export-Lautheit) und Messwerten.
+     * Herausgezoomt wird über mehrere Pixel gemittelt (mindestens 3 s), damit die Linie ruhig bleibt.
+     */
+    _drawLoudness(laneTop, laneH) {
+      const ctx = this.ctx;
+      const c = this.colors;
+      const curve = this.loudness;
+      const L = window.LoudnessCurve;
+      const w = this.width;
+      const color = c.loud || '#F2C14E';
+
+      // Skala: feine Linien alle 10 LU, Beschriftung rechts
+      ctx.font = '10px system-ui, "Segoe UI", sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'right';
+      // In flachen Wellenformen (kompakte Ansicht, kleine Fenster) nur jede zweite Linie, sonst überlappen die Zahlen.
+      const gridStep = laneH >= 110 ? 10 : 20;
+      for (let v = -10 - (gridStep === 20 ? 10 : 0); v >= -40; v -= gridStep) {
+        const y = Math.round(this._loudY(v, laneTop, laneH)) + 0.5;
+        ctx.strokeStyle = c.loudGrid || 'rgba(242,193,78,0.12)';
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w - 30, y);
+        ctx.stroke();
+        ctx.fillStyle = c.muted || '#7D8CA0';
+        ctx.fillText(lufsText(v, 0), w - 4, y);
+      }
+      if (this.loudnessTarget != null) {
+        const y = Math.round(this._loudY(this.loudnessTarget, laneTop, laneH)) + 0.5;
+        ctx.strokeStyle = c.manual || '#2BB3A3';
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w - 30, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = c.manual || '#2BB3A3';
+        ctx.textAlign = 'left';
+        ctx.fillText(`Ziel ${lufsText(this.loudnessTarget, 0)}`, 6, y - 8);
+      }
+      ctx.textAlign = 'left';
+
+      // Kurve
+      const stepsPerPx = L.STEPS_PER_SECOND / this.pxPerSec;
+      // Hineingezoomt die echte Short-term-Kurve (3 s); herausgezoomt über etwa 6 Pixel gemittelt, sonst zappelt
+      // die Linie bei Sprache zwischen Sätzen und Pausen hin und her.
+      const span = Math.max(L.SHORT_TERM_STEPS, Math.round(stepsPerPx * 6));
+      const lastX = Math.min(w, this.timeToX(curve.length / L.STEPS_PER_SECOND));
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.75;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      let pen = false;
+      const stride = this.pxPerSec * 0.1 >= 2 ? 1 : 2;     // weit hineingezoomt: jeden Pixel, sonst jeden zweiten
+      for (let px = Math.max(0, Math.floor(this.timeToX(0))); px <= lastX; px += stride) {
+        const end = Math.min(curve.length, Math.floor(this.xToTime(px) * L.STEPS_PER_SECOND) + 1);
+        const v = curve.window(end, span);
+        if (!(v > LOUD_MIN)) { pen = false; continue; }      // Stille: Linie unterbrechen
+        const y = this._loudY(v, laneTop, laneH);
+        if (pen) ctx.lineTo(px, y); else ctx.moveTo(px, y);
+        pen = true;
+      }
+      ctx.stroke();
+      ctx.lineWidth = 1;
+
+      this._drawLoudnessReadout(laneTop, laneH, color);
+    }
+
+    /** Messwerte oben rechts: live Momentary/Short-term/Integriert, sonst Werte an der Mausposition und gesamt. */
+    _drawLoudnessReadout(laneTop, laneH, color) {
+      const ctx = this.ctx;
+      const c = this.colors;
+      const curve = this.loudness;
+      const L = window.LoudnessCurve;
+      // Integrierte Werte nur neu rechnen, wenn sich Kurve oder Abschnitt ändern (gezeichnet wird bei jeder Mausbewegung).
+      const sel = this.selectedSegment;
+      const open = this.sections.find((x) => x.start != null && x.end == null);
+      const ref = this.loudnessLive ? open : (sel && sel.markerId ? this.sections.find((x) => x.id === sel.markerId) : null);
+      const liveTick = this.loudnessLive ? Math.floor(curve.length / L.STEPS_PER_SECOND) : curve.length;
+      const key = `${liveTick}|${ref ? `${ref.id}:${ref.start}:${ref.end}` : ''}`;
+      if (!this._loudCache || this._loudCache.key !== key) {
+        const range = ref ? [ref.start * L.STEPS_PER_SECOND, (ref.end != null ? ref.end : this.duration) * L.STEPS_PER_SECOND] : null;
+        this._loudCache = { key, all: curve.integrated(), section: range ? curve.integrated(range[0], range[1]) : null, label: ref ? ref.label : null };
+      }
+      const cache = this._loudCache;
+
+      const lines = [];
+      if (this.loudnessLive) {
+        lines.push([`M ${lufsText(curve.momentary())}   S ${lufsText(curve.shortTerm())} LUFS`, true]);
+        lines.push([`I ${lufsText(cache.all)} gesamt`, false]);
+      } else if (this.hoverTime != null && this.hoverTime >= 0 && this.hoverTime <= this.duration && curve.length) {
+        lines.push([`S ${lufsText(curve.shortTerm(L.Curve.stepAt(this.hoverTime)))} LUFS bei ${fmt(this.hoverTime)}`, true]);
+        lines.push([`I ${lufsText(cache.all)} gesamt`, false]);
+      } else {
+        lines.push([`I ${lufsText(cache.all)} LUFS gesamt`, true]);
+      }
+      if (cache.label != null) lines.push([`${this._fitText(cache.label, 140)}: ${lufsText(cache.section)}`, false]);
+      // Nur so viele Zeilen, wie in die Wellenform passen (mindestens die erste)
+      lines.length = Math.max(1, Math.min(lines.length, Math.floor((laneH - 22) / 17)));
+
+      ctx.font = '600 13px system-ui, "Segoe UI", sans-serif';
+      const big = lines.filter((l) => l[1]).map((l) => ctx.measureText(l[0]).width);
+      ctx.font = '12px system-ui, "Segoe UI", sans-serif';
+      const small = lines.filter((l) => !l[1]).map((l) => ctx.measureText(l[0]).width);
+      const boxW = Math.ceil(Math.max(...big, ...small)) + 20;
+      const boxH = lines.length * 17 + 10;
+      const x = this.width - boxW - 40;
+      const y = laneTop + 6;
+      ctx.fillStyle = c.loudBox || 'rgba(16,20,25,0.82)';
+      ctx.beginPath();
+      ctx.roundRect(x, y, boxW, boxH, 6);
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = 0.5;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.textBaseline = 'middle';
+      lines.forEach(([text, strong], i) => {
+        ctx.font = strong ? '600 13px system-ui, "Segoe UI", sans-serif' : '12px system-ui, "Segoe UI", sans-serif';
+        ctx.fillStyle = strong ? color : (c.text || '#E6EBF0');
+        ctx.fillText(text, x + 10, y + 13 + i * 17);
+      });
+      ctx.font = '12px system-ui, "Segoe UI", sans-serif';
     }
 
     _drawSegmentBands(laneTop, laneH) {
@@ -482,11 +636,10 @@
           cv.setPointerCapture(e.pointerId);
           this.onSelectSection(handle.id);
           this.draw();
-        } else if (y > RULER_H) {
-          const t = Math.max(0, Math.min(this.duration, this.xToTime(x)));
-          this.onSeek(t);
         } else {
-          this._panning = { startX: x, startScroll: this.scrollT };
+          // Ziehen verschiebt die Ansicht (Zeitleiste und Wellenform); ein Klick ohne Bewegung in der Wellenform setzt
+          // die Marke – das entscheidet erst das Loslassen.
+          this._panning = { startX: x, startScroll: this.scrollT, moved: false, seek: y > RULER_H };
           cv.setPointerCapture(e.pointerId);
         }
       });
@@ -523,6 +676,11 @@
           return;
         }
         if (this._panning) {
+          if (!this._panning.moved && Math.abs(x - this._panning.startX) < PAN_THRESHOLD) return;
+          if (!this._panning.moved) {
+            this._panning.moved = true;
+            cv.style.cursor = 'grabbing';
+          }
           this.scrollT = this._panning.startScroll - (x - this._panning.startX) / this.pxPerSec;
           this.follow = false;
           this.onFollowChange(false);
@@ -534,7 +692,10 @@
         const over = this._handleAt(x, y);
         const hover = over && over.edge === 'start' ? { id: over.id, edge: 'start' } : null;
         if ((hover && hover.id) !== (this.hoverHandle && this.hoverHandle.id)) this.hoverHandle = hover;
-        cv.style.cursor = this._handleAt(x, y) || this._cutEdgeAt(x, y) ? 'ew-resize' : (y < RULER_H ? 'grab' : (e.shiftKey ? 'crosshair' : 'pointer'));
+        // Wellenform: Klick setzt die Marke, Ziehen verschiebt – herausgezoomt (alles sichtbar) gibt es nichts zu verschieben.
+        const pannable = this.duration > this.viewSeconds * 0.98 || this.scrollT > 0;
+        cv.style.cursor = this._handleAt(x, y) || this._cutEdgeAt(x, y) ? 'ew-resize'
+          : (e.shiftKey && y > RULER_H ? 'crosshair' : (y < RULER_H || pannable ? 'grab' : 'pointer'));
         this.draw();
       });
 
@@ -558,7 +719,14 @@
           this.dragging = null;
           this.draw();
         }
-        this._panning = null;
+        if (this._panning) {
+          const { moved, seek, startX } = this._panning;
+          this._panning = null;
+          if (!moved && seek && e.type === 'pointerup') {
+            this.onSeek(Math.max(0, Math.min(this.duration, this.xToTime(startX))));
+          }
+          cv.style.cursor = '';
+        }
         try { cv.releasePointerCapture(e.pointerId); } catch { /* schon freigegeben */ }
       };
       cv.addEventListener('pointerup', endDrag);

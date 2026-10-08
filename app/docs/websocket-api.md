@@ -8,6 +8,8 @@ steuern (Bitfocus Companion).
 - Zusätzlich: `GET http://<rechner>:<port>/health` liefert ohne Anmeldung
   `{"app":"ebbton","protocol":1,"status":"recording"}` –
   praktisch für eine einfache Erreichbarkeitsprüfung im Dashboard.
+- `GET http://<rechner>:<port>/` liefert eine fertige **Statusseite** für Handy und Tablet (`/status.js`,
+  `/status.css`). Sie meldet sich selbst per WebSocket an und bekommt als Webseite nur die Rolle `monitor`.
 - Alle Nachrichten sind JSON-Objekte mit einem Feld `type`.
 
 ## Anmeldung
@@ -129,6 +131,15 @@ Getrennt vom Zustand und auf 5×/s gedrosselt, damit das Netz nicht geflutet wir
 
 `l` und `r` sind Spitzenwerte von 0 bis 1. `clip` bleibt nach einer
 Übersteuerung zwei Sekunden lang `true`.
+
+Bei Stereo-Aufnahmen kommt zusätzlich die Lautheit nach EBU R128 mit (LUFS, auf 0,1 gerundet, `null` = Stille):
+
+```json
+"loudness": { "momentary": -18.2, "shortTerm": -19.5, "integrated": -20.1, "section": -19.8 }
+```
+
+`momentary` = letzte 0,4 s, `shortTerm` = letzte 3 s, `integrated` = ganze Aufnahme, `section` = laufender
+Abschnitt (`null` ohne Abschnitt). Die integrierten Werte ändern sich höchstens einmal je Sekunde.
 
 ### `event` – Ereignisse
 

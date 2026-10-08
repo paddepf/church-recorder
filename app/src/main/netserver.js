@@ -1,15 +1,32 @@
 'use strict';
 
+const fs = require('fs');
 const http = require('http');
+const os = require('os');
+const path = require('path');
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
 const { WebSocketServer } = require('ws');
 const settings = require('./settings');
 
+const STATUS_DIR = path.join(__dirname, '..', 'status');
+const STATUS_FILES = {
+  '/': { name: 'index.html', type: 'text/html; charset=utf-8' },
+  '/status.js': { name: 'status.js', type: 'text/javascript; charset=utf-8' },
+  '/status.css': { name: 'status.css', type: 'text/css; charset=utf-8' }
+};
+
 const PROTOCOL_VERSION = 1;
 const LEVEL_INTERVAL_MS = 200;
 const MAX_FAILURES = 5;        // Fehlversuche pro Adresse …
 const LOCK_MS = 60000;         // … danach so lange keine Anmeldung
+
+/** IPv4-Adressen dieses Rechners im lokalen Netz (für die Adresse der Statusseite). */
+function lanAddresses() {
+  return Object.values(os.networkInterfaces()).flat()
+    .filter((a) => a && a.family === 'IPv4' && !a.internal)
+    .map((a) => a.address);
+}
 
 function safeEqual(a, b) {
   const bufA = Buffer.from(String(a || ''));
@@ -65,6 +82,7 @@ class NetServer extends EventEmitter {
         }));
         return;
       }
+      if (this._serveStatusPage(req, res)) return;
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Ebbton: bitte über WebSocket verbinden.');
     });
@@ -103,6 +121,31 @@ class NetServer extends EventEmitter {
     return { ok: true, port: this.port };
   }
 
+  /**
+   * Statusseite für Handy/Tablet (`/`, Dateien aus `src/status`). Sie meldet sich selbst per WebSocket an; als
+   * Webseite bekommt sie immer nur die Rolle „monitor“. Nur feste Dateien, keine Pfade aus der Anfrage.
+   */
+  _serveStatusPage(req, res) {
+    if (req.method !== 'GET') return false;
+    const pathname = (req.url || '/').split('?')[0];
+    const file = STATUS_FILES[pathname];
+    if (!file) return false;
+    let body;
+    try {
+      body = fs.readFileSync(path.join(STATUS_DIR, file.name));
+    } catch {
+      return false;
+    }
+    res.writeHead(200, {
+      'Content-Type': file.type,
+      'Cache-Control': 'no-cache',
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': "default-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'"
+    });
+    res.end(body);
+    return true;
+  }
+
   stop() {
     if (this._ping) clearInterval(this._ping);
     this._ping = null;
@@ -132,7 +175,8 @@ class NetServer extends EventEmitter {
       port: this.port,
       clients: this.clientCount,
       passwordSet: Boolean(settings.get('networkPassword')),
-      monitorRoleEnabled: Boolean(settings.get('monitorPassword'))
+      monitorRoleEnabled: Boolean(settings.get('monitorPassword')),
+      statusUrls: this.running ? lanAddresses().map((ip) => `http://${ip}:${this.port}/`) : []
     };
   }
 

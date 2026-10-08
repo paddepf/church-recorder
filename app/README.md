@@ -117,9 +117,25 @@ Die Einstellungen sind in Reiter gegliedert (links: Audio, Ablage & Export, Chur
    Lange Namen werden in den Listen mit „…“ gekürzt; beim Darüberfahren erscheint
    der ganze Titel samt Interpret.
 
+**Lautheit (LUFS) in der Wellenform:** Der Schalter „LUFS“ unten links in der Wellenform blendet die Lautheit nach EBU R128
+als gelbe Linie ein (Skala rechts −10 … −40, gestrichelt das Ziel aus „Lautstärke angleichen“). Die Linie ist die
+Short-term-Lautheit, also das Mittel der letzten 3 s; herausgezoomt wird sie zusätzlich geglättet. Oben rechts stehen
+während der Aufnahme M (letzte 0,4 s), S (letzte 3 s) und die integrierte Lautheit der ganzen Aufnahme und des
+laufenden Abschnitts; danach die Werte an der Mausposition, gesamt und für den gewählten Abschnitt. Ältere
+Aufnahmen werden beim Öffnen einmal im Hintergrund nachgemessen (etwa 6 s je Stunde). Nur bei Stereo.
+
+Die MP3-Dateien werden beim Export auf eine einheitliche Lautheit gebracht (Einstellungen → Ablage & Export →
+„Lautstärke angleichen“, Vorgabe −16 LUFS wie bei Podcasts; „Aus“ lässt sie wie aufgenommen). Leise Aufnahmen werden
+dabei höchstens um 20 dB angehoben, Spitzen sanft auf −1 dBFS begrenzt. Die WAV bleibt unverändert.
+
 Die WAV-Masteraufnahme bleibt erhalten. Über „Aufnahmen“ kann eine frühere
 Session erneut geöffnet, die Marken nachjustiert und ein weiterer Abschnitt
-exportiert werden.
+exportiert werden. Das Archiv ist nach Monaten gegliedert, lässt sich durchsuchen (Gottesdienst, Datum,
+Interpret, Abschnitt) und filtern (z. B. „Nicht vollständig gesichert“); jede Aufnahme zeigt, ob ihre Abschnitte
+schon als MP3 gesichert sind, und „📂“ öffnet ihren Ordner.
+
+Während einer Aufnahme zeigt der Fenstertitel „● Aufnahme läuft“; unter Windows trägt das Symbol in der
+Taskleiste einen roten Punkt (pausiert orange, bei Problemen gelb), auf dem Mac das Dock-Symbol ein Abzeichen.
 
 ### Interpret aus ChurchTools
 
@@ -206,10 +222,17 @@ In der Kachel **Ablaufplan** lässt sich die Liste jederzeit anpassen:
 ### Oberfläche rund um die Wellenform
 
 Die Wellenform zeigt beim Start und bei jeder neuen oder fortgesetzten Aufnahme
-standardmäßig **5 Minuten** auf einmal; mit den Knöpfen `+`/`−`, `Strg` + Mausrad oder
-`Umschalt` + Mausrad lässt sich zoomen. Eine beendete oder geöffnete Aufnahme wird komplett eingepasst. Lange
+standardmäßig **5 Minuten** auf einmal; mit den Lupen-Knöpfen rechts über der Wellenform, `Strg` + Mausrad oder
+`Umschalt` + Mausrad lässt sich zoomen. Hineingezoomt verschiebt **Ziehen mit der Maus** (in der Wellenform oder der
+Zeitleiste) die Ansicht hin und her; ein einfacher Klick ohne Bewegung setzt wie gewohnt die Hörmarke. Eine beendete
+oder geöffnete Aufnahme wird komplett eingepasst. Lange
 Abschnittsnamen werden an der Marke mit „…“ gekürzt, damit sich Beschriftungen
 nicht überlappen; weiter hineinzoomen zeigt mehr vom Namen.
+
+Über der Wellenform rechts sitzt der runde **Abspielknopf**: ▶ spielt ab der Marke, ❚❚ hält an; während der
+Aufnahme zeigt er einen Kopfhörer (Mithören ab dem Cursor), bei Mehrspur „▶ Zum Pult“ bzw. „■ Stopp“. Unten links in
+der Wellenform liegen die Schalter **LUFS** (Lautheitslinie), **Folgen** (Ansicht läuft mit der Live-Stelle mit) und
+bei Mehrspur **Schleife**; eingeschaltet sind sie farbig.
 
 Unter der Wellenform stehen drei Bereiche: **Ablaufplan** (offene Punkte),
 **Abschnitte** (gesetzte Abschnitte mit Zeitraum, Doppelklick zum Umbenennen) und
@@ -302,6 +325,11 @@ Beschreibung aller Nachrichten: [`docs/websocket-api.md`](docs/websocket-api.md)
 Kurz: `ws://<rechner>:8765/`, Anmeldung mit
 `{"type":"auth","password":"…"}`, danach kommen `state`- und `levels`-Nachrichten.
 Für eine reine Statusabfrage genügt `http://<rechner>:8765/health`.
+
+**Statusseite für Handy und Tablet:** `http://<rechner>:8765/` im Browser öffnen (die genaue Adresse steht unter
+Einstellungen → Netzwerk) und mit dem Passwort zum Mitlesen anmelden. Die Seite zeigt Zustand, Laufzeit, Pegel,
+Warnungen sowie den aktuellen und nächsten Ablaufpunkt – praktisch für den Prediger oder wenn man nicht am
+Technikplatz steht. Steuern lässt sich dort nichts.
 
 Das Companion-Modul liegt im Ordner `companion-module/` dieses Repositorys.
 
@@ -409,6 +437,7 @@ src/main/        Hauptprozess
   session.js     Zustand, Abschnitte, Aufnahme/Fortsetzen, Autosave
   wav.js         WAV/RF64 schreiben (eigener Thread), lesen, Cue-Marker (Abschnitte) eintragen
   mp3.js         MP3-Export eines Abschnitts
+  loudness.js    Lautheit messen (LUFS) und Spitzen begrenzen für den Export
   id3.js         ID3-Tags (Titel, Interpret, Album, Jahr)
   churchtools.js ChurchTools-API
   netserver.js   WebSocket-Schnittstelle
@@ -431,7 +460,9 @@ src/main/        Hauptprozess
 src/shared/      Von Hauptprozess und Oberfläche gemeinsam genutzt
   sections.js    Regeln für Abschnitte (Verschieben ohne Überlappung)
   roles.js       Zuordnung Dienst (ChurchTools) zu Programmpunkt
+  loudness-curve.js  Lautheitskurve: Momentary, Short-term, integriert aus 100-ms-Werten
 src/preload.js   Brücke zur Oberfläche
+src/status/      Statusseite für Handy/Tablet (vom Netzwerkserver ausgeliefert)
 src/renderer/    Oberfläche
   capture.js     Audioerfassung (AudioWorklet)
   monitor.js     Mithören der laufenden Aufnahme
@@ -453,6 +484,8 @@ Version des Zustands – Oberfläche, Netzwerk und Companion sehen alle dasselbe
 Für Aufnahmen aller 32 Kanäle des Midas M32 (DN32-USB-Karte, ASIO) gibt es einen eigenen Aufnahmeweg:
 Ein eigener Prozess öffnet das Gerät über `audify` (RtAudio; unter Windows ASIO) und schreibt je
 Kanal eine 24-Bit-Mono-WAV. Die Oberfläche erfasst dabei nichts selbst.
+Stürzt dieser Prozess während der Aufnahme ab, startet Ebbton ihn neu und schreibt in dieselben Spuren weiter;
+es fehlt nur die Zeit dazwischen (Meldung mit Stelle und Länge). Gelingt das etwa 50 s lang nicht, wird die Aufnahme beendet.
 
 **Bedienung:** Die Aufnahmeart wird unter *Einstellungen → Audio → Aufnahmeart* gewählt (oder per Companion); im
 Normalfall Stereo. Ist Mehrspur eingestellt, steht oben rechts ein farbiges Schild **„● Mehrspur“** – ein Klick darauf

@@ -7,6 +7,9 @@ const { WavWriter, readInfo, readSlice, writeCues } = require('./wav');
 const settings = require('./settings');
 const SectionLogic = require('../shared/sections');
 const RoleLogic = require('../shared/roles');
+const Loudness = require('../shared/loudness-curve');
+const { LoudnessMeter } = require('./loudness');
+const { readFrames } = require('./wav');
 
 const PEAK_BUCKET_MS = 50;   // Auflösung der Wellenform
 const AUTOSAVE_MS = 3000;
@@ -92,6 +95,10 @@ class Session extends EventEmitter {
     this._lastEdit = this._editJson();
     this._colorSeq = 0;
     this.peaks = [];                    // 0..255 je 50 ms
+    this.loudness = [];                 // Stereo: Lautheit je 100 ms (LUFS, null = Stille), siehe shared/loudness-curve.js
+    this._loudCurve = new Loudness.Curve(this.loudness);
+    this._loudMeter = null;             // misst während der Aufnahme
+    this._loudJob = (this._loudJob || 0) + 1;   // laufende Nachberechnung einer geladenen Aufnahme ungültig machen
     this.mode = 'stereo';               // stereo | multitrack (Mehrspuraufnahme, siehe multitrack/)
     this.tracks = [];                   // Mehrspur: {channel (0-basiert), name, color (Pultfarbe 0–15), file (Dateiname im Spurordner)}
     this.trackDir = null;               // Mehrspur: Ordner mit Spuren und Session-Datei
@@ -685,6 +692,7 @@ class Session extends EventEmitter {
     this.finalized = false;
     this._cueKey = null;
     this.peaks = [];
+    this._startLoudness(rate, ch, 0);
     this._restoredDuration = 0;
     this._bucketAcc = 0;
     this._bucketFrames = 0;
@@ -798,11 +806,112 @@ class Session extends EventEmitter {
     const wanted = Math.floor((this.writer.durationSeconds * 1000) / PEAK_BUCKET_MS);
     while (this.peaks.length < wanted) this.peaks.push(0);
     this.peaks.length = Math.min(this.peaks.length, wanted);
+    this._startLoudness(this.sampleRate, this.channels, this.writer.durationSeconds);
 
     this._startAutosave();
     this._changed();
     this.emit('recording-started', { wavPath: this.wavPath, sampleRate: this.sampleRate, channels: this.channels, mode: this.mode });
     return { ok: true, wavPath: this.wavPath, sampleRate: this.sampleRate, channels: this.channels, mode: this.mode };
+  }
+
+  /**
+   * Mehrspur: Nach einem Absturz des Mehrspur-Prozesses schreibt ein neu gestarteter weiter in dieselben Spuren
+   * (angehängt). Die Aufnahme läuft dabei ohne Unterbrechung weiter; Abschnitte und Pause bleiben, wie sie sind.
+   */
+  replaceWriter(writer) {
+    if (this.status !== 'recording' && this.status !== 'paused') return false;
+    this.writer = writer;
+    this._attachWriter(writer);
+    if (this.status === 'paused' && writer.pause) writer.pause();
+    // Wellenform an die Länge der Spuren angleichen (die letzten Pegelmeldungen vor dem Absturz fehlen ggf.).
+    const wanted = Math.floor((writer.durationSeconds * 1000) / PEAK_BUCKET_MS);
+    while (this.peaks.length < wanted) this.peaks.push(0);
+    this.peaks.length = Math.min(this.peaks.length, wanted);
+    this._changed({ undoable: false });
+    this.save();
+    return true;
+  }
+
+  /* -------------------------------------------------------------- Lautheit */
+
+  /**
+   * Lautheitsmessung für eine (fortgesetzte) Stereo-Aufnahme: Die Kurve wird auf die Länge der Aufnahme gebracht
+   * (beim Anhängen mit Lücke = Stille aufgefüllt), danach wächst sie mit jedem Audioblock. Mehrspur misst nicht
+   * (es gibt keinen Stereo-Mix).
+   */
+  _startLoudness(rate, channels, seconds) {
+    this._loudJob += 1;
+    if (this.mode === 'multitrack') {
+      this._loudMeter = null;
+      this.loudness = [];
+    } else {
+      this._loudMeter = new LoudnessMeter(rate, channels);
+      const wanted = Math.floor(seconds * Loudness.STEPS_PER_SECOND);
+      const list = seconds > 0 ? this.loudness.slice(0, wanted) : [];
+      while (list.length < wanted) list.push(null);
+      this.loudness = list;
+    }
+    this._loudCurve = new Loudness.Curve(this.loudness);
+    this._loudInfo = null;
+  }
+
+  /** Neue Messwerte aus dem Audioblock; liefert die neuen 100-ms-Werte und die aktuelle Anzeige. */
+  _measureLoudness(buffer, frames) {
+    if (!this._loudMeter) return null;
+    const samples = buffer.byteOffset % 2 === 0
+      ? new Int16Array(buffer.buffer, buffer.byteOffset, frames * this.channels)
+      : new Int16Array(Buffer.from(buffer).buffer, 0, frames * this.channels);
+    this._loudMeter.push(samples, frames);
+    const steps = this._loudMeter.steps.map(Loudness.stepValue);
+    this._loudMeter.steps.length = 0;
+    if (steps.length) this._loudCurve.push(steps);
+    return { steps, ...this.loudnessInfo() };
+  }
+
+  /**
+   * Anzeige: Momentary (0,4 s), Short-term (3 s), integriert über die ganze Aufnahme und über den laufenden
+   * Abschnitt (LUFS, null = Stille). Die integrierten Werte höchstens einmal je Sekunde neu rechnen.
+   */
+  loudnessInfo() {
+    const c = this._loudCurve;
+    const num = (v) => (Number.isFinite(v) ? Math.round(v * 10) / 10 : null);
+    const now = Date.now();
+    if (!this._loudInfo || now - this._loudInfo.at > 1000) {
+      const open = this.openSection();
+      this._loudInfo = {
+        at: now,
+        integrated: num(c.integrated()),
+        section: open ? num(c.integrated(open.start * Loudness.STEPS_PER_SECOND)) : null
+      };
+    }
+    return { momentary: num(c.momentary()), shortTerm: num(c.shortTerm()), integrated: this._loudInfo.integrated, section: this._loudInfo.section };
+  }
+
+  /**
+   * Geladene Stereo-Aufnahme ohne gespeicherte Lautheit (älter als diese Funktion): im Hintergrund aus der WAV
+   * messen, in Stücken von 5 s Audio, damit der Hauptprozess bedienbar bleibt. Meldet 'loudness' mit der Kurve.
+   */
+  async _computeLoudness() {
+    const job = ++this._loudJob;
+    const file = this.wavPath;
+    try {
+      const info = readInfo(file);
+      const meter = new LoudnessMeter(info.sampleRate, info.channels);
+      const chunk = info.sampleRate * 5;
+      for (let f = 0; f < info.frames; f += chunk) {
+        const { samples } = readFrames(file, f, chunk, info);
+        meter.push(samples, samples.length / info.channels);
+        await new Promise((r) => setImmediate(r));
+        if (job !== this._loudJob) return;          // inzwischen andere Aufnahme geladen oder neu begonnen
+      }
+      this.loudness = meter.steps.map(Loudness.stepValue);
+      this._loudCurve = new Loudness.Curve(this.loudness);
+      this._loudInfo = null;
+      this.emit('loudness', { loudness: this.loudness });
+      this.save();
+    } catch (err) {
+      console.warn('Lautheit konnte nicht nachberechnet werden:', err.message);
+    }
   }
 
   /** Fehler und Engpässe des Schreib-Threads weitergeben (Platte voll, Laufwerk zu langsam …). */
@@ -892,7 +1001,7 @@ class Session extends EventEmitter {
     if (peakL >= 0.999 || peakR >= 0.999) this._clipUntil = now + 2000;
     this.levels = { l: peakL, r: peakR, clip: now < this._clipUntil };
 
-    this.emit('levels', { ...this.levels, duration: this.duration });
+    this.emit('levels', { ...this.levels, duration: this.duration, loudness: this._measureLoudness(buffer, frames) });
   }
 
   /**
@@ -969,7 +1078,8 @@ class Session extends EventEmitter {
       sections: this.sections,
       exports: this.exports,
       cuts: this.cuts,
-      peaks: this.peaks
+      peaks: this.peaks,
+      loudness: this.mode === 'multitrack' ? undefined : this.loudness
     };
     try {
       fs.writeFileSync(target + '.tmp', JSON.stringify(data), 'utf8');
@@ -1000,6 +1110,8 @@ class Session extends EventEmitter {
     this.service = data.service || this.service;
     this.agendaOrigin = data.agendaOrigin || null;
     this.peaks = data.peaks || [];
+    this.loudness = Array.isArray(data.loudness) ? data.loudness : [];
+    this._loudCurve = new Loudness.Curve(this.loudness);
     this.sampleRate = data.sampleRate || this.sampleRate;
     this.channels = data.channels || 2;
     this.startedAt = data.startedAt || null;
@@ -1023,6 +1135,11 @@ class Session extends EventEmitter {
     // Eine unterbrochene Aufnahme gilt nach dem Öffnen als wiederhergestellt: so in der Datei vermerken,
     // sonst wird sie bei jedem Start erneut als "unterbrochen" gemeldet.
     if (data.finalized === false || data.status === 'recording' || data.status === 'paused') this.save();
+    // Ältere oder unterbrochene Aufnahmen ohne (vollständige) Lautheit: im Hintergrund nachmessen.
+    const steps = Math.floor(duration * Loudness.STEPS_PER_SECOND);
+    if (this.mode === 'stereo' && this.wavPath && fs.existsSync(this.wavPath) && this.loudness.length < steps - Loudness.STEPS_PER_SECOND) {
+      this._computeLoudness();
+    }
     return this.snapshot();
   }
 }

@@ -114,3 +114,23 @@ test('Ereignisse: Mitlesende ohne Dateipfade', async (t) => {
   mon.ws.close();
   ctl.ws.close();
 });
+
+test('Statusseite: feste Dateien ohne Anmeldung, sonst 404', async (t) => {
+  const net = new NetServer();
+  assert.equal(net.start().ok, true);
+  t.after(() => net.stop());
+  const get = async (p) => {
+    const res = await fetch(`http://127.0.0.1:${PORT}${p}`);
+    return { status: res.status, type: res.headers.get('content-type'), csp: res.headers.get('content-security-policy'), body: await res.text() };
+  };
+  const page = await get('/');
+  assert.equal(page.status, 200);
+  assert.match(page.type, /text\/html/);
+  assert.match(page.body, /status\.js/);
+  assert.match(page.csp, /default-src 'self'/);
+  assert.equal((await get('/status.js')).status, 200);
+  assert.match((await get('/status.css')).type, /text\/css/);
+  assert.equal((await get('/../main/settings.js')).status, 404);
+  assert.equal((await get('/index.html')).status, 404);
+  assert.equal(JSON.parse((await get('/health')).body).app, 'ebbton');
+});

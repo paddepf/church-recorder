@@ -8,7 +8,7 @@ if (process.env.EBBTON_MT_PROBE) {
 
 const fs = require('fs');
 const path = require('path');
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, screen, systemPreferences, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, screen, systemPreferences, powerSaveBlocker, nativeImage } = require('electron');
 
 const settings = require('./settings');
 const { Session, slug, dateStamp } = require('./session');
@@ -297,9 +297,7 @@ multitrack.on('gap', ({ at, seconds, recording }) => {
   if (!recording) return;
   health.inputLost = false;
   publishHealth();
-  const m = Math.floor(at / 60);
-  const sec = String(Math.floor(at % 60)).padStart(2, '0');
-  toast('warn', `Mehrspur: Eingang wieder da. Bei ${m}:${sec} fehlen etwa ${seconds.toFixed(1)} s in der Aufnahme.`);
+  toast('warn', `Mehrspur: Eingang wieder da. Bei ${fmtClock(at)} fehlen etwa ${seconds.toFixed(1)} s in der Aufnahme.`);
 });
 multitrack.on('reopen', ({ ok: reopened, error }) => {
   // Nur den ersten Fehlschlag protokollieren (sonst alle 3 s dieselbe Zeile, solange das Gerät fehlt).
@@ -329,10 +327,68 @@ multitrack.on('exit', ({ code, wasRecording }) => {
   sendMultitrack();
   if (giveUp) toast('error', 'Der Mehrspur-Prozess stürzt wiederholt ab – Mehrspur ist bis zum Neustart von Ebbton aus.');
   else setTimeout(updateMonitor, 2000);
-  if (!wasRecording) return;
-  toast('error', 'Der Mehrspur-Prozess ist abgestürzt. Die Aufnahme wurde beendet; die Spuren bis hierher sind gespeichert.');
-  if (session.mode === 'multitrack' && (session.status === 'recording' || session.status === 'paused')) session.stop();
+  if (wasRecording && session.mode === 'multitrack' && isBusy()) recoverMultitrack();
 });
+
+/* Absturz während der Aufnahme: Der Mehrspur-Prozess wird neu gestartet und hängt an dieselben Spuren an; die
+   Aufnahme (Abschnitte, Pause, Session-Datei) läuft in Ebbton einfach weiter. Es fehlt nur die Zeit dazwischen. */
+const MT_RECOVER_DELAYS = [1000, 2000, 3000, 3000, 5000, 5000, 5000, 5000, 10000, 10000];   // etwa 50 s
+let mtRecovering = false;
+
+function crashLooping() {
+  const now = Date.now();
+  return multitrackExits.filter((t) => now - t < 60000).length > 3;
+}
+
+async function recoverMultitrack() {
+  if (session.writer?.abandon) session.writer.abandon();   // der alte Stellvertreter hat keinen Prozess mehr
+  if (mtRecovering) return;                                // ein laufender Versuch macht weiter
+  mtRecovering = true;
+  const lostAt = session.duration;
+  const lostSince = Date.now();
+  health.inputLost = true;
+  publishHealth();
+  try {
+    if (!crashLooping()) {
+      toast('error', 'Der Mehrspur-Prozess ist abgestürzt – er wird neu gestartet, die Aufnahme geht in denselben Spuren weiter.');
+    }
+    for (const delay of MT_RECOVER_DELAYS) {
+      if (crashLooping()) break;
+      await new Promise((r) => setTimeout(r, delay));
+      if (session.mode !== 'multitrack' || !isBusy()) return;   // inzwischen beendet
+      let info;
+      try {
+        const { device, simulate } = await multitrackDevice();
+        info = await multitrack.start({ simulate, deviceId: device.id, tracks: session.trackFiles(), sampleRate: session.sampleRate, append: true });
+      } catch (err) {
+        console.warn('Mehrspur: Neustart nach Absturz fehlgeschlagen:', err.message);
+        continue;
+      }
+      if (!isBusy()) {                                         // während des Starts beendet
+        await multitrack.stop().catch(() => {});
+        return;
+      }
+      lastMultitrackRate = info.sampleRate;
+      session.replaceWriter(multitrack.writer(info));
+      monitorState = { active: true, info, error: null, stalled: false };
+      sendMultitrack();
+      health.inputLost = false;
+      publishHealth();
+      const seconds = (Date.now() - lostSince) / 1000;
+      toast('warn', `Mehrspur läuft wieder. Bei ${fmtClock(lostAt)} fehlen etwa ${Math.round(seconds)} s in der Aufnahme.`);
+      return;
+    }
+    toast('error', 'Der Mehrspur-Prozess ließ sich nicht wieder starten. Die Aufnahme wurde beendet; die Spuren bis zum Absturz sind gespeichert.');
+    if (session.mode === 'multitrack' && isBusy()) session.stop();
+  } finally {
+    mtRecovering = false;
+  }
+}
+
+/** Sekunden als m:ss. */
+function fmtClock(seconds) {
+  return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+}
 
 function currentHealth() {
   const input = health.inputLost || health.chunksStale ? 'lost' : (health.silent ? 'silent' : 'ok');
@@ -358,6 +414,7 @@ function publishHealth() {
   lastHealthJson = json;
   send('health', h);
   net.publishState(netState());
+  updateTaskbar();
 }
 
 /* Wächter im Hauptprozess: kommen während der Aufnahme keine Audioblöcke mehr an (Oberfläche hängt,
@@ -558,6 +615,53 @@ function setupApplicationMenu() {
   ];
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+/* ------------------------------------------------- Kennzeichen in Taskleiste/Dock */
+
+// Auch bei verdecktem Fenster soll man sehen, ob aufgenommen wird: Windows bekommt einen farbigen Punkt über dem
+// Symbol in der Taskleiste, macOS ein Abzeichen am Dock-Symbol, beide einen Fenstertitel mit Zustand.
+const TASKBAR_COLORS = { recording: [0xe5, 0x39, 0x35], paused: [0xff, 0xa7, 0x26], problem: [0xff, 0xd6, 0x00] };
+const overlayIcons = {};
+
+/** Runder Punkt (16 × 16, BGRA) mit dünnem dunklem Rand, ohne Bilddatei. */
+function dotIcon(kind) {
+  if (overlayIcons[kind]) return overlayIcons[kind];
+  const size = 16;
+  const [r, g, b] = TASKBAR_COLORS[kind];
+  const buf = Buffer.alloc(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const d = Math.hypot(x + 0.5 - size / 2, y + 0.5 - size / 2);
+      const alpha = Math.max(0, Math.min(1, size / 2 - d));            // weiche Kante
+      const edge = d > size / 2 - 2;                                    // Rand für hellen und dunklen Hintergrund
+      const i = (y * size + x) * 4;
+      buf[i] = edge ? 0x20 : b;
+      buf[i + 1] = edge ? 0x20 : g;
+      buf[i + 2] = edge ? 0x20 : r;
+      buf[i + 3] = Math.round(alpha * 255);
+    }
+  }
+  overlayIcons[kind] = nativeImage.createFromBitmap(buf, { width: size, height: size });
+  return overlayIcons[kind];
+}
+
+let taskbarKey = null;
+/** Zustand der Aufnahme an Taskleiste bzw. Dock und Fenstertitel (nur bei Änderung). */
+function updateTaskbar() {
+  if (!win || win.isDestroyed()) return;
+  const h = currentHealth();
+  const problem = isBusy() && (h.input === 'lost' || h.write === 'error');
+  const kind = problem ? 'problem' : (session.status === 'recording' ? 'recording' : (session.status === 'paused' ? 'paused' : null));
+  if (kind === taskbarKey) return;
+  taskbarKey = kind;
+  const label = { recording: 'Aufnahme läuft', paused: 'Aufnahme pausiert', problem: 'Aufnahme: Problem' }[kind];
+  win.setTitle(label ? `● ${label} – Ebbton` : 'Ebbton');
+  if (process.platform === 'win32') {
+    win.setOverlayIcon(kind ? dotIcon(kind) : null, label || '');
+  } else if (process.platform === 'darwin' && app.dock) {
+    app.dock.setBadge({ recording: '●', paused: '❚❚', problem: '!' }[kind] || '');
+  }
 }
 
 /* ------------------------------------------------------------------- Fenster */
@@ -776,6 +880,10 @@ function createWindow() {
 
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   win.once('ready-to-show', () => win.show());
+  // Den Titel setzt der Hauptprozess (Aufnahmezustand, siehe updateTaskbar), nicht das <title> der Oberfläche.
+  win.on('page-title-updated', (e) => e.preventDefault());
+  taskbarKey = undefined;
+  updateTaskbar();
   if (isDev) {
     // Die DevTools stören bei jedem Neustart (sie holen sich den Fokus). Daher nur
     // auf Wunsch: per F12 / Strg+Umschalt+I, oder dauerhaft mit "npm run dev:tools".
@@ -817,12 +925,20 @@ function createWindow() {
 
 /* ------------------------------------------------------------- Verdrahtungen */
 
-session.on('state', (s) => pushState(s));
+session.on('state', (s) => {
+  pushState(s);
+  updateTaskbar();
+});
 
 session.on('levels', (levels) => {
   send('levels', levels);
   // Netzwerk: nur der Gesamtpegel (die Pegel aller Mehrspur-Kanäle und die Wellenform braucht dort niemand).
-  const { tracks, buckets, ...overall } = levels;
+  // Lautheit: nur die Anzeigewerte, nicht die einzelnen 100-ms-Messwerte der Kurve.
+  const { tracks, buckets, loudness, ...overall } = levels;
+  if (loudness) {
+    const { steps, ...values } = loudness;
+    overall.loudness = values;
+  }
   net.publishLevels(overall);
 
   // Stille: lange fast kein Pegel, obwohl aufgenommen wird (z. B. Mischpult stumm).
@@ -873,6 +989,7 @@ session.on('recording-stopped', (info) => {
 });
 
 session.on('error-notice', (message) => toast('error', message));
+session.on('loudness', (data) => send('loudness', data));   // nachgemessene Lautheit einer geladenen Aufnahme
 
 // Schreib-Thread: Platte voll, Laufwerk entfernt, zu langsam … – sofort sichtbar machen, auch für Companion.
 session.on('write-error', (err) => {
@@ -1325,6 +1442,12 @@ function freeFilePath(filePath) {
   }
 }
 
+/** Ziel-Lautheit der MP3-Dateien in LUFS (−30 … −10), 0/leer = nicht angleichen. */
+function loudnessTarget() {
+  const t = Number(settings.get('loudnessTarget'));
+  return Number.isFinite(t) && t <= -10 && t >= -30 ? t : 0;
+}
+
 /** Zielordner für Exporte bei gesetztem Oberordner, sonst null (dann wird gefragt). */
 function exportTargetFolder() {
   const base = settings.get('exportDir');
@@ -1376,6 +1499,7 @@ ipcMain.handle('export:batch', async (_e, { items } = {}) => {
           bitrate: settings.get('mp3Bitrate') || 192,
           tags,
           skip: cuts,
+          loudness: loudnessTarget() ? { target: loudnessTarget(), ceilingDb: -1 } : null,
           onProgress: (p) => send('export-progress', { progress: (i + p) / items.length, index: i + 1, total: items.length })
         });
         files.push(result.outPath);
@@ -1433,14 +1557,35 @@ function sessionFiles() {
   return files;
 }
 
+/**
+ * Sicherungsstand einer Aufnahme fürs Archiv: beendete Abschnitte, davon als MP3 gesichert bzw. seit dem Export
+ * geändert (Anfang/Ende verschoben), und ob die gesamte Aufnahme gesichert ist.
+ */
+function exportSummary(data) {
+  const sections = Array.isArray(data.sections) ? data.sections.filter((x) => x.start != null && x.end != null) : [];
+  const exp = data.exports && typeof data.exports === 'object' ? data.exports : {};
+  let saved = 0;
+  let changed = 0;
+  for (const x of sections) {
+    const e = exp[`seg_${x.id}`];
+    if (!e) continue;
+    if (Math.abs((e.start ?? x.start) - x.start) > 0.05 || Math.abs((e.end ?? x.end) - x.end) > 0.05) changed += 1;
+    else saved += 1;
+  }
+  return { sections: sections.length, saved, changed, full: Boolean(exp.seg_full) };
+}
+
 function listSessions() {
   return sessionFiles().map((full) => {
-    const f = path.basename(full);
     try {
       const data = JSON.parse(fs.readFileSync(full, 'utf8'));
+      const placed = Array.isArray(data.sections) ? data.sections.filter((x) => x.start != null) : [];
       return {
         path: full,
-        name: data.service?.name || f,
+        labels: placed.map((x) => String(x.label || '')),
+        artists: [...new Set(placed.map((x) => String(x.artist || '').trim()).filter(Boolean))],
+        exported: data.mode === 'multitrack' ? null : exportSummary(data),
+        name: data.service?.name || 'Ohne Gottesdienst',
         date: data.service?.date || '',
         startedAt: data.startedAt || null,
         duration: data.duration || 0,
@@ -1488,7 +1633,7 @@ ipcMain.handle('session:new', () => {
   return ok({ state: session.snapshot() });
 });
 
-ipcMain.handle('session:state', () => ok({ state: session.snapshot(), peaks: session.peaks }));
+ipcMain.handle('session:state', () => ok({ state: session.snapshot(), peaks: session.peaks, loudness: session.loudness }));
 
 /* --- Netzwerk & Updates --- */
 

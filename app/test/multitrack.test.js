@@ -396,3 +396,42 @@ test('Engine reicht die Kennung des Standardgeräts weiter und unterdrückt „n
   assert.deepEqual(warnings, ['etwas anderes']);
   engine.unmonitor();
 });
+
+test('Absturz des Mehrspur-Prozesses: neuer Prozess hängt an dieselben Spuren an, die Aufnahme läuft weiter', async () => {
+  setSettings({ recordingsDir: tmpDir() });
+  const { Session } = require(src('main/session'));
+  const s = new Session();
+  const m1 = new InProcessManager(new MultitrackEngine());
+  m1.on('levels', (l) => s.pushTrackLevels(l));
+  const { folder, base } = s.multitrackTarget(tmpDir());
+  const tracks = [0, 3].map((c) => ({ channel: c, name: `Kanal ${c + 1}`, file: path.join(folder, `${c + 1}.wav`) }));
+  const info = await m1.start({ simulate: true, deviceId: SIM_DEVICE_ID, tracks });
+  const proxy1 = m1.writer(info);
+  assert.equal(s.start({ multitrack: { writer: proxy1, tracks, base, folder } }).ok, true);
+  await wait(500);
+  s.toggleSection({ label: 'Predigt' });
+
+  // „Absturz“: der alte Prozess schreibt nicht mehr, sein Stellvertreter wird aufgegeben
+  await m1.engine.stop();
+  proxy1.abandon();
+  const frozen = s.duration;
+  await wait(200);
+  assert.equal(s.duration, frozen, 'Dauer bleibt stehen, solange kein Prozess schreibt');
+  assert.equal(s.status, 'recording');
+
+  const m2 = new InProcessManager(new MultitrackEngine());
+  m2.on('levels', (l) => s.pushTrackLevels(l));
+  const info2 = await m2.start({ simulate: true, deviceId: SIM_DEVICE_ID, tracks: s.trackFiles(), sampleRate: s.sampleRate, append: true });
+  assert.equal(s.replaceWriter(m2.writer(info2)), true);
+  await wait(500);
+  s.stop();
+  await s.whenWritten();
+  s._stopAutosave();
+
+  assert.ok(s.duration > frozen + 0.35, `weiter aufgenommen: ${s.duration} nach ${frozen}`);
+  assert.equal(new Set(tracks.map((t) => fs.statSync(t.file).size)).size, 1, 'Spuren gleich lang');
+  assert.ok(Math.abs(wav.readInfo(tracks[0].file).duration - s.duration) < 0.06);
+  assert.ok(Math.abs(s.placedSections()[0].end - s.duration) < 0.1, 'Abschnitt lief über den Absturz hinweg');
+  assert.equal(await proxy1.close(), null, 'aufgegebener Stellvertreter beendet nichts mehr');
+  assert.equal(new Session().replaceWriter({}), false, 'ohne laufende Aufnahme nichts zu ersetzen');
+});

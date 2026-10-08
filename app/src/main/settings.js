@@ -31,6 +31,7 @@ const DEFAULTS = {
   fileNamePattern: '{interpret}_{abschnitt}_{gottesdienst}_{datum}',
   exportDir: '',                // Oberordner für MP3-Exporte; leer = beim Export nachfragen
   mp3Bitrate: 192,
+  loudnessTarget: -16,          // Lautheit der MP3-Dateien in LUFS (−16 = üblich für Podcasts); 0 = unverändert lassen
   // Vorlagen für Programmpunkte; die Standardvorlage wird genutzt, wenn ChurchTools keinen Ablaufplan hat
   agendaTemplates: [{ id: 'tpl_default', name: 'Gottesdienst', items: ['Einleitung', 'Kinderbeitrag', 'Predigt', 'Abschluss'] }],
   defaultTemplateId: 'tpl_default',
@@ -58,6 +59,7 @@ const DEFAULTS = {
   compactOnTop: true,           // Mini-Fenster bleibt über anderen Programmen
   compactBounds: null,          // zuletzt benutzte Lage des Mini-Fensters ({ x, y, width, height })
   compactLayout: 2,             // Stand des Mini-Fensters; ältere gespeicherte Lagen (größer) werden verworfen
+  loudnessMonitor: true,        // Lautheit (LUFS) als Linie über der Wellenform
   denseLayout: true,            // kompakte Ansicht (Voreinstellung): alle Bereiche, aber kleiner (kleinere Fenster möglich)
   denseBounds: null,            // zuletzt benutzte Lage des Fensters in der kompakten Ansicht
   largeBounds: null             // Lage des großen Fensters vor dem Umschalten auf kompakt ({ x, y, width, height, maximized })

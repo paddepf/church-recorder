@@ -7,6 +7,7 @@
   const fmt = window.formatTime;
 
   const state = {
+    loud: new window.LoudnessCurve.Curve([]),   // Lautheit je 100 ms (vom Hauptprozess gemessen)
     settings: null,
     session: null,
     peaks: [],
@@ -143,6 +144,7 @@
 
     const st = await window.api.session.state();
     if (st.ok) {
+      setLoudness(st.loudness);
       applyState(st.state, st.peaks);
       if (st.state.status === 'stopped') fitZoom();
     }
@@ -188,11 +190,17 @@
 
   async function updateBadges(info) {
     const net = await window.api.net.status();
-    if (net.ok) {
-      $('net-info').textContent = net.running
-        ? `Läuft auf Port ${net.port}. Verbundene Clients: ${net.clients}.`
-        : (net.passwordSet ? 'Nicht aktiv.' : 'Kein Passwort gesetzt – die Schnittstelle bleibt aus.');
-    }
+    if (net.ok) renderNetInfo(net);
+  }
+
+  /** Netzwerkstatus in den Einstellungen, dazu die Adresse der Statusseite für Handy/Tablet. */
+  function renderNetInfo(net) {
+    $('net-info').textContent = net.running
+      ? `Läuft auf Port ${net.port}. Verbundene Clients: ${net.clients}.`
+      : (net.passwordSet ? 'Nicht aktiv.' : 'Kein Passwort gesetzt – die Schnittstelle bleibt aus.');
+    const urls = net.running ? net.statusUrls || [] : [];
+    $('net-status-page').hidden = urls.length === 0;
+    $('net-status-urls').textContent = urls.join('  ·  ');
   }
 
   /** Standardansicht der Wellenform: 5 Minuten sichtbar. */
@@ -229,7 +237,10 @@
       tally: v('--tally'),
       selection: v('--wave-selection'),
       cut: v('--cut'),
-      cutText: v('--cut-text')
+      cutText: v('--cut-text'),
+      loud: v('--loud'),
+      loudGrid: v('--loud-grid'),
+      loudBox: v('--loud-box')
     };
   }
 
@@ -356,6 +367,7 @@
 
     if (!rec) $('timecode').textContent = longTime(session.duration || 0);
 
+    wave.loudnessLive = session.status === 'recording' || session.status === 'paused';
     wave.update({
       duration: session.duration || 0,
       sections: (session.sections || []).map((x) => ({ ...x })),
@@ -374,8 +386,29 @@
     if (!full.ok || state.session?.status === 'recording') return;
     state.peaks = full.peaks || [];
     wave.peaks = state.peaks;
+    setLoudness(full.loudness);
     state.bucketAcc = 0;
     state.bucketFrames = 0;
+    wave.draw();
+  }
+
+  /* ------------------------------------------------------------- Lautheit */
+
+  /** Ersetzt die Lautheitskurve (Laden, Fortsetzen, Neuabgleich); [] bei neuer Aufnahme. */
+  function setLoudness(list) {
+    state.loud.reset(Array.isArray(list) ? list : []);
+    wave.loudness = state.loud;
+    wave._loudCache = null;
+    wave.draw();
+  }
+
+  /** Schalter „LUFS“ und Ziellinie aus den Einstellungen; bei Mehrspur gibt es keine Lautheit. */
+  function applyLoudnessView() {
+    const on = state.settings?.loudnessMonitor !== false;
+    $('chk-loudness').checked = on;
+    wave.loudnessOn = on && !multitrackView();
+    const target = Number(state.settings?.loudnessTarget);
+    wave.loudnessTarget = Number.isFinite(target) && target < 0 ? target : null;
     wave.draw();
   }
 
@@ -438,6 +471,7 @@
       $('player').pause();
 
       state.peaks = [];
+      setLoudness([]);
       state.bucketAcc = 0;
       state.bucketFrames = 0;
       wave.peaks = state.peaks;
@@ -591,6 +625,7 @@
       if (full.ok) {
         state.peaks = full.peaks || [];
         wave.peaks = state.peaks;
+        setLoudness(full.loudness);
       }
       state.bucketAcc = 0;
       state.bucketFrames = 0;
@@ -1055,21 +1090,36 @@
     updatePlayButton();
   }
 
+  /**
+   * Abspielknopf als Symbol: ▶/❚❚ (Abspielen/Pause), Kopfhörer (Mithören während der Aufnahme), bei Mehrspur ▶ „Zum Pult“
+   * bzw. ■ „Stopp“. Die Bedeutung steht in Tooltip und `aria-label`.
+   */
+  function setPlayButton(icon, label, title, text = '') {
+    const btn = $('btn-play');
+    btn.dataset.icon = icon;
+    btn.setAttribute('aria-label', label);
+    btn.title = title;
+    $('play-label').textContent = text;
+    $('play-label').hidden = !text;
+    btn.classList.toggle('with-label', Boolean(text));
+  }
+
   function updatePlayButton() {
     const status = state.session?.status;
     const live = status === 'recording' || status === 'paused';
     if (state.session?.mode === 'multitrack') {
       if (!multitrackView()) {
-        $('btn-play').textContent = 'Abspielen';
-        $('btn-play').title = 'Mehrspuraufnahme: zum Zurückspielen zum Pult die Aufnahmeart (Einstellungen → Audio) auf Mehrspur stellen';
+        setPlayButton('play', 'Abspielen', 'Mehrspuraufnahme: zum Zurückspielen zum Pult die Aufnahmeart (Einstellungen → Audio) auf Mehrspur stellen');
         return;
       }
-      $('btn-play').textContent = mt.play?.playing ? 'Stopp' : 'Zum Pult abspielen';
-      $('btn-play').title = 'Spuren über die USB-Ausgänge zum Mischpult spielen, ab der Marke in der Wellenform (Leertaste)';
+      if (mt.play?.playing) setPlayButton('stop', 'Stopp', 'Zurückspielen zum Pult beenden (Leertaste)', 'Stopp');
+      else setPlayButton('play', 'Zum Pult abspielen', 'Spuren über die USB-Ausgänge zum Mischpult spielen, ab der Marke in der Wellenform (Leertaste)', 'Zum Pult');
       return;
     }
     const playing = live ? monitor.playing : state.playing;
-    $('btn-play').textContent = playing ? 'Pause' : (live ? 'Mithören' : 'Abspielen');
+    if (playing) setPlayButton('pause', 'Pause', 'Anhalten (Leertaste)');
+    else if (live) setPlayButton('listen', 'Mithören', 'Mithören: ab dem Cursor in die laufende Aufnahme hineinhören – Klick in die Wellenform setzt den Cursor (Leertaste)');
+    else setPlayButton('play', 'Abspielen', 'Abspielen ab der Marke in der Wellenform (Leertaste)');
   }
 
   /* ------------------------------------------------------------ UI-Bindungen */
@@ -1167,6 +1217,8 @@
       b.addEventListener('click', () => showSettingsTab(b.dataset.tab));
     });
     $('btn-library').addEventListener('click', openLibrary);
+    $('library-search').addEventListener('input', renderLibrary);
+    $('library-filter').addEventListener('change', renderLibrary);
     $('btn-service').addEventListener('click', openServicePicker);
     $('btn-plan-service').addEventListener('click', openServicePicker);
     $('btn-view-large').addEventListener('click', () => setView('large'));
@@ -1608,6 +1660,7 @@
       $('clip').dataset.on = String(Boolean(levels.clip));
       // Mehrspur: Die Wellenform kommt fertig aus dem Mehrspur-Prozess (Stereo rechnet sie hier aus den Blöcken).
       if (levels.buckets) for (const b of levels.buckets) state.peaks.push(b);
+      if (levels.loudness?.steps?.length) state.loud.push(levels.loudness.steps);
       state.duration = levels.duration;
       $('timecode').textContent = longTime(levels.duration);
       updateSectionElapsed();
@@ -1621,6 +1674,12 @@
     window.api.on('multitrack-play', (p) => applyPlayback(p));
     // Aufnahmeart von außen umgestellt (Companion): nur Umschalter und Ansicht nachziehen, ein offener
     // Einstellungsdialog behält seine ungespeicherten Eingaben.
+    window.api.on('loudness', ({ loudness }) => setLoudness(loudness));
+    $('chk-loudness').addEventListener('change', async (e) => {
+      const res = await window.api.settings.set({ loudnessMonitor: e.target.checked });
+      if (res.ok) state.settings = res.settings;
+      applyLoudnessView();
+    });
     window.api.on('settings', (st) => {
       state.settings = st;
       $('set-rec-mode').value = settingMode();
@@ -1656,11 +1715,7 @@
 
     window.api.on('compact', ({ on, onTop }) => applyCompact(on, onTop));
 
-    window.api.on('network-status', (info) => {
-      $('net-info').textContent = info.running
-        ? `Läuft auf Port ${info.port}. Verbundene Clients: ${info.clients}.`
-        : (info.passwordSet ? 'Nicht aktiv.' : 'Kein Passwort gesetzt – die Schnittstelle bleibt aus.');
-    });
+    window.api.on('network-status', (info) => renderNetInfo(info));
 
     window.api.on('update-status', (s) => applyUpdateStatus(s));
 
@@ -1818,7 +1873,8 @@
       { keys: ['F2'], text: 'Gewählten Abschnitt bearbeiten' },
       { keys: ['Klick'], text: 'In die Wellenform: Hörcursor setzen' },
       { keys: ['Doppelklick'], text: 'Auf eine Marke: Name/Interpret direkt bearbeiten' },
-      { keys: ['Ziehen'], text: 'Marke verschieben, Nachbarn weichen aus' },
+      { keys: ['Ziehen'], text: 'An einer Marke: Marke verschieben, Nachbarn weichen aus' },
+      { keys: ['Ziehen'], text: 'In der Wellenform: Ansicht hin und her verschieben (hineingezoomt)' },
       { keys: ['Umschalt', 'Ziehen'], text: 'In der Wellenform: Schnitt aufziehen (fehlt im MP3)' },
       { keys: ['Doppelklick'], text: 'Auf einen Schnitt: Schnitt entfernen' },
       { keys: ['Mausrad'], text: 'Wellenform scrollen' },
@@ -2068,26 +2124,117 @@
 
   /* -------------------------------------------------------------- Bibliothek */
 
+  /* Archiv: alle Aufnahmen nach Monat, mit Suche, Filter und Sicherungsstand. */
+  const library = { sessions: [] };
+  const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+  const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+
+  /** Datum der Aufnahme: Termin aus ChurchTools, sonst Beginn der Aufnahme (lokal). */
+  function sessionDate(s) {
+    const started = s.startedAt ? new Date(s.startedAt) : null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s.date || '');
+    const day = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : started;
+    return { day: day && !Number.isNaN(day.getTime()) ? day : null, started };
+  }
+
+  /** Sicherungsstand als Schild: alles gesichert, teilweise, geändert seit Export, nichts. */
+  function exportTag(e) {
+    if (!e) return null;
+    if (e.changed) return { cls: 'warn', text: `⚠ ${e.changed} geändert seit Export` };
+    if (e.sections && e.saved === e.sections) return { cls: 'ok', text: '✓ gesichert' };
+    if (!e.sections && e.full) return { cls: 'ok', text: '✓ gesichert' };
+    if (e.saved) return { cls: 'warn', text: `${e.saved} von ${e.sections} gesichert` };
+    return { cls: '', text: 'nicht gesichert' };
+  }
+
+  function libraryMatches(s, query, filter) {
+    if (filter === 'stereo' && s.mode !== 'stereo') return false;
+    if (filter === 'multitrack' && s.mode !== 'multitrack') return false;
+    if (filter === 'unfinished' && s.finalized) return false;
+    if (filter === 'unsaved') {
+      const tag = exportTag(s.exported);
+      if (!tag || tag.cls === 'ok') return false;
+    }
+    if (!query) return true;
+    const { day } = sessionDate(s);
+    const hay = [s.name, s.date, day ? day.toLocaleDateString('de-DE') : '', ...(s.artists || []), ...(s.labels || [])]
+      .join(' ').toLowerCase();
+    return query.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
+  }
+
+  function renderLibrary() {
+    const list = $('library-list');
+    const query = $('library-search').value.trim();
+    const filter = $('library-filter').value;
+    const shown = library.sessions.filter((s) => libraryMatches(s, query, filter));
+    list.innerHTML = '';
+    $('library-count').textContent = library.sessions.length
+      ? `${shown.length} von ${library.sessions.length} Aufnahmen`
+      : '';
+    if (!library.sessions.length) {
+      list.innerHTML = '<div class="empty">Noch keine Aufnahmen vorhanden.</div>';
+      return;
+    }
+    if (!shown.length) {
+      list.innerHTML = '<div class="empty">Keine Aufnahme passt zur Suche.</div>';
+      return;
+    }
+    let month = null;
+    shown.forEach((s) => {
+      const { day, started } = sessionDate(s);
+      const key = day ? `${MONTHS[day.getMonth()]} ${day.getFullYear()}` : 'Ohne Datum';
+      if (key !== month) {
+        month = key;
+        const head = document.createElement('div');
+        head.className = 'library-month';
+        head.textContent = key;
+        list.appendChild(head);
+      }
+      const el = document.createElement('div');
+      el.className = 'library-item' + (s.finalized ? '' : ' unfinished');
+      el.tabIndex = 0;
+      el.title = 'Öffnen';
+      el.innerHTML = '<div class="when"><b></b><small></small></div><div class="what"><div class="title"></div><div class="meta"></div></div><div class="tags"></div><button class="reveal" title="Im Ordner zeigen">📂</button>';
+      el.querySelector('.when b').textContent = day ? `${WEEKDAYS[day.getDay()]} ${day.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}` : '–';
+      el.querySelector('.when small').textContent = started ? `${started.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr` : '';
+      el.querySelector('.title').textContent = s.name;
+      const meta = [fmtLength(s.duration), `${s.sectionCount} Abschnitte`];
+      if (s.artists?.length) meta.push(s.artists.join(', '));
+      el.querySelector('.meta').textContent = meta.join(' · ');
+      el.querySelector('.what').title = [s.name, ...(s.labels || [])].join('\n');
+      const tags = el.querySelector('.tags');
+      const addTag = (cls, text, title) => {
+        const t = document.createElement('span');
+        t.className = `tag ${cls}`;
+        t.textContent = text;
+        if (title) t.title = title;
+        tags.appendChild(t);
+      };
+      if (!s.finalized) addTag('warn', 'unterbrochen', 'Die Aufnahme wurde nicht regulär beendet (Absturz o. Ä.). Öffnen stellt sie wieder her.');
+      if (!s.wavExists) addTag('warn', 'Audio fehlt', 'Die Audiodatei wurde nicht gefunden (verschoben oder gelöscht).');
+      if (s.mode === 'multitrack') addTag('mt', `Mehrspur · ${s.tracks}`, `${s.tracks} Spuren`);
+      const tag = exportTag(s.exported);
+      if (tag) addTag(tag.cls, tag.text, s.exported.full ? 'Gesamte Aufnahme ist ebenfalls gesichert.' : '');
+      el.addEventListener('click', () => openSession(s.path));
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter') openSession(s.path); });
+      el.querySelector('.reveal').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const res = await window.api.app.reveal(s.path);
+        if (!res.ok) toast('warn', res.error);
+      });
+      list.appendChild(el);
+    });
+  }
+
   async function openLibrary() {
     openModal('modal-library');
     const list = $('library-list');
     list.innerHTML = '<div class="empty">Wird geladen …</div>';
+    $('library-count').textContent = '';
     const res = await window.api.session.list();
-    list.innerHTML = '';
-    if (!res.ok || res.sessions.length === 0) {
-      list.innerHTML = '<div class="empty">Noch keine Aufnahmen vorhanden.</div>';
-      return;
-    }
-    res.sessions.forEach((s) => {
-      const el = document.createElement('div');
-      el.className = 'list-item' + (s.finalized ? '' : ' unfinished');
-      el.innerHTML = '<span class="name"></span><span class="meta"></span>';
-      el.querySelector('.name').textContent = s.name + (s.finalized ? '' : ' · unterbrochen');
-      const kind = s.mode === 'multitrack' ? ` · Mehrspur (${s.tracks} Spuren)` : '';
-      el.querySelector('.meta').textContent = `${s.date} · ${fmt(s.duration)} · ${s.sectionCount} Abschnitte${kind}`;
-      el.addEventListener('click', () => openSession(s.path));
-      list.appendChild(el);
-    });
+    library.sessions = res.ok ? res.sessions : [];
+    renderLibrary();
+    $('library-search').focus();
   }
 
   async function openSession(path) {
@@ -2098,6 +2245,7 @@
     if (full.ok) {
       state.peaks = full.peaks || [];
       wave.peaks = state.peaks;
+      setLoudness(full.loudness);
       applyState(full.state, full.peaks);
       fitZoom();
     }
@@ -2232,6 +2380,7 @@
     document.body.classList.toggle('mt', multitrackView());
     renderChannels();
     applyPlayControls();
+    applyLoudnessView();
   }
 
   /** Schild „Mehrspur“: Einstellungen beim Reiter Audio öffnen, die Aufnahmeart im Blick. */
@@ -2516,6 +2665,8 @@
     $('set-export-dir').value = s.exportDir || '';
     $('set-pattern').value = s.fileNamePattern;
     $('set-bitrate').value = String(s.mp3Bitrate);
+    $('set-loudness').value = String(s.loudnessTarget ?? 0);
+    if (!$('set-loudness').value) $('set-loudness').value = '0';
     $('set-ct-url').value = s.churchToolsUrl;
     $('set-ct-auto').checked = Boolean(s.autoLoadTodaysService);
     state.calendarIds = (s.churchToolsCalendarIds || []).map(String);
@@ -2781,6 +2932,7 @@
       defaultArtist: $('set-default-artist').value.trim(),
       fileNamePattern: $('set-pattern').value.trim() || '{interpret}_{abschnitt}_{gottesdienst}_{datum}',
       mp3Bitrate: Number($('set-bitrate').value),
+      loudnessTarget: Number($('set-loudness').value) || 0,
       churchToolsUrl: $('set-ct-url').value.trim(),
       autoLoadTodaysService: $('set-ct-auto').checked,
       churchToolsCalendarIds: readCalendarSelection(),

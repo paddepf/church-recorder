@@ -373,7 +373,8 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   (`nowrap`), stattdessen wird der Gottesdienstname mit „…“ gekürzt. Ab 1340 px hat der Transport 20 px Spaltenabstand,
   sonst passten die Knöpfe bei 1360 px nicht in die Außenspalte und brachen um.
 - **Fallstrick `hidden`:** Eine Klasse mit eigenem `display` (z. B. `.follow { display: flex }`) überstimmt das
-  `hidden`-Attribut – das Element bleibt sichtbar, obwohl der Code `hidden = true` setzt (so bei „Schleife“). Für
+  `hidden`-Attribut – das Element bleibt sichtbar, obwohl der Code `hidden = true` setzt (so bei „Schleife“, ebenso bei
+  der Statusseite fürs Handy). Für
   solche Elemente eine Regel `.klasse[hidden] { display: none; }` ergänzen; prüfen mit `getComputedStyle(el).display`.
 - Der rote Punkt im Aufnahmeknopf hat `flex-shrink: 0`: Im großen Fenster (1360 px, beendete Aufnahme mit „An Aufnahme
   anhängen“) war der Knopf so knapp, dass der Punkt auf 0 px schrumpfte (sah aus wie verschwunden, kam beim Ziehen am
@@ -519,9 +520,7 @@ Der Ordnername des lokalen Klons ist egal.
 - Einstellungen: `recordingMode`, `multitrackDevice` (Name, leer = meiste Eingänge), `multitrackSimulate`,
   `multitrackArmed` (0-basiert, `null` = alle), `multitrackDir` (leer = `Mehrspur` im Aufnahmeordner). Vorerst
   in *Einstellungen → Audio*; Kanalwahl und Namen kommen mit Schritt 3/4 (bis dahin „Kanal n“).
-- Kein MP3-Export, kein Mithören, keine Cue-Marker bei Mehrspur (`export:batch` lehnt ab). Stürzt der Mehrspur-Prozess
-  während der Aufnahme ab, wird sie beendet (Spuren bleiben bis dahin lesbar); automatisches Neustarten und Anhängen
-  fehlt noch. Beim Stopp endet der laufende Abschnitt bei der zuletzt gemeldeten Dauer (bis etwa 50 ms vor Dateiende).
+- Kein MP3-Export, kein Mithören, keine Cue-Marker bei Mehrspur (`export:batch` lehnt ab). Beim Stopp endet der laufende Abschnitt bei der zuletzt gemeldeten Dauer (bis etwa 50 ms vor Dateiende).
 - Geprüft (Mac, Simulator): Tests mit echter Engine (Session-Ablauf inkl. Laden/Anhängen) und die App per
   WebSocket-Fernsteuerung sowie per Knöpfen (Start, Abschnitt, Pause, Stopp, Anhängen, Einstellungen).
 - **Oberfläche (Schritt 4):** Aufnahmeart = Einstellung `recordingMode` (in der Kopfzeile nur das Schild, siehe
@@ -598,6 +597,65 @@ Der Ordnername des lokalen Klons ist egal.
   Aufnahme). Preset „Aufnahmeart umschalten“, Rückmeldung zusätzlich im Preset „Eingang und Speicher“.
   Geprüft: Paketbau, Befehl gegen die echte App (umschalten, ablehnen, Oberfläche zieht mit); das Modul selbst in
   Companion noch nicht.
+
+### Ergänzungen vom 2026-10-08 (aus der Ideenliste)
+- **Taskleiste/Dock** (`updateTaskbar` in `main.js`, bei jedem `state` und jeder Gesundheitsänderung): Fenstertitel
+  „● Aufnahme läuft – Ebbton“ bzw. „pausiert“/„Problem“ (Problem = Eingang `lost` oder Schreibfehler während der
+  Aufnahme). Windows: farbiger Punkt über dem Taskleistensymbol (`setOverlayIcon`, Bild per `createFromBitmap`
+  erzeugt, keine Datei; rot/orange/gelb), macOS: Dock-Abzeichen „●“/„❚❚“/„!“. Das `<title>` der Oberfläche wird über
+  `page-title-updated` ignoriert, sonst überschriebe ein Neuladen den Titel. Geprüft auf dem Mac (Titel und
+  `app.dock.getBadge()` per Node-Inspector); **das Overlay unter Windows ist noch nicht am Kirchen-PC gesehen.**
+- **Mehrspur: Neustart nach Absturz** (`recoverMultitrack`): Stürzt der Mehrspur-Prozess während der Aufnahme ab, bleibt
+  die Session `recording`/`paused`; der alte `TrackWriterProxy` wird aufgegeben (`abandon`: Dauer bleibt stehen, `close`
+  beendet nichts), der Prozess neu gestartet und mit `append` an dieselben Spuren angehängt (`MultiWavWriter` gleicht
+  auf die kürzeste Spur an), `Session.replaceWriter` setzt den neuen Stellvertreter ein (Wellenform wird aufgefüllt,
+  Pause bleibt). Versuche nach 1, 2, 3, 3, 5 … 10 s (etwa 50 s), danach bzw. bei Absturzschleife (> 3 je Minute) wird die
+  Aufnahme beendet. Meldung mit Stelle und Länge der Lücke; währenddessen `health.input = 'lost'`. Wer in der Zeit
+  „Beenden“ drückt, beendet normal (der aufgegebene Stellvertreter hat nichts mehr zu schließen).
+- **Lautheit beim MP3-Export** (`loudness.js`, `mp3.exportSegment` Option `loudness`): Einstellung `loudnessTarget`
+  (Vorgabe −16 LUFS, 0 = aus; Auswahl in *Ablage & Export*). Zwei Durchgänge: Messung nach ITU-R BS.1770
+  (K-Bewertung mit Koeffizienten wie libebur128 für jede Abtastrate, Gating −70/−10) und Spitzen je 64 Frames, dann
+  Codieren mit fester Verstärkung (höchstens +20 dB, Stille wird nicht angehoben) und Begrenzer auf −1 dBFS (Sample-Peak):
+  Verstärkung an den Blockgrenzen, linear dazwischen, vorausschauend ~6 dB je Block absenken, 20 dB/s zurück. Jede Datei
+  für sich (nicht über alle Abschnitte gemeinsam). Kostet etwa 25 % mehr Exportzeit; die Messung gibt alle 5 s Audio
+  den Hauptprozess frei. Geprüft: ffmpeg `ebur128` misst eine exportierte Datei mit −16,3 LUFS.
+- **Lautheit in der Wellenform** (Schalter „LUFS“, Einstellung `loudnessMonitor`, Vorgabe an): Der Hauptprozess misst
+  beim Stereo-Aufnehmen mit (`Session._measureLoudness` in `pushAudio`, `LoudnessMeter` aus `loudness.js`) und legt je
+  100 ms einen Wert ab (`session.loudness`, LUFS mit 0,1 dB, `null` = Stille; in der Session-Datei als `loudness`).
+  Alles Weitere rechnet `src/shared/loudness-curve.js` (UMD, Präfixsummen der Leistung): Momentary 4, Short-term 30
+  Schritte, integriert mit Gating für beliebige Bereiche. Neue Werte gehen mit `levels.loudness.steps` an die Oberfläche
+  (`state.loud`), komplett über `session:state` (`loudness`), nachgemessene über das Ereignis `loudness`. Fehlt die Kurve
+  beim Laden (ältere/unterbrochene Aufnahme), misst `_computeLoudness` die WAV im Hintergrund nach (5-s-Stücke, Abbruch
+  über `_loudJob`, wenn inzwischen etwas anderes geladen wird); 70 min dauerten etwa 6 s. Anhängen füllt die Kurve bis
+  zur Dateilänge mit `null` auf. Mehrspur misst nicht (kein Mix; Schalter ausgeblendet).
+  Zeichnen: `Waveform._drawLoudness` (Skala −50…−5 LUFS, Linien alle 10 LU, Ziel = `loudnessTarget` gestrichelt);
+  herausgezoomt mittelt jeder Pixel über etwa 6 Pixel (mindestens 3 s), sonst zappelt die Linie bei Sprache. Die
+  Messwerte oben rechts stehen in der Zeichenfläche (kein Platz in der Werkzeugleiste): live M/S/I und laufender
+  Abschnitt, sonst S an der Mausposition (echte 3 s, kann daher von der geglätteten Linie abweichen), I gesamt und
+  gewählter Abschnitt. Netzwerk bekommt `levels.loudness` ohne `steps`.
+- **Werkzeugleiste der Wellenform (überarbeitet):** Die Kästchen „LUFS“, „Ansicht folgt“ (jetzt „Folgen“) und „Schleife“
+  sind Schalter-Pillen unten links in der Wellenform (`.wave-chips` in `.wave-wrap`, Kästchen unsichtbar im Label,
+  Zustand per `:has(input:checked)`, Farben: LUFS `--loud`, Folgen `--plan`, Schleife `--manual`). Unten links, weil
+  rechts Live-Stelle, Skala und Messwerte stehen. Abspielen ist ein runder Symbolknopf (`setPlayButton`, `data-icon`
+  play/pause/stop/listen, Bedeutung in Tooltip und `aria-label`; nur Mehrspur hat zusätzlich Text „Zum Pult“/„Stopp“),
+  Zoom eine Lupen-Gruppe. Die IDs (`chk-*`, `btn-play`, `btn-zoom-*`) sind geblieben. In flachen Wellenformen (Lane unter
+  110 px, z. B. kompakt 760×520) zeichnet die Lautheit nur jede zweite Skalenlinie und so viele Messwert-Zeilen, wie passen.
+  Gemessen: kein Überlauf bei 1360, 1024 und kompakt 760 px.
+- **Ziehen verschiebt die Ansicht** (Wellenform und Zeitleiste, `_panning` in `waveform.js`): Die Hörmarke setzt jetzt erst
+  das Loslassen, und nur wenn sich die Maus weniger als `PAN_THRESHOLD` (4 px) bewegt hat; vorher setzte `pointerdown`
+  sofort die Marke. Fähnchen/Schnittränder (verschieben) und Umschalt+Ziehen (Schnitt) haben Vorrang. Zeiger „grab“,
+  sobald es etwas zu verschieben gibt, beim Ziehen „grabbing“.
+- **Statusseite für Handy/Tablet** (`src/status/`, ausgeliefert von `netserver.js` unter `/`, `/status.js`,
+  `/status.css`; nur diese festen Namen, eigene CSP): meldet sich per WebSocket an (als Webseite immer Rolle `monitor`,
+  also ohne Personennamen), Passwort im `localStorage` des Geräts. Zeigt Zustand, laufenden Timer (zwischen den
+  Meldungen lokal weitergezählt), Pegel, Warnungen aus `health`, aktuellen und nächsten Punkt, Abschnittsliste.
+  Adresse(n) stehen in *Einstellungen → Netzwerk* (`statusUrls` aus `net.statusInfo()`, IPv4 im LAN). Läuft nur, wenn die
+  Netzwerkschnittstelle läuft (also mit Passwort). Steuern lässt sich dort bewusst nichts.
+- **Archiv** („Aufnahmen“, `openLibrary`/`renderLibrary`): Liste nach Monat, Suche über Name, Datum, Interpreten und
+  Abschnittsnamen, Filter (nicht vollständig gesichert, Stereo, Mehrspur, unterbrochen), Sicherungsstand je Aufnahme
+  (`exportSummary` in `main.js` aus `exports` der Session-Datei: ✓ gesichert / n von m / ⚠ geändert seit Export / nicht
+  gesichert; Mehrspur ohne Angabe), „📂“ zeigt die Session-Datei im Ordner. Aufnahmen ohne Gottesdienstnamen heißen
+  „Ohne Gottesdienst“ (vorher stand der Dateiname da).
 
 ### Entfernt: Mitschrift
 Die lokale Transkription (whisper.cpp, Mitschrift-Panel, Einstellungen) wurde
