@@ -818,7 +818,7 @@ body.compact .top-actions { gap: 6px; flex-shrink: 0; }
 body.compact .ontop { font-size: 12px; gap: 4px; }
 body.compact .ontop input { width: 13px; height: 13px; }
 @media (max-width: 380px) { body.compact .ontop-long { display: none; } }   /* schmal: nur „oben“ */
-body.compact .top-actions > :not(.view-switch):not(.compact-only):not(#disk-badge) { display: none; }
+body.compact .top-actions > :not(#btn-compact):not(.compact-only):not(#disk-badge) { display: none; }
 body.compact #disk-badge[data-level="ok"] { display: none; }
 body.compact .service { min-width: 0; flex: 1; }
 body.compact .service-name { padding: 2px 4px; max-width: 100%; min-width: 0; }
@@ -1099,7 +1099,18 @@ body.dense .topbar { --top-h: 28px; --top-font: 13px; --top-pad: 10px; --top-gro
 .topbar .mode-badge:hover { background: rgba(108,124,224,.3); }
 .mode-badge[hidden] { display: none; }
 
-/* Mini-Fenster: nur der Ansicht-Umschalter bleibt, klein wie bisher */
+/* Ansicht: Größe „A A“ (kompakt | groß), Mini-Fenster und Hell/Dunkel als Symbolknöpfe */
+.topbar .size-switch button { width: var(--top-h); padding: 0; }
+.size-switch .a-small { font-size: calc(var(--top-font) - 2px); font-weight: 600; }
+.size-switch .a-large { font-size: calc(var(--top-font) + 4px); font-weight: 600; }
+.topbar .top-actions > .icon-btn { width: var(--top-h); padding: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
+.topbar .top-actions > .icon-btn:hover { color: var(--text); }
+.icon-btn svg { width: calc(var(--top-h) * .48); height: calc(var(--top-h) * .48); fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.topbar #btn-compact[aria-pressed="true"] { color: var(--text); background: var(--raised); }
+/* Der Schalter zeigt das Ziel: im dunklen Modus die Sonne (→ hell), im hellen den Mond (→ dunkel) */
+#btn-theme .icon-moon, :root[data-theme="light"] #btn-theme .icon-sun { display: none; }
+:root[data-theme="light"] #btn-theme .icon-moon { display: block; }
+
+/* Mini-Fenster: nur das Mini-Symbol (gedrückt, Klick = zurück), klein */
 body.compact .topbar { --top-h: 24px; --top-font: 11px; --top-pad: 8px; }
 body.compact .service-name { height: auto; }
-body.compact .top-actions > .view-switch { margin-left: 0; }

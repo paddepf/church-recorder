@@ -254,7 +254,8 @@ verschwindet, wenn kein Abschnitt aktiv ist (z. B. in der Pause zwischen zwei Pu
 
 ### Mini-Fenster
 
-Rechts oben wählt der Umschalter **„Groß | Kompakt | Mini“** die Ansicht.
+Rechts oben wählt **„A A“** die Größe (kleines A = kompakt, großes A = groß), das Fenster-Symbol daneben schaltet
+ins **Mini-Fenster** und zurück, das Sonnen- bzw. Mondsymbol wechselt direkt zwischen **hell und dunkel**.
 
 Wird nebenher am PC gearbeitet, verkleinert **„Mini“** die App auf ein sehr kleines
 Fenster (ab 320 × 164) mit Gottesdienstname, Timer, Pegel (schmaler Streifen), dem **laufenden Abschnitt groß mit Interpret** und den Knöpfen für Aufnahme, Pause,

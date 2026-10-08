@@ -346,9 +346,12 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   „● Mehrspur“ (`applyMode`; auch während einer Mehrspuraufnahme); Klick öffnet *Einstellungen → Audio* mit Fokus auf
   „Aufnahmeart“ (`openRecordingModeSetting`). Umgestellt wird dort oder per Companion (`mode.set`). Gemessen: kein Überlauf, Timer
   unverändert bei 1360/1024 groß und 960/760 kompakt, Mini 360 und 320 px.
-- **Ansicht-Umschalter** rechts oben: ein Segment „Groß | Kompakt | Mini“ (`.view-switch`, Knöpfe `#btn-view-large`,
-  `#btn-dense`, `#btn-compact`, Zustand über `aria-pressed`) statt einzelner Knöpfe, damit er wenig Platz braucht; er
-  bleibt auch im Mini-Fenster sichtbar (Wechsel Mini → Kompakt direkt). Renderer `setView(view)` → IPC
+- **Ansicht rechts oben (Variante „D“, Oktober 2026):** Größen-Umschalter „A A“ (`.size-switch`: kleines A =
+  `#btn-dense` kompakt, großes A = `#btn-view-large` groß), daneben Symbolknöpfe (`.icon-btn`, Inline-SVG): Mini-Fenster
+  `#btn-compact` und Hell/Dunkel `#btn-theme`. Der Text-Umschalter „Groß | Kompakt | Mini“ gefiel nicht. Im Mini-Fenster
+  bleibt nur `#btn-compact` sichtbar (gedrückt; Klick = zurück in die vorige Ansicht, `state.dense`). Hell/Dunkel
+  (`toggleTheme`) wechselt direkt und speichert `theme` (`light`/`dark`, auch aus „wie das System“ heraus); das Symbol zeigt
+  das Ziel (dunkel → Sonne, hell → Mond). Zustand über `aria-pressed`. Renderer `setView(view)` → IPC
   `window:compact` mit `view` → `setView` im Hauptprozess (aus dem Mini-Fenster erst zurück, dann `setDense`).
 - **Kompakte Ansicht** (**Voreinstellung**: `denseLayout: true`; `app:info` liefert `dense`): `body.dense` – dieselben Bereiche wie die große Ansicht, nur kleiner (Block
   „Kompakte Ansicht“ am Ende von `styles.css`). Der Hauptprozess senkt dafür die Mindestgröße auf `DENSE_MIN` 760×520

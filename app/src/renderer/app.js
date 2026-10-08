@@ -239,12 +239,24 @@
   function applyTheme(mode) {
     const light = mode === 'light' || (mode === 'system' && themeQuery.matches);
     document.documentElement.dataset.theme = light ? 'light' : 'dark';
+    const btn = document.getElementById('btn-theme');
+    if (btn) btn.title = light ? 'Zu dunkel wechseln' : 'Zu hell wechseln';
     if (wave) {
       wave.colors = readColors();
       wave.draw();
     }
   }
   themeQuery.addEventListener('change', () => applyTheme(state.settings?.theme));
+
+  /** Kopfleiste: direkt zwischen hell und dunkel wechseln (auch aus „wie das System“ heraus) und speichern. */
+  async function toggleTheme() {
+    const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+    applyTheme(next);
+    const res = await window.api.settings.set({ theme: next });
+    if (!res.ok) return toast('error', res.error);
+    state.settings = res.settings;
+    $('set-theme').value = next;
+  }
 
   /* ------------------------------------------------------------- Zustandsbild */
 
@@ -1159,7 +1171,9 @@
     $('btn-plan-service').addEventListener('click', openServicePicker);
     $('btn-view-large').addEventListener('click', () => setView('large'));
     $('btn-dense').addEventListener('click', () => setView('dense'));
-    $('btn-compact').addEventListener('click', () => setView('mini'));
+    // Mini-Symbol: hinein bzw. (im Mini-Fenster) zurück in die vorige Ansicht
+    $('btn-compact').addEventListener('click', () => setView(state.compact ? (state.dense ? 'dense' : 'large') : 'mini'));
+    $('btn-theme').addEventListener('click', toggleTheme);
     $('current-item').addEventListener('click', (e) => {
       const cur = state.session?.currentSegment;
       if (!cur) return;
@@ -1224,10 +1238,13 @@
   function applyDense() {
     document.body.classList.toggle('dense', Boolean(state.dense) && !state.compact);
     if (wave) wave.resize();
-    // Umschalter „Groß | Kompakt | Mini“
+    // Größe „A A“ und Mini-Symbol
     $('btn-view-large').setAttribute('aria-pressed', String(!state.compact && !state.dense));
     $('btn-dense').setAttribute('aria-pressed', String(!state.compact && Boolean(state.dense)));
     $('btn-compact').setAttribute('aria-pressed', String(state.compact));
+    $('btn-compact').title = state.compact
+      ? 'Zurück zur normalen Ansicht (Strg+Umschalt+M)'
+      : 'Mini-Fenster mit den nötigsten Knöpfen (Strg+Umschalt+M)';
   }
 
   /**
