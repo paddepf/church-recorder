@@ -131,3 +131,13 @@ test('Versionshinweise als Text', () => {
   assert.equal(releaseNotesText([{ note: 'A &amp; B' }]), 'A & B');
   assert.equal(releaseNotesText(null), '');
 });
+
+test('Ersatztext von GitHub (Tag-Nachricht) gilt als leer, Notizen mehrerer Versionen mit Überschrift', () => {
+  const tagOnly = '<p>Version 1.0.3</p>\n\n<p>Co-Authored-By: Claude Opus 5.5 &lt;noreply@anthropic.com&gt;</p>';
+  assert.equal(releaseNotesText(tagOnly), '');
+  assert.equal(releaseNotesText([{ version: '1.0.4', note: tagOnly }]), '');
+  assert.equal(
+    releaseNotesText([{ version: '1.0.5', note: '<ul><li>Neu A</li></ul>' }, { version: '1.0.4', note: tagOnly }]),
+    'Version 1.0.5\n• Neu A');
+  assert.equal(releaseNotesText('- Erstens\n- Zweitens'), '• Erstens\n• Zweitens');
+});

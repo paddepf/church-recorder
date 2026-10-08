@@ -292,6 +292,11 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   (`state.updateDismissed`), im Mini-Fenster wird der Dialog bis zum Verlassen aufgeschoben (`state.updatePrompt`).
 - Protokoll `userData/logs/updater.log` (eigener kleiner Logger, max. 1 MB). Nicht gepackt (`npm run dev`) ist der
   Updater `unavailable`. Mac ohne Zertifikat: `manual` mit Knopf „Download-Seite öffnen“ (`update:openPage`).
+- **Versionshinweise („Was ist neu?“):** Der Release-Workflow schreibt die Commit-Titel seit dem vorigen Tag als Notizen
+  (ohne „Version x.y.z“, ohne Doppelte; Schritt „Versionshinweise zusammenstellen“, `fetch-depth: 0`). Vorher waren die
+  Notizen leer, GitHub setzte dann die Tag-Nachricht („Version 1.0.3“, „Co-Authored-By: …“) ein und genau das stand im
+  Dialog. `releaseNotesText` filtert solche Zeilen weiterhin heraus (alte Releases); `fullChangelog = true` zeigt die
+  Hinweise aller übersprungenen Versionen mit Überschrift. **Commit-Titel landen damit bei den Nutzern:** verständlich formulieren.
 - Tests: `test/updater.test.js` mit nachgebautem `autoUpdater` (Option `autoUpdater` im Konstruktor).
 
 ### Mithören

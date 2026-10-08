@@ -63,6 +63,7 @@ class Updater extends EventEmitter {
     au.autoDownload = false;           // erst nach Rückfrage herunterladen
     au.autoInstallOnAppQuit = false;   // beim Beenden nie ungefragt installieren
     au.allowPrerelease = false;
+    au.fullChangelog = true;           // Hinweise aller übersprungenen Versionen, nicht nur der neuesten
     au.logger = this._logger();
 
     au.on('checking-for-update', () => this._set('checking'));
@@ -249,16 +250,28 @@ class Updater extends EventEmitter {
   }
 }
 
-/** Versionshinweise aus GitHub (HTML oder Liste) als schlichten Text. */
+/** Versionshinweise aus GitHub (HTML oder Liste je Version) als schlichten Text. */
 function releaseNotesText(notes) {
   if (!notes) return '';
-  const raw = Array.isArray(notes) ? notes.map((n) => n?.note || '').join('\n\n') : String(notes);
-  return raw
+  if (Array.isArray(notes)) {
+    // fullChangelog: eine Liste aller neueren Versionen, neueste zuerst
+    return notes
+      .map((n) => ({ version: n?.version, text: releaseNotesText(n?.note) }))
+      .filter((n) => n.text)
+      .map((n) => (notes.length > 1 && n.version ? `Version ${n.version}\n${n.text}` : n.text))
+      .join('\n\n');
+  }
+  return String(notes)
     .replace(/<\s*br\s*\/?>/gi, '\n')
     .replace(/<\s*\/(p|li|h\d|div)\s*>/gi, '\n')
     .replace(/<\s*li[^>]*>/gi, '• ')
     .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
+    .split('\n')
+    // Ohne Beschreibung setzt GitHub die Tag-Nachricht ein („Version 1.0.3“, „Co-Authored-By: …“) – das ist kein Inhalt.
+    .filter((line) => !/^\s*(Version\s+v?\d+(\.\d+)*\s*|Co-Authored-By:.*|No content\.?\s*)$/i.test(line))
+    .join('\n')
+    .replace(/^- /gm, '• ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }

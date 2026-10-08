@@ -338,6 +338,8 @@ Der Dialog öffnet sich dann nicht von selbst, die Knöpfe sind mit Hinweis gesp
 3. Der Workflow `.github/workflows/release.yml` prüft, ob Tag und Version
    übereinstimmen, lässt die Tests laufen, legt einen Release-Entwurf an, baut
    die Windows-Version hinein und gibt das Release erst frei, wenn sie vollständig ist.
+   Als Versionshinweise trägt er die Commit-Titel seit dem vorigen Release ein; die App
+   zeigt sie im Update-Dialog unter „Was ist neu?“.
    **Mac-Releases sind vorerst abgeschaltet.** Wieder einschalten: auf GitHub unter
    *Settings → Secrets and variables → Actions → Variables* die Variable `MAC_RELEASE`
    mit dem Wert `true` anlegen; dann baut der Workflow auch die Mac-Version (ohne
