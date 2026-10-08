@@ -713,6 +713,7 @@ body.dense .ch-list { padding: 8px 10px 10px; gap: 2px 6px; }
 .mixer-line .ok { color: var(--manual); }
 .mixer-line .bad { color: var(--amber); }
 .mixer-channels { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 12px; font-size: 13px; }
+.mixer-empty { grid-column: 1 / -1; color: var(--muted); }
 .mixer-ch { display: flex; gap: 6px; align-items: baseline; min-width: 0; border-left: 4px solid var(--line); padding-left: 6px; }
 .mixer-ch b { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
 .mixer-ch span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

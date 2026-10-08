@@ -160,6 +160,8 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - Fernstart (`record.start` von Companion) startet ohne Rückfrage (`remote: true`); `record.toggle` beendet auch
   eine pausierte Aufnahme. Startbefehle setzen den Status lokal sofort auf `recording`, damit ein Doppeldruck die
   laufende Erfassung nicht beendet. Gehaltene Tasten (`e.repeat`) werden ignoriert.
+- **Hinweistexte in den Einstellungen kurz halten** (Oktober 2026 gekürzt, waren zu lang): höchstens eine Zeile unter
+  einem Feld, nur was man zum Ausfüllen braucht; Erklärungen gehören in `app/README.md`.
 - Einstellungen: Reiter links (Audio · Ablage & Export · ChurchTools · Vorlagen · Netzwerk · Programm), rechts nur die
   Gruppen des Reiters (`fieldset[data-tab]`, `showSettingsTab`; beim Öffnen immer zuletzt gewählter Reiter). Neue Felder in
   die passende Gruppe setzen; gelesen/gespeichert wird unabhängig von der Sichtbarkeit.

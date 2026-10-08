@@ -1951,7 +1951,7 @@
     }
     badge.textContent = `${formatBytes(res.freeBytes)} frei · ca. ${formatHours(res.hoursLeft)}`;
     badge.title = `Freier Speicherplatz auf ${res.dir}: reicht für ca. ${formatHours(res.hoursLeft)} Aufnahme`;
-    $('disk-info').textContent = `Frei: ${formatBytes(res.freeBytes)} – reicht für ca. ${formatHours(res.hoursLeft)} Aufnahme.`;
+    $('disk-info').textContent = `Frei: ${formatBytes(res.freeBytes)} (ca. ${formatHours(res.hoursLeft)} Aufnahme)`;
     badge.dataset.level = res.hoursLeft < DISK_LOW_HOURS ? 'low' : (res.hoursLeft < DISK_WARN_HOURS ? 'warn' : 'ok');
     state.diskHoursLeft = res.hoursLeft;
     if (multitrackView()) renderChannelStatus();
@@ -2312,9 +2312,9 @@
       const i = m.info || {};
       st.innerHTML = `<span class="ok">● Verbunden</span>: ${esc(i.model || 'Pult')} „${esc(i.name || '')}“ · Firmware ${esc(i.version || '?')} · ${esc(i.ip || m.host)}${m.simulated ? ' (simuliert)' : ''}`;
     } else if (m.status === 'lost') {
-      st.innerHTML = `<span class="bad">● ${esc(m.host)} antwortet nicht mehr</span> (Pult aus oder Netzwerk getrennt?)`;
+      st.innerHTML = `<span class="bad">● ${esc(m.host)} antwortet nicht mehr</span>`;
     } else {
-      st.innerHTML = `<span class="bad">● Verbinde mit ${esc(m.host)} …</span> (antwortet bisher nicht – Pult aus?)`;
+      st.innerHTML = `<span class="bad">● Verbinde mit ${esc(m.host)} …</span>`;
     }
 
     const kinds = { stereo: 'Stereo', multitrack: 'Mehrspur', unknown: 'unbekannt' };
@@ -2343,7 +2343,10 @@
     list.innerHTML = '';
     const channels = m.status === 'connected' ? (m.channels || []) : [];
     if (!channels.length) {
-      list.textContent = m.configured ? 'Keine Kanalnamen (nicht verbunden).' : 'Ohne Verbindung heißen die Spuren „Kanal 1“, „Kanal 2“ …';
+      const empty = document.createElement('div');
+      empty.className = 'mixer-empty';                 // über alle Spalten, sonst bricht der Text in der ersten um
+      empty.textContent = 'Nicht verbunden – Spuren heißen „Kanal 1“, „Kanal 2“ …';
+      list.appendChild(empty);
     }
     channels.forEach((ch, i) => {
       const el = document.createElement('div');
@@ -2631,7 +2634,7 @@
   async function refreshMultitrackDevices() {
     const info = $('mt-device-info');
     if (isLive()) {
-      info.textContent = 'Während einer Aufnahme wird nicht nach Geräten gesucht.';
+      info.textContent = 'Nicht während einer Aufnahme.';
       return;
     }
     info.textContent = 'Geräte werden gesucht …';
@@ -2685,8 +2688,8 @@
       : 'alle Kalender';
     $('set-ct-services').value = s.artistServices || '';
     $('ct-token-state').textContent = s.churchToolsTokenSet
-      ? (s.encryptionAvailable ? 'Ein Token ist hinterlegt (verschlüsselt gespeichert).' : 'Ein Token ist hinterlegt. Achtung: Verschlüsselung auf diesem System nicht verfügbar.')
-      : 'Noch kein Token hinterlegt.';
+      ? (s.encryptionAvailable ? 'Token hinterlegt (verschlüsselt).' : 'Token hinterlegt – unverschlüsselt (auf diesem System nicht möglich).')
+      : 'Kein Token hinterlegt.';
     $('set-net-on').checked = Boolean(s.networkEnabled);
     $('set-net-port').value = s.networkPort;
     $('set-net-pass').value = s.networkPassword;
@@ -2888,8 +2891,8 @@
       out.textContent = 'Suche im Netz …';
       const res = await window.api.mixer.discover();
       if (!res.ok) { out.textContent = `Suche fehlgeschlagen: ${res.error}`; return; }
-      if (!res.found.length) { out.textContent = 'Kein Pult gefunden. Eingeschaltet und im selben Netz? Sonst die IP vom Pult (Setup → Network) eintragen.'; return; }
-      out.textContent = 'Gefunden: ' + res.found.map((f) => `${f.model} „${f.name}“ (${f.ip})`).join(', ') + ' – übernommen, bitte speichern.';
+      if (!res.found.length) { out.textContent = 'Kein Pult gefunden – IP von Hand eintragen (am Pult: Setup → Network).'; return; }
+      out.textContent = 'Gefunden: ' + res.found.map((f) => `${f.model} „${f.name}“ (${f.ip})`).join(', ') + ' – bitte speichern.';
       $('set-mixer-host').value = res.found[0].ip;
     });
     const learn = async (mode) => {
