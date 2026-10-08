@@ -458,8 +458,8 @@ function stateThrottle() {
 }
 const pushState = stateThrottle();
 
-function buildFileName(segmentLabel, artist) {
-  const pattern = settings.get('fileNamePattern') || '{interpret}_{abschnitt}_{gottesdienst}_{datum}';
+function buildFileName(segmentLabel, artist, pattern = settings.get('fileNamePattern')) {
+  pattern = pattern || '{interpret}_{abschnitt}_{gottesdienst}_{datum}';
   const name = pattern
     .replace(/\{datum\}/g, session.service.date || dateStamp())
     .replace(/\{gottesdienst\}/g, slug(session.service.name, 'Gottesdienst'))
@@ -1455,6 +1455,15 @@ function exportTargetFolder() {
 }
 
 ipcMain.handle('export:target', () => ok({ folder: exportTargetFolder() }));
+/* Vorschau des Dateinamens für die Einstellungen: mit dem eingegebenen (noch nicht gespeicherten) Muster und einem
+   Abschnitt der angezeigten Aufnahme (am liebsten einem mit Interpret), sonst Beispielwerten. */
+ipcMain.handle('export:previewName', (_e, { pattern } = {}) => {
+  const list = (session.sections || []).filter((x) => x.label);
+  const pick = list.find((x) => x.artist) || list[0];
+  const label = pick ? pick.label : 'Predigt';
+  const artist = pick ? (pick.artist || settings.get('defaultArtist') || '') : 'Thomas Beck';
+  return ok({ name: buildFileName(label, artist, pattern) });
+});
 
 /** Ausgewählte Abschnitte nacheinander als MP3 speichern und als gesichert vermerken. */
 ipcMain.handle('export:batch', async (_e, { items } = {}) => {

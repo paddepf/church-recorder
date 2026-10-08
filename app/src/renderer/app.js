@@ -208,9 +208,11 @@
 
   /** Netzwerkstatus in den Einstellungen, dazu die Adresse der Statusseite für Handy/Tablet. */
   function renderNetInfo(net) {
-    $('net-info').textContent = net.running
-      ? `Läuft auf Port ${net.port}. Verbundene Clients: ${net.clients}.`
-      : (net.passwordSet ? 'Nicht aktiv.' : 'Kein Passwort gesetzt – die Schnittstelle bleibt aus.');
+    const info = $('net-info');
+    info.textContent = net.running
+      ? `● Läuft auf Port ${net.port} · ${net.clients} ${net.clients === 1 ? 'Verbindung' : 'Verbindungen'}`
+      : (net.passwordSet ? '● Aus' : '● Aus – es fehlt das Passwort für die Steuerung');
+    info.dataset.level = net.running ? 'ok' : (net.passwordSet ? '' : 'warn');
     const urls = net.running ? net.statusUrls || [] : [];
     $('net-status-page').hidden = urls.length === 0;
     $('net-status-urls').textContent = urls.join('  ·  ');
@@ -333,7 +335,8 @@
     document.querySelectorAll('#phase-steps li').forEach((li) => li.classList.toggle('on', li.dataset.step === phase));
     if (prevPhase && prevPhase !== phase) fadeNowPanel();
     applyMode();
-    $('service-name').textContent = session.service?.name || 'Kein Gottesdienst gewählt';
+    $('service-name').textContent = session.service?.name || 'Gottesdienst wählen …';
+    $('btn-service').classList.toggle('unset', !session.service?.name);
     $('service-date').textContent = serviceDateText(session.service);
     {
       // Herkunft des Ablaufplans (agendaOrigin; bei alten Sessions aus den Quellen der Punkte abgeleitet) und
@@ -1834,7 +1837,10 @@
     document.querySelectorAll('[data-close]').forEach((b) =>
       b.addEventListener('click', () => b.closest('.modal').hidden = true));
     document.querySelectorAll('.modal').forEach((m) =>
-      m.addEventListener('click', (e) => { if (e.target === m) m.hidden = true; }));
+      m.addEventListener('click', (e) => {
+        if (e.target !== m) return;
+        if (m.id === 'modal-settings') requestCloseSettings(); else m.hidden = true;
+      }));
 
     bindSettingsForm();
     bindUpdateUi();
@@ -1845,14 +1851,21 @@
     // Dialoge passen nicht ins Mini-Fenster: vorher auf das große Fenster umschalten.
     if (state.compact) toggleCompact(false);
     $(id).hidden = false;
-    // Fokus in den Dialog setzen (Tastaturbedienung, Bildschirmleser)
-    setTimeout(() => $(id).querySelector('input:not([type=hidden]), select, button:not(.close)')?.focus(), 0);
+    // Fokus in den Dialog setzen (Tastaturbedienung, Bildschirmleser); in den Einstellungen auf den Dialog selbst,
+    // sonst trüge der erste Reiter einen Fokusrahmen wie eine Auswahl
+    setTimeout(() => {
+      const card = $(id).querySelector('.modal-card');
+      if (id === 'modal-settings') { card.tabIndex = -1; card.focus(); return; }
+      $(id).querySelector('input:not([type=hidden]), select, button:not(.close)')?.focus();
+    }, 0);
     // Geräte können seit dem Start ein- oder ausgesteckt worden sein.
     if (id === 'modal-settings') {
       // Ohne Speichern geschlossene Änderungen verwerfen: immer die gespeicherten Werte zeigen.
       applySettingsToForm();
-      refreshDevices();
+      state.calendarsLoaded = false;
+      refreshDevices().then(() => takeSettingsSnapshot());
       showSettingsTab(settingsTab);
+      takeSettingsSnapshot();
     }
   }
 
@@ -1861,11 +1874,109 @@
   function showSettingsTab(tab) {
     settingsTab = tab;
     document.querySelectorAll('#modal-settings fieldset[data-tab]').forEach((f) => { f.hidden = f.dataset.tab !== tab; });
+    // Letzte sichtbare Gruppe ohne Trennlinie darunter
+    const shown = [...document.querySelectorAll('#modal-settings fieldset[data-tab]')].filter((f) => !f.hidden);
+    document.querySelectorAll('#modal-settings fieldset.last-visible').forEach((f) => f.classList.remove('last-visible'));
+    shown[shown.length - 1]?.classList.add('last-visible');
     document.querySelectorAll('#modal-settings .settings-nav button').forEach((b) => {
       b.setAttribute('aria-selected', String(b.dataset.tab === tab));
     });
     const body = document.querySelector('#modal-settings .modal-body');
     if (body) body.scrollTop = 0;
+    // Kalender beim ersten Öffnen des Reiters selbst laden (vorher musste man „Kalender laden“ drücken)
+    if (tab === 'churchtools' && !state.calendarsLoaded && ctConfigured()) {
+      state.calendarsLoaded = true;
+      loadCalendars();
+    }
+  }
+
+  /* ---- Einstellungen: Änderungen erkennen, nachfragen beim Schließen ---- */
+
+  /** Werte aller Felder je Reiter (Kontrollkästchen als true/false). */
+  function settingsValues() {
+    const out = {};
+    document.querySelectorAll('#modal-settings fieldset[data-tab]').forEach((f) => {
+      const vals = [...f.querySelectorAll('input, select, textarea')]
+        .filter((el) => el.id || el.closest('.agenda-row'))
+        .map((el) => (el.type === 'checkbox' ? el.checked : el.value));
+      out[f.dataset.tab] = (out[f.dataset.tab] || []).concat(vals);
+    });
+    // Kalender: die Auswahl zählt, nicht ob die Liste schon geladen ist
+    out.churchtools = (out.churchtools || []).concat([readCalendarSelection().map(String).sort().join(',')]);
+    // Vorlagen: alle Vorlagen samt Standard (nicht nur die gerade angezeigte)
+    if (state.tpl) {
+      const cur = state.tpl.templates.find((x) => x.id === state.tpl.selectedId);
+      const draft = state.tpl.templates.map((t) => (t === cur ? { ...t, name: $('tpl-name').value, items: readDefaultAgenda() } : t));
+      out.vorlagen = (out.vorlagen || []).concat([JSON.stringify([draft, state.tpl.defaultId])]);
+    }
+    Object.keys(out).forEach((k) => { out[k] = JSON.stringify(out[k]); });
+    return out;
+  }
+
+  function takeSettingsSnapshot() {
+    state.settingsSnap = settingsValues();
+    updateSettingsDirty();
+  }
+
+  /** Geänderte Reiter bekommen einen Punkt, der Speichern-Knopf nennt die Zahl. */
+  function dirtyTabs() {
+    if (!state.settingsSnap) return [];
+    const now = settingsValues();
+    return Object.keys(now).filter((k) => now[k] !== state.settingsSnap[k]);
+  }
+
+  function updateSettingsDirty() {
+    const dirty = dirtyTabs();
+    document.querySelectorAll('#modal-settings .settings-nav button').forEach((b) => {
+      b.classList.toggle('dirty', dirty.includes(b.dataset.tab));
+    });
+    const btn = $('btn-save-settings');
+    btn.disabled = dirty.length === 0;
+    btn.textContent = dirty.length ? 'Änderungen speichern' : 'Speichern';
+    $('settings-dirty').textContent = dirty.length
+      ? `Ungespeichert: ${dirty.map((t) => document.querySelector(`#modal-settings .settings-nav [data-tab="${t}"]`).textContent).join(', ')}`
+      : '';
+  }
+
+  /** Schließen (×, Esc, Hintergrund, „Schließen“): mit ungespeicherten Änderungen erst nachfragen. */
+  async function requestCloseSettings() {
+    const modal = $('modal-settings');
+    if (dirtyTabs().length) {
+      const drop = await confirmDialog('Änderungen verwerfen?',
+        'Einige Einstellungen sind noch nicht gespeichert. Ohne Speichern gehen sie verloren.', 'Verwerfen');
+      if (!drop) return;
+    }
+    modal.hidden = true;
+  }
+
+  /** Umschalter „Stereo | Mehrspur“ schreibt in das versteckte Feld #set-rec-mode. */
+  function syncRecModeSeg() {
+    const v = $('set-rec-mode').value;
+    document.querySelectorAll('#rec-mode-seg button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === v)));
+  }
+
+  /** Ordner als Name (groß) und Pfad (klein) statt als graues Eingabefeld. */
+  function renderPathViews() {
+    ['set-dir', 'set-export-dir', 'set-mt-dir'].forEach((id) => {
+      const value = $(id).value;
+      const view = $(`${id}-view`);
+      view.querySelector('b').textContent = value ? baseName(value) : view.dataset.empty;
+      view.querySelector('small').textContent = value || '';
+      view.classList.toggle('is-empty', !value);
+      view.title = value || '';
+    });
+    $('btn-clear-export-dir').hidden = !$('set-export-dir').value;
+    $('btn-clear-mt-dir').hidden = !$('set-mt-dir').value;
+  }
+
+  /** Vorschau des Dateinamens mit dem eingegebenen Muster (rechnet der Hauptprozess wie beim Export). */
+  let previewTimer = null;
+  function updatePatternPreview() {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(async () => {
+      const res = await window.api.exportPreviewName($('set-pattern').value.trim());
+      $('pattern-preview').textContent = res.ok ? res.name : '–';
+    }, 150);
   }
 
   /* ----------------------------------------------------------- Mini-Fenster */
@@ -2182,7 +2293,7 @@
       if (openModalEl) {
         if (e.key === 'Escape' || (e.key === '?' && openModalEl.id === 'modal-keys')) {
           e.preventDefault();
-          openModalEl.hidden = true;
+          if (openModalEl.id === 'modal-settings') requestCloseSettings(); else openModalEl.hidden = true;
         }
         return;
       }
@@ -2276,6 +2387,7 @@
     window.api.on('settings', (st) => {
       state.settings = st;
       $('set-rec-mode').value = settingMode();
+      syncRecModeSeg();
       applyMode();
       refreshDisk();
       renderNow();
@@ -2898,14 +3010,18 @@
     const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const st = $('mixer-status');
     if (!m.configured) {
-      st.textContent = 'Keine Verbindung eingerichtet.';
+      st.textContent = '● Kein Pult eingerichtet';
+      st.dataset.level = '';
     } else if (m.status === 'connected') {
       const i = m.info || {};
-      st.innerHTML = `<span class="ok">● Verbunden</span>: ${esc(i.model || 'Pult')} „${esc(i.name || '')}“ · Firmware ${esc(i.version || '?')} · ${esc(i.ip || m.host)}${m.simulated ? ' (simuliert)' : ''}`;
+      st.innerHTML = `● Verbunden: ${esc(i.model || 'Pult')} „${esc(i.name || '')}“ · Firmware ${esc(i.version || '?')} · ${esc(i.ip || m.host)}${m.simulated ? ' (simuliert)' : ''}`;
+      st.dataset.level = 'ok';
     } else if (m.status === 'lost') {
-      st.innerHTML = `<span class="bad">● ${esc(m.host)} antwortet nicht mehr</span>`;
+      st.textContent = `● ${m.host} antwortet nicht mehr`;
+      st.dataset.level = 'warn';
     } else {
-      st.innerHTML = `<span class="bad">● Verbinde mit ${esc(m.host)} …</span>`;
+      st.textContent = `● Verbinde mit ${m.host} …`;
+      st.dataset.level = 'warn';
     }
 
     const kinds = { stereo: 'Stereo', multitrack: 'Mehrspur', unknown: 'unbekannt' };
@@ -2924,7 +3040,10 @@
       r.innerHTML = `USB-Ausgänge ${c.labels.map(esc).join(' · ')}<br>`
         + `Erkannt: <b>${kinds[c.kind]}</b> (${c.learned ? 'gemerkt' : 'Faustregel'}) – ${verdict}<br>${learnedText}`;
     }
-    $('btn-mixer-learn-stereo').disabled = !c.labels;
+    // Merken geht nur mit verbundenem Pult: sonst ausblenden statt ausgrauen
+    $('btn-mixer-learn-stereo').hidden = !c.labels;
+    $('btn-mixer-learn-multi').hidden = !c.labels;
+    $('btn-mixer-forget').hidden = !(learned.stereo || learned.multitrack);
     $('btn-mixer-learn-multi').disabled = !c.labels;
     $('mixer-sim-row').hidden = !m.simulated;
     // Warnbalken sofort richtig, auch wenn noch keine Gesundheitsmeldung kam (z. B. direkt nach dem Start).
@@ -2991,8 +3110,9 @@
     settingsTab = 'audio';
     openModal('modal-settings');
     setTimeout(() => {
-      $('set-rec-mode').scrollIntoView({ block: 'center' });
-      $('set-rec-mode').focus();
+      const seg = $('rec-mode-seg');
+      seg.scrollIntoView({ block: 'center' });
+      seg.querySelector('[aria-checked="true"]')?.focus();
     }, 50);
   }
 
@@ -3251,6 +3371,7 @@
     const s = state.settings;
     $('set-samplerate').value = String(s.sampleRate);
     $('set-rec-mode').value = s.recordingMode === 'multitrack' ? 'multitrack' : 'stereo';
+    syncRecModeSeg();
     $('set-mt-simulate').checked = Boolean(s.multitrackSimulate);
     $('set-mt-device').value = s.multitrackDevice || '';
     if (!$('set-mt-device').options.length || $('set-mt-device').value !== (s.multitrackDevice || '')) fillMultitrackSelect(null);
@@ -3271,8 +3392,8 @@
     state.calendarIds = (s.churchToolsCalendarIds || []).map(String);
     $('ct-calendars').innerHTML = '';
     $('ct-calendars-info').textContent = state.calendarIds.length
-      ? `${state.calendarIds.length} Kalender ausgewählt`
-      : 'alle Kalender';
+      ? `· ${state.calendarIds.length} ausgewählt`
+      : '· alle';
     $('set-ct-services').value = s.artistServices || '';
     $('ct-token-state').textContent = s.churchToolsTokenSet
       ? (s.encryptionAvailable ? 'Token hinterlegt (verschlüsselt).' : 'Token hinterlegt – unverschlüsselt (auf diesem System nicht möglich).')
@@ -3286,6 +3407,9 @@
     $('set-loudness-monitor').checked = s.loudnessMonitor !== false;
     $('set-follow-live').checked = s.followLive !== false;
     $('set-prelisten').checked = s.prelisten !== false;
+    renderPathViews();
+    updatePatternPreview();
+    $('test-tools').open = Boolean(s.multitrackSimulate);
   }
 
   /** Editor für die Standard-Programmpunkte (Name, nach oben/unten, entfernen). */
@@ -3295,22 +3419,48 @@
     (list || []).forEach((text) => addDefaultAgendaRow(text));
   }
 
+  /**
+   * Eine Zeile im Vorlagen-Editor: am Griff ziehen (wie in der Liste „Ablauf“) oder Alt + ↑/↓ im Feld; × entfernt.
+   */
   function addDefaultAgendaRow(text = '') {
     const box = $('default-agenda-list');
     const row = document.createElement('div');
     row.className = 'agenda-row';
-    row.innerHTML = `<input type="text" />
-      <button class="secondary" data-up title="Nach oben">↑</button>
-      <button class="secondary" data-down title="Nach unten">↓</button>
-      <button class="secondary" data-del title="Entfernen">×</button>`;
-    row.querySelector('input').value = text;
-    row.querySelector('[data-up]').addEventListener('click', () => {
-      if (row.previousElementSibling) box.insertBefore(row, row.previousElementSibling);
+    row.innerHTML = `<span class="grip" title="Ziehen zum Verschieben" aria-hidden="true">⋮⋮</span><input type="text" aria-label="Programmpunkt" />
+      <button class="ghost" type="button" data-del title="Entfernen" aria-label="Punkt entfernen">×</button>`;
+    const input = row.querySelector('input');
+    input.value = text;
+    const moved = () => updateSettingsDirty();
+    row.querySelector('[data-del]').addEventListener('click', () => { row.remove(); moved(); });
+    input.addEventListener('keydown', (e) => {
+      if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+      e.preventDefault();
+      if (e.key === 'ArrowUp' && row.previousElementSibling) box.insertBefore(row, row.previousElementSibling);
+      if (e.key === 'ArrowDown' && row.nextElementSibling) box.insertBefore(row.nextElementSibling, row);
+      input.focus();
+      moved();
     });
-    row.querySelector('[data-down]').addEventListener('click', () => {
-      if (row.nextElementSibling) box.insertBefore(row.nextElementSibling, row);
+    // Ziehen nur am Griff, damit man im Feld weiter Text markieren kann
+    const grip = row.querySelector('.grip');
+    grip.addEventListener('pointerdown', () => { row.draggable = true; });
+    row.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/agenda-row', '1');
+      e.dataTransfer.effectAllowed = 'move';
+      row.classList.add('dragging');
     });
-    row.querySelector('[data-del]').addEventListener('click', () => row.remove());
+    row.addEventListener('dragend', () => {
+      row.draggable = false;
+      row.classList.remove('dragging');
+      box.querySelectorAll('.agenda-row').forEach((r) => r.classList.remove('drop-before', 'drop-after'));
+      moved();
+    });
+    row.addEventListener('dragover', (e) => {
+      const dragging = box.querySelector('.agenda-row.dragging');
+      if (!dragging || dragging === row) return;
+      e.preventDefault();
+      const before = e.clientY - row.getBoundingClientRect().top < row.offsetHeight / 2;
+      box.insertBefore(dragging, before ? row : row.nextElementSibling);
+    });
     box.appendChild(row);
     return row;
   }
@@ -3350,8 +3500,10 @@
     sel.value = t.selectedId;
     const cur = t.templates.find((x) => x.id === t.selectedId);
     $('tpl-name').value = cur ? cur.name : '';
-    $('tpl-default').checked = t.defaultId === t.selectedId;
-    $('tpl-default').disabled = t.defaultId === t.selectedId;     // es muss immer eine Standardvorlage geben
+    // Es gibt immer genau eine Standardvorlage: Schild bei ihr, sonst der Knopf zum Festlegen
+    const isDefault = t.defaultId === t.selectedId;
+    $('tpl-default-badge').hidden = !isDefault;
+    $('tpl-make-default').hidden = isDefault;
     renderDefaultAgenda(cur ? cur.items : []);
   }
 
@@ -3417,7 +3569,7 @@
       label.append(c.name);
       box.appendChild(label);
     });
-    $('ct-calendars-info').textContent = `${res.calendars.length} Kalender – ohne Häkchen gelten alle`;
+    $('ct-calendars-info').textContent = '· ohne Häkchen gelten alle';
   }
 
   function bindSettingsForm() {
@@ -3441,10 +3593,11 @@
       t.selectedId = t.defaultId;
       renderTemplateEditor();
     });
-    $('tpl-default').addEventListener('change', (e) => {
+    $('tpl-make-default').addEventListener('click', () => {
       commitTemplateDraft();      // Änderungen an Name und Punkten nicht verlieren
-      if (e.target.checked) state.tpl.defaultId = state.tpl.selectedId;
+      state.tpl.defaultId = state.tpl.selectedId;
       renderTemplateEditor();
+      updateSettingsDirty();
     });
     $('tpl-name').addEventListener('input', () => {
       // Name sofort im Auswahlfeld zeigen
@@ -3454,17 +3607,23 @@
     $('btn-choose-dir').addEventListener('click', async () => {
       const res = await window.api.settings.chooseFolder('Ordner für Aufnahmen wählen', $('set-dir').value);
       if (res.ok && res.path) $('set-dir').value = res.path;
+      renderPathViews();
+      updateSettingsDirty();
     });
     $('btn-choose-export-dir').addEventListener('click', async () => {
       const res = await window.api.settings.chooseFolder('Oberordner für MP3-Exporte wählen', $('set-export-dir').value);
       if (res.ok && res.path) $('set-export-dir').value = res.path;
+      renderPathViews();
+      updateSettingsDirty();
     });
-    $('btn-clear-export-dir').addEventListener('click', () => { $('set-export-dir').value = ''; });
+    $('btn-clear-export-dir').addEventListener('click', () => { $('set-export-dir').value = ''; renderPathViews(); updateSettingsDirty(); });
     $('btn-choose-mt-dir').addEventListener('click', async () => {
       const res = await window.api.settings.chooseFolder('Ordner für Mehrspuraufnahmen wählen', $('set-mt-dir').value || $('set-dir').value);
       if (res.ok && res.path) $('set-mt-dir').value = res.path;
+      renderPathViews();
+      updateSettingsDirty();
     });
-    $('btn-clear-mt-dir').addEventListener('click', () => { $('set-mt-dir').value = ''; });
+    $('btn-clear-mt-dir').addEventListener('click', () => { $('set-mt-dir').value = ''; renderPathViews(); updateSettingsDirty(); });
     $('btn-mt-refresh').addEventListener('click', () => refreshMultitrackDevices());
     $('btn-mode-badge').addEventListener('click', openRecordingModeSetting);
     $('ch-all').addEventListener('click', () => saveArmed(null));
@@ -3514,6 +3673,44 @@
     });
 
     $('btn-save-settings').addEventListener('click', () => saveSettings(false));
+    $('settings-close').addEventListener('click', requestCloseSettings);
+    $('settings-cancel').addEventListener('click', requestCloseSettings);
+    // Jede Eingabe: geänderte Reiter markieren
+    const modal = $('modal-settings');
+    modal.addEventListener('input', () => updateSettingsDirty());
+    modal.addEventListener('change', () => updateSettingsDirty());
+    modal.addEventListener('click', (e) => { if (e.target.closest('#btn-tpl-add, #btn-tpl-del, #btn-default-agenda-add')) setTimeout(updateSettingsDirty, 0); });
+    // Aufnahmeart als Umschalter
+    document.querySelectorAll('#rec-mode-seg button').forEach((b) => b.addEventListener('click', () => {
+      $('set-rec-mode').value = b.dataset.value;
+      syncRecModeSeg();
+      updateSettingsDirty();
+    }));
+    // Platzhalter per Klick an der Schreibmarke einfügen; Vorschau aktualisieren
+    document.querySelectorAll('#pattern-chips [data-insert]').forEach((chip) => chip.addEventListener('click', () => {
+      const input = $('set-pattern');
+      const start = input.selectionStart ?? input.value.length;
+      const end = input.selectionEnd ?? input.value.length;
+      const ins = chip.dataset.insert;
+      const before = input.value.slice(0, start);
+      const sep = before && !/[_\-\s]$/.test(before) ? '_' : '';
+      input.value = before + sep + ins + input.value.slice(end);
+      input.focus();
+      const pos = (before + sep + ins).length;
+      input.setSelectionRange(pos, pos);
+      updatePatternPreview();
+      updateSettingsDirty();
+    }));
+    $('set-pattern').addEventListener('input', updatePatternPreview);
+    $('set-default-artist').addEventListener('input', updatePatternPreview);
+    // Passwörter bleiben verdeckt; das Auge zeigt sie nur, solange es gedrückt ist bzw. bis zum nächsten Klick
+    document.querySelectorAll('#modal-settings .reveal-btn').forEach((b) => b.addEventListener('click', () => {
+      const input = $(b.dataset.reveal);
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      b.setAttribute('aria-pressed', String(show));
+      b.title = show ? 'Verbergen' : 'Anzeigen';
+    }));
   }
 
   async function saveSettings(keepOpen) {
@@ -3568,6 +3765,7 @@
     updatePrelisten();
     $('set-ct-token').value = '';
     applySettingsToForm();
+    takeSettingsSnapshot();
     if (!keepOpen) {
       $('modal-settings').hidden = true;
     }

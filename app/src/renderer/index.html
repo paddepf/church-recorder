@@ -27,8 +27,13 @@
       <span id="disk-badge" class="badge" data-level="ok" title="Freier Speicherplatz auf dem Laufwerk der Aufnahmen">Speicher</span>
       <button id="btn-update" class="update-btn" hidden title="Update anzeigen">Update</button>
       <button id="btn-mode-badge" class="mode-badge" hidden title="Mehrspuraufnahme ist eingestellt – Klick: Aufnahmeart in den Einstellungen ändern">● Mehrspur</button>
-      <button id="btn-library" class="ghost" title="Frühere Aufnahmen">Aufnahmen</button>
-      <button id="btn-settings" class="ghost" title="Einstellungen">Einstellungen</button>
+      <button id="btn-library" class="ghost top-text" title="Frühere Aufnahmen öffnen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="5" rx="1.2"/><path d="M5 9v9.5a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5V9M10 13h4"/></svg>
+        <span>Aufnahmen</span>
+      </button>
+      <button id="btn-settings" class="ghost icon-btn" aria-label="Einstellungen" title="Einstellungen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
       <label class="ontop compact-only" title="Das Mini-Fenster bleibt über anderen Programmen"><input type="checkbox" id="chk-ontop" checked /> <span class="ontop-long">Immer </span>oben</label>
       <div class="view-switch size-switch" role="group" aria-label="Größe der Ansicht">
         <button id="btn-dense" aria-pressed="false" aria-label="Kompakte Ansicht" title="Kompakte Ansicht: alle Bereiche bleiben, nur kleiner – so lässt sich auch in einem kleineren Fenster vollständig arbeiten"><span class="a-small">A</span></button>
@@ -228,17 +233,18 @@
   <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
   <audio id="player" preload="none"></audio>
 
-  <!-- Einstellungen -->
+  <!-- Einstellungen: Reiter links, rechts Gruppen mit Zwischenüberschriften. Geänderte Reiter tragen einen Punkt,
+       gespeichert wird gesammelt; beim Schließen mit Änderungen wird nachgefragt. -->
   <div id="modal-settings" class="modal" hidden>
     <div class="modal-card settings">
       <div class="modal-head">
         <h2>Einstellungen</h2>
-        <button class="icon close" data-close>×</button>
+        <button class="icon close" id="settings-close" aria-label="Schließen">×</button>
       </div>
       <div class="settings-layout">
       <nav class="settings-nav" role="tablist" aria-label="Bereiche">
         <button type="button" data-tab="audio" aria-selected="true">Audio</button>
-        <button type="button" data-tab="mischpult" aria-selected="false">Mischpult</button>
+        <button type="button" data-tab="mischpult" aria-selected="false">Mehrspur &amp; Pult</button>
         <button type="button" data-tab="ablage" aria-selected="false">Ablage &amp; Export</button>
         <button type="button" data-tab="churchtools" aria-selected="false">ChurchTools</button>
         <button type="button" data-tab="vorlagen" aria-selected="false">Vorlagen</button>
@@ -247,14 +253,24 @@
       </nav>
       <div class="modal-body">
         <fieldset data-tab="audio">
-          <legend>Audio</legend>
+          <legend>Aufnahmeart</legend>
+          <input type="hidden" id="set-rec-mode" value="stereo" />
+          <div class="seg" id="rec-mode-seg" role="radiogroup" aria-label="Aufnahmeart">
+            <button type="button" role="radio" data-value="stereo" aria-checked="true">Stereo</button>
+            <button type="button" role="radio" data-value="multitrack" aria-checked="false">Mehrspur</button>
+          </div>
+          <small id="rec-mode-hint">Stereo: eine WAV, Abschnitte als MP3. Mehrspur: eine WAV je Pultkanal, kein MP3-Export.</small>
+        </fieldset>
+
+        <fieldset data-tab="audio">
+          <legend>Ein- und Ausgang</legend>
           <label>Eingang (Aufnahme)
             <select id="set-device" class="select"></select>
           </label>
+          <label class="check"><input type="checkbox" id="set-prelisten" /> Pegel schon vor dem Start anzeigen</label>
           <label>Ausgang (Mithören und Abspielen)
             <select id="set-output" class="select"></select>
           </label>
-          <label class="check"><input type="checkbox" id="set-prelisten" /> Pegel schon vor dem Start anzeigen (Eingang wird geöffnet, nichts gespeichert)</label>
           <label>Abtastrate
             <select id="set-samplerate" class="select">
               <option value="44100">44,1 kHz</option>
@@ -263,51 +279,38 @@
           </label>
         </fieldset>
 
-        <fieldset data-tab="audio">
-          <legend>Mehrspuraufnahme</legend>
-          <label>Aufnahmeart
-            <select id="set-rec-mode" class="select">
-              <option value="stereo">Stereo</option>
-              <option value="multitrack">Mehrspur (alle Pultkanäle einzeln)</option>
-            </select>
-            <small>Mehrspur: eine WAV je Kanal, kein MP3-Export.</small>
-          </label>
-          <label>Mehrspur-Gerät
+        <fieldset data-tab="mischpult">
+          <legend>Mehrspur-Gerät</legend>
+          <label>Gerät
             <span class="row">
               <select id="set-mt-device" class="select"></select>
-              <button id="btn-mt-refresh" class="secondary" type="button">Suchen</button>
+              <button id="btn-mt-refresh" class="secondary" type="button">Geräte suchen</button>
             </span>
             <small id="mt-device-info"></small>
           </label>
-          <label class="check"><input type="checkbox" id="set-mt-simulate" /> Simuliertes Pult (zum Testen ohne Mischpult)</label>
         </fieldset>
 
         <fieldset data-tab="mischpult">
           <legend>Mischpult (Midas M32)</legend>
+          <div id="mixer-status" class="status-pill"></div>
           <label>Adresse (IP) des Pults
             <span class="row">
               <input id="set-mixer-host" type="text" placeholder="z. B. 192.168.1.62" />
-              <button id="btn-mixer-discover" class="secondary" type="button">Suchen</button>
+              <button id="btn-mixer-discover" class="secondary" type="button">Pult im Netz suchen</button>
             </span>
-            <small id="mixer-found"></small>
+            <small id="mixer-found">Nur lesend (Namen, Farben, Routing) – am Pult wird nichts verstellt.</small>
           </label>
-          <div id="mixer-status" class="mixer-line"></div>
-          <small>Nur lesend (Kanalnamen, Farben, Routing) – am Pult wird nichts verstellt.</small>
         </fieldset>
 
         <fieldset data-tab="mischpult">
           <legend>Routing der USB-Ausgänge</legend>
           <div id="mixer-routing" class="mixer-line"></div>
-          <small>Ebbton warnt, wenn das Routing nicht zur Aufnahmeart passt. Jedes Routing einmal am Pult einstellen und merken.</small>
-          <span class="row">
+          <span class="row" id="mixer-learn-row">
             <button id="btn-mixer-learn-stereo" class="secondary" type="button">Als Stereo merken</button>
             <button id="btn-mixer-learn-multi" class="secondary" type="button">Als Mehrspur merken</button>
-            <button id="btn-mixer-forget" class="secondary" type="button">Gemerktes vergessen</button>
+            <button id="btn-mixer-forget" class="ghost" type="button">Gemerktes vergessen</button>
           </span>
-          <span class="row" id="mixer-sim-row" hidden>
-            <button id="btn-mixer-sim-stereo" class="secondary" type="button">Simulator: Stereo-Routing</button>
-            <button id="btn-mixer-sim-multi" class="secondary" type="button">Simulator: Mehrspur-Routing</button>
-          </span>
+          <small>Ebbton warnt, wenn das Routing nicht zur Aufnahmeart passt. Jedes Routing einmal am Pult einstellen und merken.</small>
         </fieldset>
 
         <fieldset data-tab="mischpult">
@@ -315,41 +318,65 @@
           <div id="mixer-channels" class="mixer-channels"></div>
         </fieldset>
 
+        <fieldset data-tab="mischpult">
+          <details class="test-tools" id="test-tools">
+            <summary>Zum Testen ohne Mischpult</summary>
+            <label class="check"><input type="checkbox" id="set-mt-simulate" /> Simuliertes Pult und Mehrspur-Gerät</label>
+            <span class="row" id="mixer-sim-row" hidden>
+              <button id="btn-mixer-sim-stereo" class="secondary" type="button">Simulator: Stereo-Routing</button>
+              <button id="btn-mixer-sim-multi" class="secondary" type="button">Simulator: Mehrspur-Routing</button>
+            </span>
+          </details>
+        </fieldset>
+
         <fieldset data-tab="ablage">
           <legend>Ordner</legend>
-          <label>Ordner für Aufnahmen
-            <span class="row">
-              <input id="set-dir" type="text" readonly />
-              <button id="btn-choose-dir" class="secondary">Wählen</button>
-            </span>
+          <div class="field">
+            <span class="field-label">Aufnahmen</span>
+            <div class="path-row">
+              <input id="set-dir" type="hidden" />
+              <div class="path" id="set-dir-view" data-empty="—"><b></b><small></small></div>
+              <button id="btn-choose-dir" class="secondary" type="button">Ändern …</button>
+            </div>
             <small id="disk-info"></small>
-          </label>
-          <label>Ordner für MP3-Exporte (Oberordner)
-            <span class="row">
-              <input id="set-export-dir" type="text" readonly placeholder="Leer: beim Export fragen" />
-              <button id="btn-choose-export-dir" class="secondary">Wählen</button>
-              <button id="btn-clear-export-dir" class="secondary" title="Zurücksetzen">×</button>
-            </span>
+          </div>
+          <div class="field">
+            <span class="field-label">MP3-Exporte (Oberordner)</span>
+            <div class="path-row">
+              <input id="set-export-dir" type="hidden" />
+              <div class="path" id="set-export-dir-view" data-empty="Beim Sichern fragen"><b></b><small></small></div>
+              <button id="btn-choose-export-dir" class="secondary" type="button">Ändern …</button>
+              <button id="btn-clear-export-dir" class="ghost" type="button">Zurücksetzen</button>
+            </div>
             <small>Je Gottesdienst ein Unterordner, ohne Rückfrage.</small>
-          </label>
-          <label>Ordner für Mehrspuraufnahmen
-            <span class="row">
-              <input id="set-mt-dir" type="text" readonly placeholder="Leer: „Mehrspur“ im Aufnahmeordner" />
-              <button id="btn-choose-mt-dir" class="secondary">Wählen</button>
-              <button id="btn-clear-mt-dir" class="secondary" title="Zurücksetzen">×</button>
-            </span>
+          </div>
+          <div class="field">
+            <span class="field-label">Mehrspuraufnahmen</span>
+            <div class="path-row">
+              <input id="set-mt-dir" type="hidden" />
+              <div class="path" id="set-mt-dir-view" data-empty="„Mehrspur“ im Aufnahmeordner"><b></b><small></small></div>
+              <button id="btn-choose-mt-dir" class="secondary" type="button">Ändern …</button>
+              <button id="btn-clear-mt-dir" class="ghost" type="button">Zurücksetzen</button>
+            </div>
             <small>Etwa 16,6 GB je Stunde bei 32 Kanälen.</small>
-          </label>
+          </div>
         </fieldset>
 
         <fieldset data-tab="ablage">
           <legend>MP3-Export</legend>
           <label>Dateiname
             <input id="set-pattern" type="text" placeholder="{interpret}_{abschnitt}_{gottesdienst}_{datum}" />
-            <small>Platzhalter: {interpret}, {abschnitt}, {gottesdienst}, {datum}, {zeit}</small>
           </label>
+          <div class="chips" id="pattern-chips" aria-label="Platzhalter einfügen">
+            <button type="button" class="chip" data-insert="{interpret}">Interpret</button>
+            <button type="button" class="chip" data-insert="{abschnitt}">Abschnitt</button>
+            <button type="button" class="chip" data-insert="{gottesdienst}">Gottesdienst</button>
+            <button type="button" class="chip" data-insert="{datum}">Datum</button>
+            <button type="button" class="chip" data-insert="{zeit}">Uhrzeit</button>
+          </div>
+          <small class="preview">Beispiel: <code id="pattern-preview"></code></small>
           <label>Standard-Interpret
-            <input id="set-default-artist" type="text" />
+            <input id="set-default-artist" type="text" placeholder="z. B. EBB Pfungstadt" />
             <small>Für Abschnitte ohne eigenen Interpreten.</small>
           </label>
           <label>MP3-Qualität
@@ -373,29 +400,35 @@
         </fieldset>
 
         <fieldset data-tab="churchtools">
-          <legend>ChurchTools</legend>
+          <legend>Verbindung</legend>
           <label>Adresse
             <input id="set-ct-url" type="text" placeholder="https://meinegemeinde.church.tools" />
           </label>
           <label>Personal Access Token
-            <input id="set-ct-token" type="password" placeholder="Leer lassen = unverändert" />
+            <span class="row">
+              <input id="set-ct-token" type="password" placeholder="Leer lassen = unverändert" autocomplete="off" />
+              <button type="button" class="ghost reveal-btn" data-reveal="set-ct-token" aria-label="Token anzeigen" title="Anzeigen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            </span>
             <small id="ct-token-state"></small>
           </label>
+          <div class="row inline-action">
+            <button id="btn-ct-test" class="secondary" type="button">Verbindung prüfen</button>
+            <span id="ct-test-result" class="inline-result"></span>
+          </div>
+          <label class="check"><input type="checkbox" id="set-ct-auto" /> Beim Start den heutigen Gottesdienst laden</label>
+        </fieldset>
+
+        <fieldset data-tab="churchtools">
+          <legend>Dienste und Kalender</legend>
           <label>Dienste für Interpret-Vorschläge
             <input id="set-ct-services" type="text" />
             <small>Kommagetrennt; die eingeteilten Personen werden als Interpret vorgeschlagen.</small>
           </label>
           <div class="field">
-            <span>Kalender für die Terminauswahl</span>
-            <div class="row">
-              <button id="btn-ct-calendars" class="secondary" type="button">Kalender laden</button>
-              <span id="ct-calendars-info" class="inline-result"></span>
-            </div>
+            <span class="field-label">Kalender für die Terminauswahl <span id="ct-calendars-info" class="inline-result"></span></span>
             <div id="ct-calendars" class="calendar-list"></div>
+            <button id="btn-ct-calendars" class="ghost" type="button">Neu laden</button>
           </div>
-          <label class="check"><input type="checkbox" id="set-ct-auto" /> Beim Start den heutigen Gottesdienst laden</label>
-          <button id="btn-ct-test" class="secondary">Verbindung prüfen</button>
-          <span id="ct-test-result" class="inline-result"></span>
         </fieldset>
 
         <fieldset data-tab="vorlagen">
@@ -404,31 +437,42 @@
           <label>Vorlage
             <span class="row">
               <select id="tpl-select" class="select"></select>
-              <button id="btn-tpl-add" class="secondary">Neu</button>
-              <button id="btn-tpl-del" class="secondary">Löschen</button>
+              <button id="btn-tpl-add" class="secondary" type="button">Neu</button>
+              <button id="btn-tpl-del" class="danger" type="button">Löschen</button>
             </span>
           </label>
           <label>Name der Vorlage
             <input id="tpl-name" type="text" />
           </label>
-          <label class="check"><input type="checkbox" id="tpl-default" /> Standardvorlage</label>
+          <div class="row tpl-default-row">
+            <span id="tpl-default-badge" class="tag-badge">Standardvorlage</span>
+            <button id="tpl-make-default" class="ghost" type="button">Als Standard festlegen</button>
+          </div>
           <div id="default-agenda-list" class="agenda-editor"></div>
-          <button id="btn-default-agenda-add" class="secondary">Punkt hinzufügen</button>
+          <button id="btn-default-agenda-add" class="secondary" type="button">+ Punkt hinzufügen</button>
+          <small>Punkte am Griff ziehen oder mit Alt + ↑/↓ verschieben.</small>
         </fieldset>
 
         <fieldset data-tab="netzwerk">
-          <legend>Netzwerk</legend>
-          <label class="check"><input type="checkbox" id="set-net-on" /> Netzwerkschnittstelle aktiv</label>
+          <legend>Netzwerkschnittstelle</legend>
+          <div id="net-info" class="status-pill"></div>
+          <label class="check"><input type="checkbox" id="set-net-on" /> Netzwerkschnittstelle aktiv (Companion, Statusseite)</label>
           <label>Port
             <input id="set-net-port" type="number" min="1024" max="65535" />
           </label>
           <label>Passwort für Steuerung (Companion)
-            <input id="set-net-pass" type="password" autocomplete="off" />
+            <span class="row">
+              <input id="set-net-pass" type="password" autocomplete="off" />
+              <button type="button" class="ghost reveal-btn" data-reveal="set-net-pass" aria-label="Passwort anzeigen" title="Anzeigen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            </span>
+            <small>Ohne Passwort bleibt die Schnittstelle aus.</small>
           </label>
           <label>Passwort zum Mitlesen (optional)
-            <input id="set-monitor-pass" type="password" autocomplete="off" />
+            <span class="row">
+              <input id="set-monitor-pass" type="password" autocomplete="off" />
+              <button type="button" class="ghost reveal-btn" data-reveal="set-monitor-pass" aria-label="Passwort anzeigen" title="Anzeigen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            </span>
           </label>
-          <div id="net-info" class="inline-result"></div>
           <div id="net-status-page" class="net-status-page" hidden>
             <strong>Statusseite für Handy und Tablet</strong>
             <span id="net-status-urls" class="net-status-urls"></span>
@@ -446,8 +490,10 @@
             </select>
           </label>
           <label class="check"><input type="checkbox" id="set-autoupdate" /> Automatisch nach Updates suchen</label>
-          <div id="version-info" class="inline-result"></div>
-          <button id="btn-check-update" class="secondary">Jetzt nach Update suchen</button>
+          <div class="row inline-action">
+            <button id="btn-check-update" class="secondary" type="button">Jetzt nach Update suchen</button>
+            <span id="version-info" class="inline-result"></span>
+          </div>
         </fieldset>
 
         <fieldset data-tab="programm">
@@ -458,7 +504,9 @@
       </div>
       </div>
       <div class="modal-foot">
-        <button id="btn-save-settings" class="primary">Einstellungen speichern</button>
+        <span id="settings-dirty" class="dirty-note"></span>
+        <button id="settings-cancel" class="ghost" type="button">Schließen</button>
+        <button id="btn-save-settings" class="primary" type="button">Speichern</button>
       </div>
     </div>
   </div>

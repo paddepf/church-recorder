@@ -55,9 +55,14 @@ Windows erzeugen. Der mitgelieferte Workflow erledigt beides auf GitHub.
 
 ## Einrichtung beim ersten Start
 
-Die Einstellungen sind in Reiter gegliedert (links: Audio, Ablage & Export, ChurchTools, Vorlagen, Netzwerk, Programm).
+Die Einstellungen öffnet das Zahnrad oben rechts. Sie sind in Reiter gegliedert (links: Audio, Mehrspur & Pult,
+Ablage & Export, ChurchTools, Vorlagen, Netzwerk, Programm). Geänderte Reiter tragen einen gelben Punkt; gespeichert wird
+mit „Änderungen speichern“, beim Schließen ohne Speichern fragt die App nach.
 
-1. **Einstellungen → Audio:** Eingang, Ausgang (fürs Mithören) und Abtastrate wählen. Die Auswahl wird
+Ordner werden als Name mit Pfad darunter angezeigt und über „Ändern …“ gewählt. Unter dem Dateinamen-Muster lassen sich
+die Platzhalter per Klick einfügen, darunter steht ein Beispiel, wie die MP3-Datei heißen wird.
+
+1. **Einstellungen → Audio:** Aufnahmeart (Stereo ist der Normalfall), Eingang, Ausgang (fürs Mithören) und Abtastrate wählen. Die Auswahl wird
    gespeichert und beim nächsten Start wiederverwendet.
 2. **Einstellungen → Ablage:** Ordner für die Aufnahmen festlegen. Rechne mit
    etwa 700 MB pro Stunde für die WAV-Masteraufnahme. Zusätzlich lässt sich ein
@@ -337,8 +342,8 @@ unabhängig und sieht immer gleich aus.
 
 ### Kalender, Beenden, Bedienung per Tastatur
 
-- **Kalender:** Unter Einstellungen → ChurchTools → „Kalender laden“ lassen sich die Kalender
-  wählen, deren Termine in der Auswahl erscheinen (ohne Häkchen: alle).
+- **Kalender:** Unter Einstellungen → ChurchTools lassen sich die Kalender wählen, deren Termine in der Auswahl
+  erscheinen (ohne Häkchen: alle); die Liste lädt beim Öffnen des Reiters von selbst.
 - **Beenden:** Beim Schließen während einer Aufnahme fragt die App nach, ohne die Aufnahme dabei
   anzuhalten, und schließt erst, wenn die Datei vollständig geschrieben ist.
 - **Pause:** In der Pause sind Timer, Fensterrand und Pause-Knopf gelb; derselbe Knopf (jetzt ▶) setzt fort.
@@ -527,9 +532,9 @@ aufgenommen), „Alle“ und „Nur benannte“ (Kanäle mit Namen am Pult) wäh
 gelb umrandet = seit über 20 s still während der Aufnahme (die Namen stehen auch oben im Bereich). Darüber stehen
 Gerät, Abtastrate, Zahl der gewählten Kanäle und der Platz in Stunden; fehlt das Gerät (Pult aus), versucht
 Ebbton es alle 10 s erneut. Der große Pegel zeigt den lautesten gewählten Kanal.
-Gerät wählen unter *Einstellungen → Audio → Mehrspuraufnahme* („Suchen“ fragt die Geräte ab, unter Windows die
+Gerät wählen unter *Einstellungen → Mehrspur & Pult* („Geräte suchen“ fragt die Geräte ab, unter Windows die
 ASIO-Treiber; nur außerhalb einer Aufnahme) oder „Automatisch“ (Gerät mit den meisten Eingängen). „Simuliertes
-Pult“ nimmt ein nachgebautes 32-Kanal-Pult auf (zum Ausprobieren). Aufnehmen wie gewohnt: Start, Pause, Abschnitte,
+Pult“ (zugeklappt unter „Zum Testen ohne Mischpult“) nimmt ein nachgebautes 32-Kanal-Pult auf (zum Ausprobieren). Aufnehmen wie gewohnt: Start, Pause, Abschnitte,
 Beenden, „An Aufnahme anhängen“, auch per Companion. Am Mischpult müssen die USB-Ausgänge dafür auf den Kanälen
 1–32 liegen. Die Spuren landen je Aufnahme in einem Unterordner des Mehrspur-Ordners (*Ablage & Export*, sonst
 `Mehrspur` im Aufnahmeordner), zusammen mit der Session-Datei; die Liste „Aufnahmen“ zeigt sie mit an.
@@ -544,7 +549,7 @@ mit „Schleife“ wird der gewählte Abschnitt (sonst die ganze Aufnahme) wiede
 Position. Am Mischpult müssen die Kanäle dafür die USB-Karte als Quelle haben – das stellt Ebbton bewusst nicht
 selbst um. Eine neue Aufnahme beendet das Abspielen.
 
-**Mischpult (Einstellungen → Mischpult):** IP des M32 eintragen oder „Suchen“ (findet Pulte im selben Netz).
+**Mischpult (Einstellungen → Mehrspur & Pult):** IP des M32 eintragen oder „Pult im Netz suchen“.
 Ebbton liest dann per OSC – nur lesend – die Kanalnamen und -farben (die Spuren heißen wie am Pult,
 z. B. `01_Predigt.wav`; ist das Pult nicht erreichbar, „Kanal 1“ …) und das Routing der USB-Kartenausgänge. Passt
 das Routing nicht zur Aufnahmeart (Mehrspur eingestellt, aber Matrix auf USB 1–2, oder umgekehrt), erscheint ein

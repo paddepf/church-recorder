@@ -117,6 +117,7 @@ contextBridge.exposeInMainWorld('api', {
 
   exportBatch: (items) => invoke('export:batch', { items }),
   exportTarget: () => invoke('export:target'),
+  exportPreviewName: (pattern) => invoke('export:previewName', { pattern }),
 
   net: {
     status: () => invoke('net:status'),

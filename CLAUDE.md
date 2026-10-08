@@ -166,9 +166,10 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   laufende Erfassung nicht beendet. Gehaltene Tasten (`e.repeat`) werden ignoriert.
 - **Hinweistexte in den Einstellungen kurz halten** (Oktober 2026 gekürzt, waren zu lang): höchstens eine Zeile unter
   einem Feld, nur was man zum Ausfüllen braucht; Erklärungen gehören in `app/README.md`.
-- Einstellungen: Reiter links (Audio · Ablage & Export · ChurchTools · Vorlagen · Netzwerk · Programm), rechts nur die
-  Gruppen des Reiters (`fieldset[data-tab]`, `showSettingsTab`; beim Öffnen immer zuletzt gewählter Reiter). Neue Felder in
-  die passende Gruppe setzen; gelesen/gespeichert wird unabhängig von der Sichtbarkeit.
+- Einstellungen: Reiter links (Audio · Mehrspur & Pult · Ablage & Export · ChurchTools · Vorlagen · Netzwerk · Programm),
+  rechts nur die Gruppen des Reiters (`fieldset[data-tab]`, `showSettingsTab`; beim Öffnen immer zuletzt gewählter Reiter).
+  Neue Felder in die passende Gruppe setzen; gelesen/gespeichert wird unabhängig von der Sichtbarkeit. Überarbeitung
+  2026-10-08 siehe „Einstellungen (überarbeitet)“ unter „Oberfläche nach Phasen“.
 - Der Netzwerkstatus steht nicht in der Kopfzeile (zu unwichtig), sondern nur in den Einstellungen unter „Netzwerk“
   (`#net-info`: Port, verbundene Clients).
 - Einstellungen speichern startet die Netzwerkschnittstelle nur bei geänderten Werten neu. `settings:chooseFolder`
@@ -353,12 +354,12 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   hoch und gleich groß beschriftet – Variablen `--top-h`/`--top-font`/`--top-pad` auf `.topbar` (groß 40 px/15 px,
   unter 1180 px 36/14, kompakt 28/13, Mini 24/11; Block „Kopfleiste (aufgeräumt)“ am Ende von `styles.css`). Rechts
   Gruppen mit Abstand (`--top-group` vor „Aufnahmen“ und vor dem Ansicht-Umschalter): [Schild „● Mehrspur“] ·
-  Aufnahmen/Einstellungen · Ansicht. Vorher: drei verschiedene Höhen (25/39/45 px) und kleinere Schrift in den
+  Aufnahmen/Einstellungen · Ansicht. Seit 2026-10-08 ruhiger: siehe „Kopfleiste (ruhiger)“ unter „Oberfläche nach Phasen“. Vorher: drei verschiedene Höhen (25/39/45 px) und kleinere Schrift in den
   Umschaltern – wirkte unordentlich.
 - **Aufnahmeart in der Kopfzeile nur als Schild:** Stereo ist der Normalfall, Mehrspur wird selten genutzt. Deshalb kein
   Umschalter „Stereo | Mehrspur“ mehr (gab es kurz), sondern nur bei Mehrspur das farbige Schild `#btn-mode-badge`
   „● Mehrspur“ (`applyMode`; auch während einer Mehrspuraufnahme); Klick öffnet *Einstellungen → Audio* mit Fokus auf
-  „Aufnahmeart“ (`openRecordingModeSetting`). Umgestellt wird dort oder per Companion (`mode.set`). Gemessen: kein Überlauf, Timer
+  den Umschalter „Aufnahmeart“ (`openRecordingModeSetting`). Umgestellt wird dort oder per Companion (`mode.set`). Gemessen: kein Überlauf, Timer
   unverändert bei 1360/1024 groß und 960/760 kompakt, Mini 360 und 320 px.
 - **Ansicht rechts oben (Variante „D“, Oktober 2026):** Größen-Umschalter „A A“ (`.size-switch`: kleines A =
   `#btn-dense` kompakt, großes A = `#btn-view-large` groß), daneben Symbolknöpfe (`.icon-btn`, Inline-SVG): Mini-Fenster
@@ -608,7 +609,7 @@ Der Ordnername des lokalen Klons ist egal.
   Gilt auch im Stereo-Modus (Mehrspur-Routing vergessen zurückzustellen → Aufnahme hätte nur Kanal 1/2 roh).
 - Pult-Simulator (`mixer/simulator.js`, Beispielnamen und -farben): läuft in der App nur bei Aufnahmeart Mehrspur mit
   „Simuliertes Pult“ und leerer IP (`configureMixer`); im Stereo-Modus nie, sonst meldete er ständig falsches Routing.
-  Umschalten seines Routings über Knöpfe in *Einstellungen → Mischpult* (`mixer:simulateRouting`).
+  Umschalten seines Routings über Knöpfe in *Einstellungen → Mehrspur & Pult → Zum Testen* (`mixer:simulateRouting`).
 - Companion (Modul 2.1.0): Variablen `recording_mode`/`routing_status`, Rückmeldungen `routing_mismatch` (nur bei
   `mismatch`, nicht bei `unknown`, sonst stünde die Taste bei nicht erreichbarem Pult dauernd auf Rot) und
   `multitrack`, Aktion `mode_set` → WebSocket `mode.set` (`stereo`/`multitrack`/`toggle`, während der Aufnahme
@@ -754,6 +755,37 @@ dran?“; je Phase genau eine Hauptaktion, der Aufbau bleibt gleich, nur die Bet
   mit Umriss, Abschnitten, Schnitten, Live-Stelle, Hörmarke und dem sichtbaren Ausschnitt als Rahmen; Klick springt,
   Ziehen verschiebt (schaltet „Folgen“ aus). Der Umriss wird nur bei neuen Daten neu gerechnet.
 - Datum in der Kopfzeile menschlich („Do., 8. Okt. 2026“, `serviceDateText`; in Dateinamen bleibt ISO).
+- **Kopfleiste (ruhiger):** Rechts waren sechs gleich laute, umrandete Knöpfe. Jetzt: „Aufnahmen“ mit Symbol (`.top-text`),
+  Einstellungen als Zahnrad (`#btn-settings.icon-btn`), dann Größe „A A“ (behält als Segment den Rahmen), Mini und
+  Hell/Dunkel – Symbole ohne Rahmen, erst beim Darüberfahren hinterlegt. **Hell/Dunkel bleibt bewusst in der Kopfleiste**
+  (Wunsch des Nutzers). Kopfleiste flacher (10 px statt 14 px Innenabstand). Ohne Gottesdienst heißt das Feld
+  „Gottesdienst wählen …“ und ist gestrichelt in Akzentfarbe (`.service-name.unset`).
+- **Einstellungen (überarbeitet):** Zwischenüberschriften statt Kästen im Kasten, Feldnamen 15 px, Hinweise 13 px
+  (vorher 13/11 px, deutlich kleiner als die Hauptansicht). Knöpfe in passender Breite (`justify-self: start`), keine über
+  die volle Breite gezogenen mehr.
+  - **Speichern:** Änderungen werden erkannt (`settingsValues` vergleicht je Reiter mit `takeSettingsSnapshot` beim
+    Öffnen und nach dem Speichern; Kalender über `readCalendarSelection`, Vorlagen über den ganzen Entwurf). Geänderte
+    Reiter tragen einen gelben Punkt, unten steht „Ungespeichert: …“, der Knopf heißt „Änderungen speichern“ (sonst
+    gesperrt). Schließen mit ×, Esc, Hintergrund oder „Schließen“ fragt bei Änderungen „Änderungen verwerfen?“
+    (`requestCloseSettings`). Sofort speichern bei jeder Änderung wurde bewusst nicht gewählt (Netzwerk-Neustart, Pfade).
+  - **Audio:** oben die Aufnahmeart als Umschalter (`#rec-mode-seg` schreibt in das versteckte `#set-rec-mode`, damit
+    der übrige Code unverändert bleibt; `syncRecModeSeg`), darunter Ein-/Ausgang. Mehrspur-Gerät, Pult, Routing und
+    Kanäle stehen unter **„Mehrspur & Pult“** (`data-tab="mischpult"`). „Simuliertes Pult“ und die Simulator-Knöpfe
+    stecken in einem zugeklappten Bereich „Zum Testen ohne Mischpult“ (offen, wenn der Simulator an ist). „Als … merken“
+    nur bei verbundenem Pult, „Gemerktes vergessen“ nur, wenn etwas gemerkt ist. Die Simulator-Knöpfe waren trotz
+    `hidden` sichtbar (`.row` mit `display: flex`) – jetzt `.row[hidden] { display: none }`.
+  - **Ordner:** versteckte Felder (`#set-dir`, `#set-export-dir`, `#set-mt-dir`) plus Anzeige Name groß/Pfad klein
+    (`renderPathViews`), Knöpfe „Ändern …“ und „Zurücksetzen“. Klasse `.is-empty` (nicht `.empty` – die globale Klasse
+    zentriert Text).
+  - **Dateiname:** Platzhalter als Chips (fügen an der Schreibmarke ein), darunter „Beispiel: …“ – gerechnet im
+    Hauptprozess mit `buildFileName(label, artist, pattern)` über IPC `export:previewName`, also genau wie beim Export.
+  - **Netzwerk/Pult:** Zustand oben als Schild (`.status-pill`, `data-level` ok/warn), statt „aktiv“ angehakt und darunter
+    „bleibt aus“. Passwortfelder und Token haben ein Auge zum Anzeigen (bleiben standardmäßig verdeckt).
+  - **ChurchTools:** Kalender laden beim ersten Öffnen des Reiters von selbst (`state.calendarsLoaded`), „Verbindung
+    prüfen“ mit Ergebnis daneben.
+  - **Vorlagen:** Punkte am Griff ziehen (Ziehen nur am Griff, damit Text markierbar bleibt) oder Alt + ↑/↓; „Löschen“ in
+    roter Schrift; Standard als Schild bzw. Knopf „Als Standard festlegen“ (`#tpl-make-default`, vorher ein ausgegrautes
+    Häkchen).
 - Gemessen (echte App per DevTools-Protokoll, Zustände auch per `data-phase` nachgestellt): kein Überlauf, Timer fest bei
   1360×880, 1024×680, kompakt 960×640 und 760×520, Stereo und Mehrspur; Mini 360×168 und 320×164 in allen vier
   Zuständen; hell und dunkel. Echte Abläufe: Start, N, Beenden halten (kurz → Hinweis), Entfernen + Rückgängig.

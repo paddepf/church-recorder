@@ -1504,3 +1504,105 @@ body.compact .service-name { height: auto; }
   body .panel-flow .item { --stw: 0px; }
   body .panel-flow .item .st { visibility: hidden; }
 }
+
+/* ------------------------------------------- Kopfleiste (ruhiger, Oktober 2026)
+   Weniger gleich laute Knöpfe: „Aufnahmen“ mit Symbol, Einstellungen als Zahnrad, Hell/Dunkel und Mini als Symbole –
+   alle ohne Rahmen, erst beim Darüberfahren hinterlegt; nur der Größen-Umschalter behält seinen Rahmen (Segment).
+   Ist noch kein Gottesdienst gewählt, ist das Feld eine Aufforderung (gestrichelt, Akzentfarbe). */
+.topbar { padding-top: 10px; padding-bottom: 10px; }
+.topbar .top-actions > .icon-btn,
+.topbar .top-actions > .top-text { border-color: transparent; background: transparent; }
+.topbar .top-actions > .icon-btn:hover:not(:disabled),
+.topbar .top-actions > .top-text:hover:not(:disabled) { background: var(--raised); border-color: transparent; color: var(--text); }
+.topbar .top-actions > .top-text { display: inline-flex; align-items: center; gap: 8px; color: var(--text); }
+.top-text svg { width: calc(var(--top-h) * .46); height: calc(var(--top-h) * .46); fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--muted); }
+.top-actions > #btn-settings { margin-left: 0; }
+.top-actions > .view-switch { margin-left: var(--top-group); }
+.service-name.unset { border-style: dashed; border-color: color-mix(in srgb, var(--plan) 60%, transparent); }
+.service-name.unset #service-name { color: var(--plan); }
+.service-name.unset:hover { border-color: var(--plan); background: color-mix(in srgb, var(--plan) 10%, transparent); }
+body.compact .top-text svg { display: none; }
+
+/* ------------------------------------------------------ Einstellungen (neu)
+   Zwischenüberschriften statt Kästen im Kasten, Schrift wie in der Hauptansicht (Felder 15 px, Hinweise 13 px),
+   Knöpfe in passender Breite, geänderte Reiter mit Punkt. */
+.modal-card.settings { width: min(980px, 100%); height: min(740px, 100%); }
+.settings-nav { width: 210px; padding: 14px 12px; }
+.settings-nav button { font-size: 15px; padding: 9px 12px; display: flex; align-items: center; gap: 8px; }
+.settings-nav button.dirty::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--amber); margin-left: auto; flex-shrink: 0; }
+#modal-settings .modal-body { padding: 18px 24px 24px; gap: 0; }
+#modal-settings fieldset {
+  border: none; border-radius: 0; margin: 0; padding: 0 0 22px; gap: 12px;
+  border-bottom: 1px solid var(--line);
+}
+#modal-settings fieldset:not([hidden]) ~ fieldset:not([hidden]) { padding-top: 18px; }
+#modal-settings fieldset:not([hidden]):last-of-type, #modal-settings fieldset.last-visible { border-bottom: none; }
+#modal-settings legend { float: left; width: 100%; padding: 0; margin: 0 0 2px; font-size: 16px; font-weight: 700; color: var(--text); }
+#modal-settings legend + * { clear: both; }
+#modal-settings label { font-size: 15px; gap: 6px; }
+#modal-settings label small, #modal-settings fieldset > small, #modal-settings .field small { color: var(--muted); font-size: 13px; line-height: 1.4; }
+#modal-settings label.check { font-size: 15px; gap: 10px; }
+#modal-settings label.check input { width: 17px; height: 17px; accent-color: var(--plan); }
+#modal-settings input[type="text"], #modal-settings input[type="password"], #modal-settings input[type="number"], #modal-settings select {
+  font-size: 15px; padding: 9px 11px;
+}
+#modal-settings fieldset > button, #modal-settings .field > button { justify-self: start; }
+#modal-settings button { font-size: 15px; }
+#modal-settings .row { align-items: center; }
+.row[hidden] { display: none; }        /* .row hat display: flex und überstimmte sonst hidden (Simulator-Knöpfe) */
+.field-label { font-size: 15px; }
+.inline-action { gap: 12px; }
+.inline-result { font-size: 13px; color: var(--muted); }
+.modal-foot { align-items: center; }
+.dirty-note { margin-right: auto; color: var(--amber); font-size: 13px; font-weight: 600; }
+.modal-foot .primary:disabled { opacity: .55; }
+
+/* Umschalter (Segment), z. B. Aufnahmeart */
+.seg { display: inline-flex; justify-self: start; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.seg button { border: none; border-radius: 0; background: transparent; color: var(--muted); padding: 9px 26px; font-weight: 600; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-checked="true"] { background: var(--plan); color: var(--on-accent); }
+.seg button:hover:not([aria-checked="true"]) { background: var(--raised); color: var(--text); }
+
+/* Zustand als Schild (Netzwerk, Mischpult) */
+.status-pill { justify-self: start; font-size: 14px; font-weight: 600; padding: 5px 12px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
+.status-pill[data-level="ok"] { color: var(--ok); background: var(--ok-soft); }
+.status-pill[data-level="warn"] { color: var(--amber); background: var(--amber-soft); }
+.status-pill:empty { display: none; }
+
+/* Ordner: Name groß, Pfad klein – kein graues Feld, das wie eine Eingabe aussieht */
+.path-row { display: flex; align-items: center; gap: 8px; }
+.path { flex: 1; min-width: 0; display: grid; padding: 6px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-2); }
+.path b { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.path small { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.path.is-empty b { color: var(--muted); font-weight: 400; font-style: italic; }
+.path.is-empty small { display: none; }
+.modal-card:focus { outline: none; }
+.path-row button { flex-shrink: 0; }
+
+/* Dateiname: Platzhalter als Chips, darunter die Vorschau */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -4px; }
+.chips .chip::before { content: "+ "; color: var(--muted); }
+.preview code { font: 600 13px var(--sans); color: var(--text); background: var(--raised); padding: 2px 8px; border-radius: 4px; user-select: text; word-break: break-all; }
+
+/* Passwort anzeigen */
+.reveal-btn { width: 40px; height: 38px; padding: 0 !important; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.reveal-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.reveal-btn[aria-pressed="true"] { color: var(--plan); }
+
+/* Vorlagen: Zeilen am Griff ziehen */
+.agenda-row { gap: 6px; }
+.agenda-row .grip { color: var(--muted); cursor: grab; padding: 0 4px; letter-spacing: -2px; font-size: 14px; user-select: none; }
+.agenda-row .grip:hover { color: var(--text); }
+.agenda-row.dragging { opacity: .45; }
+.agenda-row button { width: 36px; height: 36px; padding: 0; font-size: 18px; }
+.tpl-default-row { align-items: center; gap: 10px; }
+.tag-badge { font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 999px; color: var(--plan); background: color-mix(in srgb, var(--plan) 14%, transparent); }
+.tag-badge[hidden] { display: none; }
+
+.test-tools summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+.test-tools[open] { display: grid; gap: 10px; }
+.test-tools[open] summary { margin-bottom: 4px; }
+.calendar-list label { font-size: 15px; }
+.mixer-line { font-size: 15px; }
+.mixer-channels { font-size: 14px; }
