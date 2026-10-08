@@ -59,7 +59,8 @@ const DEFAULTS = {
   compactOnTop: true,           // Mini-Fenster bleibt über anderen Programmen
   compactBounds: null,          // zuletzt benutzte Lage des Mini-Fensters ({ x, y, width, height })
   compactLayout: 2,             // Stand des Mini-Fensters; ältere gespeicherte Lagen (größer) werden verworfen
-  loudnessMonitor: true,        // Lautheit (LUFS) als Linie über der Wellenform
+  loudnessMonitor: true,        // Voreinstellung des Schalters „LUFS“ (Lautheitslinie in der Wellenform)
+  followLive: true,             // Voreinstellung des Schalters „Folgen“ bei jedem Aufnahmestart
   denseLayout: true,            // kompakte Ansicht (Voreinstellung): alle Bereiche, aber kleiner (kleinere Fenster möglich)
   denseBounds: null,            // zuletzt benutzte Lage des Fensters in der kompakten Ansicht
   largeBounds: null             // Lage des großen Fensters vor dem Umschalten auf kompakt ({ x, y, width, height, maximized })

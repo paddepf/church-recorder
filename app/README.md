@@ -229,10 +229,12 @@ oder geöffnete Aufnahme wird komplett eingepasst. Lange
 Abschnittsnamen werden an der Marke mit „…“ gekürzt, damit sich Beschriftungen
 nicht überlappen; weiter hineinzoomen zeigt mehr vom Namen.
 
-Über der Wellenform rechts sitzt der runde **Abspielknopf**: ▶ spielt ab der Marke, ❚❚ hält an; während der
+Über der Wellenform rechts sitzt der **Abspielknopf**: ▶ spielt ab der Marke, ❚❚ hält an; während der
 Aufnahme zeigt er einen Kopfhörer (Mithören ab dem Cursor), bei Mehrspur „▶ Zum Pult“ bzw. „■ Stopp“. Unten links in
 der Wellenform liegen die Schalter **LUFS** (Lautheitslinie), **Folgen** (Ansicht läuft mit der Live-Stelle mit) und
-bei Mehrspur **Schleife**; eingeschaltet sind sie farbig.
+bei Mehrspur **Schleife**; eingeschaltet sind sie farbig. Wie „LUFS“ und „Folgen“ beim Start stehen, legt
+*Einstellungen → Programm → Wellenform* fest; in der Wellenform umgeschaltet gilt es nur bis zum nächsten Programmstart
+(LUFS) bzw. bis zur nächsten Aufnahme (Folgen).
 
 Unter der Wellenform stehen drei Bereiche: **Ablaufplan** (offene Punkte),
 **Abschnitte** (gesetzte Abschnitte mit Zeitraum, Doppelklick zum Umbenennen) und

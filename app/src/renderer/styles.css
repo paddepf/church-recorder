@@ -341,14 +341,14 @@ body[data-status="recording"] .timecode { color: var(--tally-text); }
 .follow { color: var(--muted); font-size: 16px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .follow[hidden] { display: none; }   /* sonst gewinnt display: flex gegen das hidden-Attribut („Schleife“) */
 .follow input { width: 20px; height: 20px; accent-color: var(--plan); cursor: pointer; }
-/* Abspielen als runder Symbolknopf (Symbol je Zustand über data-icon), Zoom als zusammenhängende Gruppe */
+/* Abspielen als Symbolknopf (Symbol je Zustand über data-icon), Ecken wie die übrigen Knöpfe; Zoom als Gruppe */
 .wave-toolbar .play-btn {
   --size: 44px;
-  width: var(--size); height: var(--size); padding: 0; border-radius: 50%;
+  width: var(--size); height: var(--size); padding: 0; border-radius: var(--radius);
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   color: var(--text); flex-shrink: 0;
 }
-.wave-toolbar .play-btn.with-label { width: auto; border-radius: 999px; padding: 0 18px 0 12px; }
+.wave-toolbar .play-btn.with-label { width: auto; padding: 0 18px 0 12px; }
 .play-btn svg { width: 22px; height: 22px; display: none; flex-shrink: 0; fill: currentColor; }
 .play-btn .i-listen { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
 .play-btn .i-listen rect { fill: currentColor; stroke: none; }
@@ -379,7 +379,7 @@ body[data-status="recording"] .timecode { color: var(--tally-text); }
 .wave-chip {
   pointer-events: auto;
   display: inline-flex; align-items: center; gap: 5px;
-  height: 26px; padding: 0 10px 0 8px; border-radius: 999px;
+  height: 26px; padding: 0 10px 0 8px; border-radius: var(--radius);
   font-size: 12.5px; font-weight: 600; letter-spacing: .02em;
   color: var(--muted);
   background: color-mix(in srgb, var(--panel) 82%, transparent);

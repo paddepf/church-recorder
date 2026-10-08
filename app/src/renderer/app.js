@@ -123,6 +123,7 @@
     });
 
     setDefaultZoom();
+    setFollow(followDefault());
     bindUi();
     bindEvents();
     renderShortcuts(info.platform);
@@ -402,9 +403,19 @@
     wave.draw();
   }
 
-  /** Schalter „LUFS“ und Ziellinie aus den Einstellungen; bei Mehrspur gibt es keine Lautheit. */
+  /** Voreinstellungen der Schalter „LUFS“ und „Folgen“ (Einstellungen → Programm → Wellenform). */
+  const loudnessDefault = () => state.settings?.loudnessMonitor !== false;
+  const followDefault = () => state.settings?.followLive !== false;
+
+  function setFollow(on) {
+    wave.follow = on;
+    $('chk-follow').checked = on;
+  }
+
+  /** Schalter „LUFS“ (`state.loudOn`) und Ziellinie; bei Mehrspur gibt es keine Lautheit. */
   function applyLoudnessView() {
-    const on = state.settings?.loudnessMonitor !== false;
+    if (state.loudOn == null) state.loudOn = loudnessDefault();
+    const on = state.loudOn;
     $('chk-loudness').checked = on;
     wave.loudnessOn = on && !multitrackView();
     const target = Number(state.settings?.loudnessTarget);
@@ -476,8 +487,7 @@
       state.bucketFrames = 0;
       wave.peaks = state.peaks;
       setDefaultZoom();
-      wave.follow = true;
-      $('chk-follow').checked = true;
+      setFollow(followDefault());
       monitor.pause();
       state.cursorT = null;
       wave.update({ playhead: null });
@@ -630,8 +640,7 @@
       state.bucketAcc = 0;
       state.bucketFrames = 0;
       setDefaultZoom();
-      wave.follow = true;
-      $('chk-follow').checked = true;
+      setFollow(followDefault());
       monitor.pause();
       state.cursorT = null;
       wave.update({ playhead: null });
@@ -1675,9 +1684,9 @@
     // Aufnahmeart von außen umgestellt (Companion): nur Umschalter und Ansicht nachziehen, ein offener
     // Einstellungsdialog behält seine ungespeicherten Eingaben.
     window.api.on('loudness', ({ loudness }) => setLoudness(loudness));
-    $('chk-loudness').addEventListener('change', async (e) => {
-      const res = await window.api.settings.set({ loudnessMonitor: e.target.checked });
-      if (res.ok) state.settings = res.settings;
+    // Nur bis zum nächsten Programmstart; die Voreinstellung steht in den Einstellungen.
+    $('chk-loudness').addEventListener('change', (e) => {
+      state.loudOn = e.target.checked;
       applyLoudnessView();
     });
     window.api.on('settings', (st) => {
@@ -2684,6 +2693,8 @@
     $('set-monitor-pass').value = s.monitorPassword;
     $('set-autoupdate').checked = Boolean(s.autoUpdateCheck);
     $('set-theme').value = s.theme || 'dark';
+    $('set-loudness-monitor').checked = s.loudnessMonitor !== false;
+    $('set-follow-live').checked = s.followLive !== false;
   }
 
   /** Editor für die Standard-Programmpunkte (Name, nach oben/unten, entfernen). */
@@ -2942,14 +2953,21 @@
       networkPassword: $('set-net-pass').value,
       monitorPassword: $('set-monitor-pass').value,
       autoUpdateCheck: $('set-autoupdate').checked,
-      theme: $('set-theme').value
+      theme: $('set-theme').value,
+      loudnessMonitor: $('set-loudness-monitor').checked,
+      followLive: $('set-follow-live').checked
     };
     const token = $('set-ct-token').value;
     if (token) patch.churchToolsToken = token;
 
     const res = await window.api.settings.set(patch);
     if (!res.ok) return toast('error', res.error);
+    // Geänderte Voreinstellung der Wellenform-Schalter gleich übernehmen („Folgen“ nur während einer Aufnahme).
+    const loudChanged = res.settings.loudnessMonitor !== state.settings.loudnessMonitor;
+    const followChanged = res.settings.followLive !== state.settings.followLive;
     state.settings = res.settings;
+    if (loudChanged) state.loudOn = loudnessDefault();
+    if (followChanged && isLive()) setFollow(followDefault());
     applyTheme(state.settings.theme);
     applyOutputDevice();
     applyMode();

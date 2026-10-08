@@ -634,13 +634,17 @@ Der Ordnername des lokalen Klons ist egal.
   Abschnitt, sonst S an der Mausposition (echte 3 s, kann daher von der geglätteten Linie abweichen), I gesamt und
   gewählter Abschnitt. Netzwerk bekommt `levels.loudness` ohne `steps`.
 - **Werkzeugleiste der Wellenform (überarbeitet):** Die Kästchen „LUFS“, „Ansicht folgt“ (jetzt „Folgen“) und „Schleife“
-  sind Schalter-Pillen unten links in der Wellenform (`.wave-chips` in `.wave-wrap`, Kästchen unsichtbar im Label,
+  sind kleine Schalter (eckig wie alle Knöpfe) unten links in der Wellenform (`.wave-chips` in `.wave-wrap`, Kästchen unsichtbar im Label,
   Zustand per `:has(input:checked)`, Farben: LUFS `--loud`, Folgen `--plan`, Schleife `--manual`). Unten links, weil
-  rechts Live-Stelle, Skala und Messwerte stehen. Abspielen ist ein runder Symbolknopf (`setPlayButton`, `data-icon`
+  rechts Live-Stelle, Skala und Messwerte stehen. Abspielen ist ein Symbolknopf mit denselben Ecken wie alle Knöpfe (`setPlayButton`, `data-icon`
   play/pause/stop/listen, Bedeutung in Tooltip und `aria-label`; nur Mehrspur hat zusätzlich Text „Zum Pult“/„Stopp“),
   Zoom eine Lupen-Gruppe. Die IDs (`chk-*`, `btn-play`, `btn-zoom-*`) sind geblieben. In flachen Wellenformen (Lane unter
   110 px, z. B. kompakt 760×520) zeichnet die Lautheit nur jede zweite Skalenlinie und so viele Messwert-Zeilen, wie passen.
   Gemessen: kein Überlauf bei 1360, 1024 und kompakt 760 px.
+- **Voreinstellung der Wellenform-Schalter** (*Einstellungen → Programm → Wellenform*): `loudnessMonitor` (LUFS) und
+  `followLive` (Folgen). Der Schalter in der Wellenform ändert die Einstellung nicht mehr (vorher speicherte „LUFS“ bei
+  jedem Klick): LUFS steht in `state.loudOn` bis zum Programmstart, Folgen wird bei jedem Aufnahmestart/-anhängen und beim
+  Programmstart auf `followLive` gesetzt (`setFollow`). Eine beim Speichern geänderte Voreinstellung gilt sofort.
 - **Ziehen verschiebt die Ansicht** (Wellenform und Zeitleiste, `_panning` in `waveform.js`): Die Hörmarke setzt jetzt erst
   das Loslassen, und nur wenn sich die Maus weniger als `PAN_THRESHOLD` (4 px) bewegt hat; vorher setzte `pointerdown`
   sofort die Marke. Fähnchen/Schnittränder (verschieben) und Umschalt+Ziehen (Schnitt) haben Vorrang. Zeiger „grab“,
