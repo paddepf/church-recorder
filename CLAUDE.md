@@ -8,6 +8,8 @@ Systemen laufen.
 - `app/` – Electron-App (Hauptprozess `src/main`, Oberfläche `src/renderer`)
 - `companion-module/` – Bitfocus-Companion-Modul
 - `.github/workflows/release.yml` – baut bei Tag `v*` Windows- und Mac-Release
+- `docs/video-kapitel.md` – Auftrag für einen Dienst auf dem Server, der die Abschnitte als Kapitel in die
+  OBS-Videos auf der NAS schreibt (liest die `.session.json`; bei Formatänderungen dort mitpflegen)
 
 Befehle (im Ordner `app/`): `npm install`, `npm run dev` (Live-Reload),
 `npm start`. Architektur und Einrichtung stehen in `app/README.md`.
