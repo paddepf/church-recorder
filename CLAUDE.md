@@ -390,6 +390,11 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - Wellenform-Beschriftung: Der Name am Start-Fähnchen wird mit „…“ auf den Platz bis zum Ende-Fähnchen
   gekürzt (`_fitText`, `_drawHandles`); reicht der Platz nicht, schrumpft das Ende-Fähnchen zur Lasche. Der
   Interpret erscheint nur bei genug Platz.
+- **Wellenform zeichnen** (`_drawWave`): in Gerätepixeln; herausgezoomt fasst jede Spalte feste Buckets zusammen, gerechnet
+  ab Aufnahmebeginn, und die Ansicht wird nur um ganze Pixel verschoben. Vorher wurden die Buckets ab dem linken Rand
+  verteilt: Bei jedem Folgen/Ziehen sprangen die Spitzen zwischen den Spalten (Flackern bei langen Aufnahmen). Außen
+  der Spitzenwert (halbtransparent), innen der leicht geglättete Mittelwert, damit herausgezoomt Kontur bleibt statt
+  eines gleichmäßigen Blocks. Die Lautheitslinie nimmt ihre Stützstellen ebenso an festen Zeitpunkten.
 - Wellenform: Standardansicht 5 Minuten (`DEFAULT_VISIBLE_SECONDS`, `setDefaultZoom()` beim Start und
   bei neuer/fortgesetzter Aufnahme), beendete Aufnahmen werden eingepasst (`fitZoom`). Der Zoom wird nicht
   mehr in den Einstellungen gespeichert.

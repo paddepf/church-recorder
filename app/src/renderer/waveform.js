@@ -152,34 +152,7 @@
       this._drawRuler();
 
       // Wellenform
-      const startIdx = Math.max(0, Math.floor(this.scrollT / BUCKET_SEC));
-      const endIdx = Math.min(this.peaks.length, Math.ceil((this.scrollT + this.viewSeconds) / BUCKET_SEC) + 1);
-      const bucketsPerPx = 1 / (BUCKET_SEC * this.pxPerSec);
-
-      ctx.fillStyle = c.wave || '#4E6C8A';
-      if (bucketsPerPx <= 1) {
-        // Weit gezoomt: ein Balken je Bucket
-        const barW = Math.max(1, BUCKET_SEC * this.pxPerSec - 1);
-        for (let i = startIdx; i < endIdx; i++) {
-          const v = (this.peaks[i] || 0) / 255;
-          const x = this.timeToX(i * BUCKET_SEC);
-          const bh = Math.max(1, v * (laneH / 2 - 6));
-          ctx.fillRect(x, mid - bh, barW, bh * 2);
-        }
-      } else {
-        // Herausgezoomt: je Pixel den Spitzenwert
-        for (let px = 0; px < w; px++) {
-          const from = Math.floor((this.scrollT + px / this.pxPerSec) / BUCKET_SEC);
-          const to = Math.floor((this.scrollT + (px + 1) / this.pxPerSec) / BUCKET_SEC);
-          let peak = 0;
-          for (let i = from; i <= to && i < this.peaks.length; i++) {
-            if (this.peaks[i] > peak) peak = this.peaks[i];
-          }
-          if (!peak) continue;
-          const bh = Math.max(1, (peak / 255) * (laneH / 2 - 6));
-          ctx.fillRect(px, mid - bh, 1, bh * 2);
-        }
-      }
+      this._drawWave(mid, laneH);
 
       // Mittellinie
       ctx.strokeStyle = c.line || '#2A3542';
@@ -194,6 +167,83 @@
       this._drawHandles(laneTop, h);
       this._drawPlayhead(h);
       this._drawHover(h);
+    }
+
+    /* Wellenform in Gerätepixeln. Herausgezoomt fasst jede Spalte feste Buckets zusammen, gerechnet ab
+       Aufnahmebeginn (nicht ab dem linken Rand) und um ganze Pixel verschoben: Sonst verteilten sich die Buckets
+       bei jeder Bewegung der Ansicht (Folgen, Ziehen) neu auf die Spalten und die Spitzen sprangen hin und her.
+       Außen der Spitzenwert (hell), innen der Mittelwert der Spalte (kräftig), damit Sprache und Musik
+       auch weit herausgezoomt Kontur haben statt eines gleichmäßigen Blocks. */
+    _drawWave(mid, laneH) {
+      const ctx = this.ctx;
+      const peaks = this.peaks;
+      if (!peaks.length) return;
+      const dpr = this.canvas.width / (this.width || 1) || 1;
+      const W = this.canvas.width;
+      const midD = Math.round(mid * dpr);
+      const amp = Math.max(1, (laneH / 2 - 6) * dpr);
+      const bucketPx = BUCKET_SEC * this.pxPerSec * dpr;   // Breite eines Buckets in Gerätepixeln
+      const offset = Math.round(this.scrollT * this.pxPerSec * dpr);   // linker Rand als ganze Spalte
+      const height = (v) => Math.max(1, Math.round((v / 255) * amp));
+
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = this.colors.wave || '#4E6C8A';
+
+      if (bucketPx >= 3) {
+        // Hineingezoomt: ein Balken je Bucket, mit einem Pixel Abstand
+        const first = Math.max(0, Math.floor(offset / bucketPx));
+        const last = Math.min(peaks.length, Math.ceil((offset + W) / bucketPx) + 1);
+        for (let i = first; i < last; i++) {
+          const x1 = Math.round(i * bucketPx) - offset;
+          const x2 = Math.round((i + 1) * bucketPx) - offset;
+          const bh = height(peaks[i] || 0);
+          ctx.fillRect(x1, midD - bh, Math.max(1, x2 - x1 - Math.max(1, Math.round(dpr))), bh * 2);
+        }
+        ctx.restore();
+        return;
+      }
+
+      // Herausgezoomt: je Spalte Spitze und Mittelwert der enthaltenen Buckets
+      const maxH = new Float32Array(W);
+      const avgH = new Float32Array(W);
+      for (let x = 0; x < W; x++) {
+        const col = offset + x;
+        if (col < 0) continue;
+        const from = Math.floor(col / bucketPx);
+        if (from >= peaks.length) break;
+        const to = Math.min(peaks.length, Math.max(from + 1, Math.floor((col + 1) / bucketPx)));
+        let peak = 0, sum = 0;
+        for (let i = from; i < to; i++) {
+          const v = peaks[i] || 0;
+          if (v > peak) peak = v;
+          sum += v;
+        }
+        maxH[x] = peak;
+        avgH[x] = sum / (to - from);
+      }
+      // Mittelwert leicht glätten (über etwa einen Bildschirmpixel zu jeder Seite), sonst wirkt er streifig
+      const r = Math.max(1, Math.round(dpr));
+      const smooth = new Float32Array(W);
+      for (let x = 0; x < W; x++) {
+        if (!avgH[x]) continue;
+        let sum = 0, n = 0;
+        for (let k = Math.max(0, x - r); k <= Math.min(W - 1, x + r); k++) { sum += avgH[k]; n++; }
+        smooth[x] = Math.min(maxH[x], sum / n);
+      }
+      ctx.globalAlpha = 0.45;
+      for (let x = 0; x < W; x++) {
+        if (!maxH[x]) continue;
+        const bh = height(maxH[x]);
+        ctx.fillRect(x, midD - bh, 1, bh * 2);
+      }
+      ctx.globalAlpha = 1;
+      for (let x = 0; x < W; x++) {
+        if (!smooth[x]) continue;
+        const bh = height(smooth[x]);
+        ctx.fillRect(x, midD - bh, 1, bh * 2);
+      }
+      ctx.restore();
     }
 
     /* ------------------------------------------------------------ Lautheit */
@@ -271,8 +321,13 @@
       ctx.beginPath();
       let pen = false;
       const stride = this.pxPerSec * 0.1 >= 2 ? 1 : 2;     // weit hineingezoomt: jeden Pixel, sonst jeden zweiten
-      for (let px = Math.max(0, Math.floor(this.timeToX(0))); px <= lastX; px += stride) {
-        const end = Math.min(curve.length, Math.floor(this.xToTime(px) * L.STEPS_PER_SECOND) + 1);
+      // Stützstellen an festen Zeitpunkten (Raster ab Aufnahmebeginn), nicht am linken Rand: Sonst wandern sie beim
+      // Folgen/Ziehen mit und die Linie zittert.
+      const origin = this.scrollT * this.pxPerSec;
+      const firstCol = Math.max(0, Math.floor(origin / stride) * stride);
+      for (let col = firstCol; col - origin <= lastX; col += stride) {
+        const px = col - origin;
+        const end = Math.min(curve.length, Math.floor((col / this.pxPerSec) * L.STEPS_PER_SECOND) + 1);
         const v = curve.window(end, span);
         if (!(v > LOUD_MIN)) { pen = false; continue; }      // Stille: Linie unterbrechen
         const y = this._loudY(v, laneTop, laneH);
