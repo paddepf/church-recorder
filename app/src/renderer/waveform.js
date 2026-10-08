@@ -9,9 +9,14 @@
   const RULER_H = 22;
   const PAN_THRESHOLD = 4;   // ab so vielen Pixeln Bewegung ist ein Klick ein Ziehen (Ansicht verschieben)
   const FLAG_H = 26;
-  // Dezente, gut unterscheidbare Farbtöne für die Abschnitte (Reihenfolge der Anlage).
-  const HUES = [212, 28, 150, 300, 48, 182, 346, 262];
-  const hueOf = (section) => HUES[(section.color || 0) % HUES.length];
+  const STRIPE_H = 4;        // Farbstreifen des Abschnitts unter den Fähnchen
+  const FLASH_MS = 350;      // so lange blendet eine neu gesetzte Marke ein
+  // Feste Palette der Abschnitte (CSS-Variablen --sec-0 … --sec-7, je Farbschema abgestimmt), Index = section.color.
+  const SECTION_COLORS = 8;
+  const HUES = [212, 28, 150, 300, 48, 182, 346, 262];        // nur Rückfall, falls die Palette fehlt
+  const paletteIndex = (section) => ((section && section.color) || 0) % SECTION_COLORS;
+  /** CSS-Wert der Abschnittsfarbe, z. B. für style.setProperty('--sec', …); folgt dem Farbschema von selbst. */
+  const sectionColorVar = (section) => `var(--sec-${paletteIndex(section)})`;
 
   // Bereich der Lautheitsanzeige (LUFS)
   const LOUD_MIN = -50;
@@ -53,6 +58,9 @@
       this.hoverTime = null;
       this.dragging = null;
       this.colors = opts.colors || {};
+      this._seen = null;          // bekannte Abschnitte (neu gesetzte blenden während der Aufnahme kurz ein)
+      this._flash = new Map();    // id → Zeitpunkt des Setzens
+      this.overview = opts.overviewCanvas ? new Overview(opts.overviewCanvas, this) : null;
       // Lautheit (LUFS): Kurve (window.LoudnessCurve.Curve), an/aus, Ziel (Export) und ob die Aufnahme läuft/pausiert
       this.loudness = null;
       this.loudnessOn = false;
@@ -123,11 +131,49 @@
       if (playhead !== undefined) this.playhead = playhead;
       if (recording != null) this.recording = recording;
       if (selectedSegment !== undefined) this.selectedSegment = selectedSegment;
+      if (sections) this._noteNewSections();
 
       if (this.recording && this.follow) {
         this.scrollT = Math.max(0, this.duration - this.viewSeconds * 0.85);
       }
       this.draw();
+    }
+
+    /** Farbe eines Abschnitts aus der Palette des Farbschemas. */
+    secColor(section) {
+      const list = this.colors.sections;
+      const c = list && list[paletteIndex(section)];
+      return c || `hsl(${HUES[paletteIndex(section)]}, 55%, 62%)`;
+    }
+
+    /** Während der Aufnahme neu gesetzte Abschnitte merken, damit ihre Marke kurz einblendet. */
+    _noteNewSections() {
+      const placed = this.sections.filter((x) => x.start != null);
+      const ids = new Set(placed.map((x) => x.id));
+      if (this._seen && this.recording) {
+        const now = performance.now();
+        placed.forEach((x) => { if (!this._seen.has(x.id)) this._flash.set(x.id, now); });
+        if (this._flash.size) this._animateFlash();
+      }
+      this._seen = ids;
+    }
+
+    _animateFlash() {
+      if (this._flashRaf) return;
+      const step = () => {
+        const now = performance.now();
+        for (const [id, t0] of this._flash) if (now - t0 > FLASH_MS) this._flash.delete(id);
+        this.draw();
+        this._flashRaf = this._flash.size ? requestAnimationFrame(step) : null;
+      };
+      this._flashRaf = requestAnimationFrame(step);
+    }
+
+    /** 0 … 1: wie weit die Marke eines eben gesetzten Abschnitts eingeblendet ist (1 = fertig). */
+    _flashLevel(id) {
+      const t0 = this._flash.get(id);
+      if (t0 == null) return 1;
+      return Math.min(1, (performance.now() - t0) / FLASH_MS);
     }
 
     /* ------------------------------------------------------------ Zeichnen */
@@ -167,6 +213,7 @@
       this._drawHandles(laneTop, h);
       this._drawPlayhead(h);
       this._drawHover(h);
+      if (this.overview) this.overview.draw();
     }
 
     /* Wellenform in Gerätepixeln. Herausgezoomt fasst jede Spalte feste Buckets zusammen, gerechnet ab
@@ -280,7 +327,7 @@
       const curve = this.loudness;
       const L = window.LoudnessCurve;
       const w = this.width;
-      const color = c.loud || '#F2C14E';
+      const color = c.loud || '#4FC3E8';
       const target = this.loudnessTarget;
       const gutter = 34;          // rechts: Platz für die Zahlen der Skala
 
@@ -293,14 +340,14 @@
       const targetY = target != null ? Math.round(this._loudY(target, laneTop, laneH)) + 0.5 : null;
       grid.forEach((v) => {
         const y = Math.round(this._loudY(v, laneTop, laneH)) + 0.5;
-        ctx.strokeStyle = c.loudGrid || 'rgba(242,193,78,0.12)';
+        ctx.strokeStyle = c.loudGrid || 'rgba(79,195,232,0.13)';
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(w - gutter, y);
         ctx.stroke();
       });
       if (targetY != null) {
-        ctx.strokeStyle = c.manual || '#2BB3A3';
+        ctx.strokeStyle = color;
         ctx.setLineDash([6, 4]);
         ctx.beginPath();
         ctx.moveTo(0, targetY);
@@ -343,7 +390,7 @@
         if (targetY != null && Math.abs(y - targetY) < 14) return;
         this._scaleLabel(lufsText(v, 0), y, c.muted || '#7D8CA0');
       });
-      if (targetY != null) this._scaleLabel(lufsText(target, 0), targetY, c.manual || '#2BB3A3');
+      if (targetY != null) this._scaleLabel(lufsText(target, 0), targetY, color);
     }
 
     /**
@@ -384,16 +431,26 @@
       this.onLoudness(data);
     }
 
+    /**
+     * Abschnitte als Farbstreifen am oberen Rand der Wellenform (die Fläche bleibt neutral, damit die Wellenform gut
+     * lesbar ist); nur der gewählte Abschnitt ist leicht hinterlegt.
+     */
     _drawSegmentBands(laneTop, laneH) {
       const ctx = this.ctx;
+      const selectedId = (this.selectedSegment && this.selectedSegment.markerId) || this.selectedSectionId || null;
       this.sections.filter((x) => x.start != null).forEach((x) => {
         const end = x.end != null ? x.end : this.duration;
         const x1 = this.timeToX(x.start);
         const x2 = this.timeToX(end);
         if (x2 < 0 || x1 > this.width) return;
-        const selected = this.selectedSegment && this.selectedSegment.markerId === x.id;
-        ctx.fillStyle = `hsla(${hueOf(x)}, 60%, 55%, ${selected ? 0.3 : 0.15})`;
-        ctx.fillRect(x1, laneTop, x2 - x1, laneH);
+        ctx.fillStyle = this.secColor(x);
+        if (x.id === selectedId) {
+          ctx.globalAlpha = 0.14;
+          ctx.fillRect(x1, laneTop, x2 - x1, laneH);
+        }
+        ctx.globalAlpha = 0.9 * this._flashLevel(x.id);
+        ctx.fillRect(x1, laneTop, x2 - x1, STRIPE_H);
+        ctx.globalAlpha = 1;
       });
     }
 
@@ -526,11 +583,14 @@
 
       /** Linie und Fähnchen; parts = [{ text, alpha }] sind bereits auf die Breite gekürzt. */
       const drawFlag = (section, edge, x, w, rightSide, parts) => {
-        const color = `hsl(${hueOf(section)}, 55%, 62%)`;
+        const color = this.secColor(section);
         const active = this.dragging && this.dragging.id === section.id && this.dragging.edge === edge;
+        const fade = this._flashLevel(section.id);
 
+        ctx.save();
+        ctx.globalAlpha = 0.2 + 0.8 * fade;
         ctx.strokeStyle = color;
-        ctx.lineWidth = active ? 2 : 1;
+        ctx.lineWidth = active || fade < 1 ? 2 : 1;
         ctx.beginPath();
         ctx.moveTo(Math.round(x) + 0.5, RULER_H);
         ctx.lineTo(Math.round(x) + 0.5, h);
@@ -552,10 +612,11 @@
         let tx = fx + PAD;
         parts.forEach((part) => {
           if (!part.text) return;
-          ctx.globalAlpha = part.alpha;
+          ctx.globalAlpha = part.alpha * (0.2 + 0.8 * fade);
           ctx.fillText(part.text, tx, RULER_H + FLAG_H / 2);
           tx += ctx.measureText(part.text).width;
         });
+        ctx.restore();
         ctx.restore();
         return fx;
       };
@@ -860,7 +921,156 @@
     }
   }
 
+  /**
+   * Übersichtsleiste über der Wellenform: die ganze Aufnahme auf einen Blick (Umriss, Abschnitte, Schnitte, Live-Stelle,
+   * Hörmarke) und der sichtbare Ausschnitt als Rahmen. Klick springt hin, Ziehen verschiebt den Ausschnitt.
+   */
+  class Overview {
+    constructor(canvas, wave) {
+      this.canvas = canvas;
+      this.ctx = canvas.getContext('2d');
+      this.wave = wave;
+      this._cols = null;          // zwischengespeicherter Umriss je Spalte
+      this._drag = null;
+      this._bind();
+    }
+
+    get total() { return Math.max(this.wave.duration, 0.001); }
+
+    _resize() {
+      const dpr = window.devicePixelRatio || 1;
+      const w = Math.floor(this.canvas.clientWidth * dpr);
+      const h = Math.floor(this.canvas.clientHeight * dpr);
+      if (this.canvas.width !== w || this.canvas.height !== h) {
+        this.canvas.width = w;
+        this.canvas.height = h;
+        this._cols = null;
+      }
+      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    /** Umriss: je Bildschirmspalte der Spitzenwert der enthaltenen Buckets (nur neu, wenn neue Daten da sind). */
+    _outline(w) {
+      const peaks = this.wave.peaks || [];
+      const key = `${peaks.length}|${w}`;
+      if (this._cols && this._cols.key === key) return this._cols.data;
+      const data = new Float32Array(w);
+      const per = peaks.length / w;
+      for (let x = 0; x < w; x++) {
+        const from = Math.floor(x * per);
+        const to = Math.max(from + 1, Math.floor((x + 1) * per));
+        let m = 0;
+        for (let i = from; i < to && i < peaks.length; i++) if (peaks[i] > m) m = peaks[i];
+        data[x] = m / 255;
+      }
+      this._cols = { key, data };
+      return data;
+    }
+
+    draw() {
+      const cv = this.canvas;
+      const w = cv.clientWidth;
+      const h = cv.clientHeight;
+      if (!w || !h) return;
+      this._resize();
+      const ctx = this.ctx;
+      const wave = this.wave;
+      const c = wave.colors;
+      const total = this.total;
+      const tx = (t) => (t / total) * w;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = c.ruler || '#101720';
+      ctx.fillRect(0, 0, w, h);
+      if (!(wave.duration > 0)) return;
+
+      // Abschnitte als Flächen, darüber der Umriss
+      wave.sections.filter((x) => x.start != null).forEach((x) => {
+        const x1 = tx(x.start);
+        const x2 = tx(x.end != null ? x.end : wave.duration);
+        ctx.fillStyle = wave.secColor(x);
+        ctx.globalAlpha = 0.42;
+        ctx.fillRect(x1, 0, Math.max(1, x2 - x1), h);
+        ctx.globalAlpha = 1;
+        ctx.fillRect(x1, h - 3, Math.max(1, x2 - x1), 3);
+      });
+      const cols = this._outline(Math.floor(w));
+      ctx.fillStyle = c.wave || '#4E6C8A';
+      const mid = (h - 3) / 2;
+      for (let x = 0; x < cols.length; x++) {
+        const bh = Math.max(0.5, cols[x] * (mid - 1));
+        ctx.fillRect(x, mid - bh, 1, bh * 2);
+      }
+      // Schnitte
+      const rgb = c.cut || '255,59,48';
+      wave.cuts.forEach((cut) => {
+        const x1 = tx(cut.start);
+        const x2 = tx(cut.end != null ? cut.end : wave.duration);
+        ctx.fillStyle = `rgba(${rgb},0.45)`;
+        ctx.fillRect(x1, 0, Math.max(1, x2 - x1), h);
+      });
+      // Ausschnitt der Wellenform als Rahmen
+      const v1 = tx(wave.scrollT);
+      const v2 = tx(Math.min(total, wave.scrollT + wave.viewSeconds));
+      if (v2 - v1 < w - 1) {
+        ctx.fillStyle = c.hover || 'rgba(255,255,255,0.18)';
+        ctx.globalAlpha = 0.5;
+        ctx.fillRect(v1, 0, Math.max(3, v2 - v1), h);
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = c.text || '#E6EBF0';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(Math.round(v1) + 0.75, 0.75, Math.max(3, Math.round(v2 - v1) - 1.5), h - 1.5);
+        ctx.lineWidth = 1;
+      }
+      const line = (t, color) => {
+        const x = Math.round(Math.min(w - 1, tx(t)));
+        ctx.fillStyle = color;
+        ctx.fillRect(x, 0, 2, h);
+      };
+      if (wave.playhead != null && !wave.recording) line(wave.playhead, c.text || '#E6EBF0');
+      if (wave.recording) line(wave.duration, c.tally || '#FF3B30');
+    }
+
+    _bind() {
+      const cv = this.canvas;
+      const timeAt = (e) => {
+        const r = cv.getBoundingClientRect();
+        return Math.max(0, Math.min(this.total, ((e.clientX - r.left) / Math.max(1, r.width)) * this.total));
+      };
+      const scrollTo = (start) => {
+        const wave = this.wave;
+        wave.scrollT = start;
+        wave.follow = false;
+        wave.onFollowChange(false);
+        wave.clampScroll();
+        wave.draw();
+      };
+      cv.addEventListener('pointerdown', (e) => {
+        if (!(this.wave.duration > 0)) return;
+        const t = timeAt(e);
+        const wave = this.wave;
+        const inside = t >= wave.scrollT && t <= wave.scrollT + wave.viewSeconds;
+        this._drag = { offset: inside ? t - wave.scrollT : wave.viewSeconds / 2 };
+        cv.setPointerCapture(e.pointerId);
+        cv.style.cursor = 'grabbing';
+        if (!inside) scrollTo(t - this._drag.offset);
+      });
+      cv.addEventListener('pointermove', (e) => {
+        if (!this._drag) return;
+        scrollTo(timeAt(e) - this._drag.offset);
+      });
+      const end = (e) => {
+        this._drag = null;
+        cv.style.cursor = '';
+        try { cv.releasePointerCapture(e.pointerId); } catch { /* schon freigegeben */ }
+      };
+      cv.addEventListener('pointerup', end);
+      cv.addEventListener('pointercancel', end);
+      if (typeof ResizeObserver === 'function') new ResizeObserver(() => this.draw()).observe(cv);
+    }
+  }
+
   window.Waveform = Waveform;
-  window.sectionHue = hueOf;
+  window.sectionColorVar = sectionColorVar;
   window.formatTime = fmt;
 })();

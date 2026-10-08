@@ -18,6 +18,11 @@
         <span id="service-date" class="service-date"></span>
       </button>
     </div>
+    <ol id="phase-steps" class="phase-steps" aria-label="Ablauf">
+      <li data-step="prep">Vorbereiten</li>
+      <li data-step="rec">Aufnehmen</li>
+      <li data-step="save">Sichern</li>
+    </ol>
     <div class="top-actions">
       <span id="disk-badge" class="badge" data-level="ok" title="Freier Speicherplatz auf dem Laufwerk der Aufnahmen">Speicher</span>
       <button id="btn-update" class="update-btn" hidden title="Update anzeigen">Update</button>
@@ -41,19 +46,39 @@
 
   <div id="audio-warning" class="audio-warning" role="alert" hidden>Kein Audiosignal – der Eingang wird neu verbunden …</div>
 
+  <!-- Transport: je Phase genau eine Hauptaktion (body[data-phase] = prep | rec | save blendet die übrigen aus) -->
   <section class="transport">
     <div class="transport-controls">
-      <button id="btn-record" class="record" title="Neue Aufnahme starten (Strg+R)">
+      <button id="btn-record" class="record go" title="Aufnahme starten (Strg+R)">
         <span class="dot"></span>
-        <span id="record-label">Neue Aufnahme starten</span>
+        <span id="record-label">Aufnahme starten</span>
+        <kbd class="k" id="record-key">Strg R</kbd>
       </button>
-      <button id="btn-continue" class="secondary" hidden title="Neue Audioaufnahme an das Ende der angezeigten, beendeten Aufnahme anhängen (gleiche Datei, gleiche Abschnitte)">An Aufnahme anhängen</button>
-      <button id="btn-pause" class="secondary" disabled title="Pausieren">Pause</button>
-      <button id="btn-stop" class="secondary" disabled title="Aufnahme beenden">Beenden</button>
+      <button id="btn-export" class="primary save-btn" disabled>Ausgewählte als MP3 sichern</button>
+      <button id="btn-next-item" class="primary next-btn" disabled title="Laufenden Abschnitt beenden und den nächsten Ablaufpunkt beginnen (N)">
+        <span class="nb-text"><span class="nb-cap">Nächster Punkt <kbd class="k">N</kbd></span><span id="next-name" class="nb-name"></span></span>
+      </button>
+      <button id="btn-marker" class="marker-btn" disabled title="Abschnitt an der aktuellen Stelle beginnen bzw. beenden (M)">
+        <span class="mk-text"><span class="mk-cap">Abschnitt</span> <span id="marker-label">starten</span></span><kbd class="k">M</kbd>
+      </button>
+      <span class="rec-ctl">
+        <button id="btn-pause" class="icon-only pause-btn" disabled aria-label="Pause" title="Pausieren">
+          <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="5.5" width="3.8" height="13" rx="1"/><rect x="13.7" y="5.5" width="3.8" height="13" rx="1"/></svg>
+          <svg class="i-resume" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+          <span id="pause-label" class="ctl-label">Pause</span>
+        </button>
+        <button id="btn-stop" class="icon-only danger hold-btn" disabled aria-label="Aufnahme beenden (gedrückt halten)" title="Aufnahme beenden: gedrückt halten">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>
+          <span class="ctl-label">Beenden</span>
+          <i class="hold-bar" aria-hidden="true"></i>
+        </button>
+      </span>
+      <button id="btn-continue" class="secondary" title="Neue Audioaufnahme an das Ende der angezeigten, beendeten Aufnahme anhängen (gleiche Datei, gleiche Abschnitte)">An Aufnahme anhängen</button>
     </div>
 
     <div class="clock">
       <div id="timecode" class="timecode">00:00:00</div>
+      <div id="status-line" class="status-line"><span class="sd" aria-hidden="true"></span><span id="status-text">Bereit</span></div>
       <button id="current-item" class="current-item" disabled title="Laufenden Abschnitt umbenennen und Interpret eintragen">
         <span class="ci-text"><span id="current-name" class="ci-name">Bereit</span><span id="current-artist" class="ci-artist" hidden></span></span>
         <span id="current-elapsed" class="ci-elapsed" title="So lange läuft der aktuelle Abschnitt schon" hidden></span>
@@ -61,28 +86,16 @@
       </button>
     </div>
 
-    <div class="meters">
-      <div class="meter"><span class="meter-label">L</span><div class="bar"><i id="meter-l"></i></div></div>
-      <div class="meter"><span class="meter-label">R</span><div class="bar"><i id="meter-r"></i></div></div>
-      <div id="clip" class="clip">Übersteuert</div>
+    <div class="meters" title="Spitzenpegel in dBFS (Grün bis −9, Gelb bis −3, darüber Rot); der Strich hält die Spitze 2 Sekunden">
+      <div class="meter"><span class="meter-label">L</span><div class="bar"><i id="meter-l"></i><u id="hold-l"></u></div><span id="db-l" class="meter-db">–</span></div>
+      <div class="meter"><span class="meter-label">R</span><div class="bar"><i id="meter-r"></i><u id="hold-r"></u></div><span id="db-r" class="meter-db">–</span></div>
+      <div class="meter-scale" aria-hidden="true"><span></span><span class="ticks"><span style="left:0%">−48</span><span style="left:25%">−36</span><span style="left:50%">−24</span><span style="left:75%">−12</span><span style="left:87.5%">−6</span><span style="left:100%">0</span></span><span></span></div>
+      <button id="clip" class="clip" type="button" title="Übersteuert – Klick setzt die Anzeige zurück">Übersteuert</button>
     </div>
   </section>
 
   <section class="wave-section">
     <div class="wave-toolbar">
-      <button id="btn-marker" class="secondary" disabled title="Abschnitt an der aktuellen Stelle beginnen bzw. beenden (M) – Namen danach per Doppelklick oder ✎ ändern">Abschnitt starten</button>
-      <button id="btn-next-item" class="secondary" disabled title="Laufenden Abschnitt beenden und den nächsten Ablaufpunkt beginnen (N)"><span class="nb-label">Nächster Ablaufpunkt</span><span id="next-name" class="nb-name" hidden></span></button>
-      <div id="loud-readout" class="loud-readout" aria-describedby="loud-help"></div>
-      <div id="loud-help" class="loud-help" role="tooltip">
-        <strong>Lautheit in LUFS</strong> <span class="muted">(EBU R128 · näher an 0 = lauter)</span>
-        <dl>
-          <dt>S</dt><dd>Short-term: Mittel der letzten 3 s – die gelbe Linie. Ohne Aufnahme: an der Mausposition.</dd>
-          <dt>M</dt><dd>Momentary: letzte 0,4 s, springt schnell.</dd>
-          <dt>I</dt><dd>Integriert: Durchschnitt der ganzen Aufnahme, Pausen herausgerechnet.</dd>
-          <dt>Name</dt><dd>I des laufenden bzw. angeklickten Abschnitts.</dd>
-        </dl>
-        <span class="muted">Der Export gleicht I auf das Ziel an (türkise Linie, z. B. −16).</span>
-      </div>
       <button id="btn-play" class="secondary play-btn" data-icon="play" disabled aria-label="Abspielen" title="Abspielen bzw. während der Aufnahme ab dem Cursor mithören (Leertaste)">
         <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"/></svg>
         <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="5.5" width="3.8" height="13" rx="1"/><rect x="13.7" y="5.5" width="3.8" height="13" rx="1"/></svg>
@@ -90,6 +103,21 @@
         <svg class="i-listen" viewBox="0 0 24 24" aria-hidden="true"><path class="line" d="M4.5 14v-2a7.5 7.5 0 0 1 15 0v2"/><rect x="3.5" y="13" width="4.5" height="7" rx="1.6"/><rect x="16" y="13" width="4.5" height="7" rx="1.6"/></svg>
         <span id="play-label" class="play-label" hidden></span>
       </button>
+      <button id="btn-cut" class="ghost cut-btn" title="Schnitt an der Live-Stelle beginnen bzw. beenden – die Stelle fehlt im MP3 (X)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><path d="M8.2 7.6L20 17M8.2 16.4L20 7"/></svg>
+        <span id="cut-label">Schnitt</span><kbd class="k">X</kbd>
+      </button>
+      <div id="loud-readout" class="loud-readout" aria-describedby="loud-help"></div>
+      <div id="loud-help" class="loud-help" role="tooltip">
+        <strong>Lautheit in LUFS</strong> <span class="muted">(EBU R128 · näher an 0 = lauter)</span>
+        <dl>
+          <dt>S</dt><dd>Short-term: Mittel der letzten 3 s – die Linie in der Wellenform. Ohne Aufnahme: an der Mausposition.</dd>
+          <dt>M</dt><dd>Momentary: letzte 0,4 s, springt schnell.</dd>
+          <dt>I</dt><dd>Integriert: Durchschnitt der ganzen Aufnahme, Pausen herausgerechnet.</dd>
+          <dt>Name</dt><dd>I des laufenden bzw. angeklickten Abschnitts.</dd>
+        </dl>
+        <span class="muted">Der Export gleicht I auf das Ziel an (gestrichelte Linie, z. B. −16).</span>
+      </div>
       <div class="zoom" role="group" aria-label="Zoom">
         <button id="btn-zoom-out" class="secondary" title="Herauszoomen (Strg+Mausrad)" aria-label="Herauszoomen">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M8 10.5h5"/></svg>
@@ -99,6 +127,7 @@
         </button>
       </div>
     </div>
+    <canvas id="overview" class="overview" title="Übersicht der ganzen Aufnahme – Klick springt hin, der Rahmen lässt sich ziehen"></canvas>
     <div class="wave-wrap">
       <div class="wave-chips">
         <label class="wave-chip chip-loud loud-toggle" id="loudness-wrap" title="Lautheit (LUFS) als Linie über der Wellenform: Short-term (Mittel der letzten 3 s), dazu Momentary (0,4 s) und integriert (gesamt bzw. Abschnitt)">
@@ -120,58 +149,69 @@
 
   <section id="compact-export" class="compact-export" aria-label="Export">
     <div id="ce-summary" class="ce-summary"></div>
-    <button id="ce-export" class="primary">Als MP3 speichern</button>
+    <button id="ce-export" class="primary">Als MP3 sichern</button>
     <div id="ce-progress" class="progress" hidden><i></i></div>
     <div id="ce-result" class="ce-result"></div>
     <button id="ce-new" class="ghost">Neue Aufnahme</button>
   </section>
 
+  <!-- Unten: eine Liste „Ablauf“ (offen · läuft · fertig, nach dem Beenden mit Export-Häkchen) und rechts „Jetzt“
+       (Prüfliste vor dem Start, laufender Punkt, Sichern). Bei Mehrspur steht rechts der Bereich „Kanäle“. -->
   <section class="panels">
-    <div class="panel panel-plan">
+    <div class="panel panel-flow">
       <div class="panel-head">
-        <h2>Ablaufplan</h2>
+        <h2>Ablauf</h2>
         <div class="head-actions">
-          <button id="btn-plan-service" class="secondary" title="Gottesdienst aus ChurchTools wählen">ChurchTools …</button>
-          <select id="plan-template" class="select" title="Vorlage mit Programmpunkten laden" aria-label="Vorlage laden"></select>
+          <button id="btn-plan-service" class="ghost plan-only" title="Gottesdienst aus ChurchTools wählen">ChurchTools …</button>
+          <select id="plan-template" class="select plan-only" title="Vorlage mit Programmpunkten laden" aria-label="Vorlage laden"></select>
+          <span class="export-select save-only">
+            <button id="export-all" class="ghost" title="Alle zum Sichern auswählen">Alle</button>
+            <button id="export-none" class="ghost" title="Auswahl aufheben">Keine</button>
+          </span>
         </div>
       </div>
       <div id="plan-source" class="plan-source" hidden></div>
-      <ol id="pending-list" class="pending"></ol>
+      <ol id="flow-list" class="flow" aria-label="Ablauf: Programmpunkte und Abschnitte"></ol>
       <div class="add-row">
-        <input id="plan-new" type="text" aria-label="Neuen Programmpunkt hinzufügen" />
-        <button id="btn-plan-add" class="secondary" title="Punkt am Ende des Ablaufplans hinzufügen" aria-label="Punkt hinzufügen">+</button>
+        <input id="plan-new" type="text" placeholder="Punkt hinzufügen, z. B. Lobpreis" aria-label="Neuen Programmpunkt hinzufügen" />
+        <button id="btn-plan-add" class="secondary" title="Punkt am Ende des Ablaufs hinzufügen" aria-label="Punkt hinzufügen">+</button>
       </div>
     </div>
 
-    <div class="panel panel-sections">
-      <div class="panel-head">
-        <h2>Abschnitte</h2>
-        <span class="hint">Doppelklick zum Bearbeiten</span>
+    <div class="panel panel-now" id="panel-now">
+      <div class="panel-head"><h2 id="now-title">Bereit für den Start?</h2></div>
+      <div class="now-block now-prep">
+        <ul id="prep-checks" class="checks"></ul>
+        <div id="prep-first" class="now-hint"></div>
       </div>
-      <ol id="marker-list" class="markers"></ol>
-    </div>
-
-    <div class="panel panel-export">
-      <div class="panel-head">
-        <h2>Abschnitte exportieren</h2>
-        <span class="export-select">
-          <button id="export-all" class="mini" title="Alle auswählen">Alle</button>
-          <button id="export-none" class="mini" title="Auswahl aufheben">Keine</button>
-        </span>
+      <div class="now-block now-rec">
+        <button id="now-card" class="now-card" type="button" title="Laufenden Abschnitt umbenennen und Interpret eintragen">
+          <span id="now-label" class="nc-label">● Läuft</span>
+          <span id="now-name" class="nc-name"></span>
+          <span id="now-artist" class="nc-artist"></span>
+          <span id="now-elapsed" class="nc-elapsed"></span>
+        </button>
+        <div id="now-next" class="next-card"><span class="nc-label">Als Nächstes · <kbd>N</kbd></span><span id="now-next-name" class="nn-name"></span></div>
       </div>
-      <div id="export-list" class="export-list"></div>
-      <div id="export-target" class="segment-info"></div>
-      <button id="btn-export" class="primary" disabled>Ausgewählte als MP3 speichern</button>
-      <div id="export-progress" class="progress" hidden><i></i></div>
-      <div id="export-result" class="export-result"></div>
+      <div class="now-block now-save">
+        <div id="save-summary" class="save-summary"></div>
+        <div class="dest">
+          <span class="dest-label">Ziel</span>
+          <b id="export-folder"></b>
+          <small id="export-target"></small>
+        </div>
+        <div id="export-progress" class="progress" hidden><i></i></div>
+        <div id="export-result" class="export-result"></div>
+        <button id="now-continue" class="ghost now-continue" title="Neue Audioaufnahme an das Ende der angezeigten, beendeten Aufnahme anhängen (gleiche Datei, gleiche Abschnitte)">An Aufnahme anhängen</button>
+      </div>
     </div>
 
     <div class="panel panel-channels">
       <div class="panel-head">
         <h2>Kanäle</h2>
         <span class="export-select">
-          <button id="ch-all" class="mini" title="Alle Kanäle aufnehmen">Alle</button>
-          <button id="ch-named" class="mini" title="Nur Kanäle aufnehmen, die am Pult einen Namen haben">Nur benannte</button>
+          <button id="ch-all" class="ghost" title="Alle Kanäle aufnehmen">Alle</button>
+          <button id="ch-named" class="ghost" title="Nur Kanäle aufnehmen, die am Pult einen Namen haben">Nur benannte</button>
         </span>
       </div>
       <div id="ch-status" class="ch-status"></div>
@@ -214,6 +254,7 @@
           <label>Ausgang (Mithören und Abspielen)
             <select id="set-output" class="select"></select>
           </label>
+          <label class="check"><input type="checkbox" id="set-prelisten" /> Pegel schon vor dem Start anzeigen (Eingang wird geöffnet, nichts gespeichert)</label>
           <label>Abtastrate
             <select id="set-samplerate" class="select">
               <option value="44100">44,1 kHz</option>

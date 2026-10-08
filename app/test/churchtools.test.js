@@ -75,6 +75,14 @@ test('Infotext des Termins: erste Zeile, ohne HTML und doppelte Leerzeichen', as
   assert.equal((await ct.eventServices(12, [])).info, 'Römer 8');
 });
 
+test('Gerade Anführungszeichen werden typografisch', () => {
+  assert.equal(ct.typoQuotes('Predigt: Kolosser 2,6-7 "Verwurzelt in Christus"'), 'Predigt: Kolosser 2,6-7 „Verwurzelt in Christus“');
+  assert.equal(ct.typoQuotes('"Gott ist treu" (Ps 33)'), '„Gott ist treu“ (Ps 33)');
+  assert.equal(ct.typoQuotes("Gottes Wort und Jesu' Ruf, 'kurz'"), 'Gottes Wort und Jesu’ Ruf, ‚kurz’');
+  assert.equal(ct.typoQuotes('ohne'), 'ohne');
+  assert.equal(ct.eventInfoText({ description: 'Römer 8 "Nichts kann uns trennen"' }), 'Römer 8 „Nichts kann uns trennen“');
+});
+
 test('404 trägt den Status, kaputte Antwort eine klare Meldung', async () => {
   routes = {};
   await assert.rejects(ct.agenda(77), (err) => err.status === 404);

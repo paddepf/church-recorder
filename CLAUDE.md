@@ -44,8 +44,9 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - Ein Abschnitt hat Anfang **und** Ende (`sections` in `session.js`, je
   `start`/`end`; `start == null` = offener Ablaufpunkt, `end == null` = läuft
   gerade). Es läuft höchstens einer. Jeder Abschnitt hat eine feste `color`
-  (Index, wird beim Anlegen vergeben; Farbtöne in `waveform.js`).
-- Pausen zwischen Punkten: **M** auf einem laufenden Abschnitt („Abschnitt abschließen“) lässt die Aufnahme ohne aktiven
+  (Index, wird beim Anlegen vergeben; feste Palette `--sec-0` … `--sec-7` in `styles.css`, je Farbschema, siehe
+  „Oberfläche nach Phasen“).
+- Pausen zwischen Punkten: **M** auf einem laufenden Abschnitt („Abschnitt beenden“) lässt die Aufnahme ohne aktiven
   Abschnitt weiterlaufen, bis **N** den nächsten beginnt (`startNextPending` beginnt bei fehlendem offenem Abschnitt
   einfach an der Live-Stelle). Oberfläche: „Zwischen den Punkten“, wenn noch Punkte offen sind.
 - **M** (`section.toggle`) beginnt bzw. beendet einen Abschnitt, **N**
@@ -99,11 +100,11 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Kinderbeitrag, Predigt, Abschluss), und meldet `usedDefaults` und `templateName`. Der Termin wird dabei trotzdem gesetzt. `session:service` (ohne
   ChurchTools) trägt dieselbe Vorlage ein, wenn noch keine Abschnitte existieren. Ein vorhandener ChurchTools-Ablaufplan
   hat immer Vorrang.
-- Ablaufplan-Kachel: Knopf „ChurchTools …“ neben der Vorlagenwahl öffnet denselben Termin-Dialog wie der Klick auf den
+- Liste „Ablauf“ (früher Kachel „Ablaufplan“): Knopf „ChurchTools …“ neben der Vorlagenwahl öffnet denselben Termin-Dialog wie der Klick auf den
   Gottesdienst in der Kopfzeile (`openServicePicker`); `#plan-source` zeigt die Herkunft: eine Zeile aus `session.agendaOrigin` (`{source, template}`, gesetzt in `setAgenda(items, source, templateName)`,
   in der Session-Datei gespeichert; bei alten Sessions aus `source` der Punkte abgeleitet): „Ablaufplan aus ChurchTools“ bzw.
   „Vorlage „Name““, bei ChurchTools-Termin (`service.id`) dahinter „· Dienste: n · Infotext ✓“ (Namen und Infotext im Tooltip).
-- Ablaufplan-Kachel: Punkt hinzufügen (`section:add`), entfernen (`section:delete`), umsortieren per Drag in der
+- Liste „Ablauf“: Punkt hinzufügen (`section:add`), entfernen (`section:delete`), umsortieren per Drag in der
   Liste (`section:reorder`, setzt `order` der offenen Punkte neu). Dieselbe Drag-Quelle (`text/marker-id`) dient
   weiter zum Ablegen auf der Wellenform, das Ziel unterscheidet.
 
@@ -131,7 +132,8 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   `toast()` zeigt dieselbe Meldung nicht doppelt und höchstens drei je Ort. **Fehler und Warnungen** (`error`/`warn`)
   erscheinen groß und farbig oben in der Mitte (`#alerts`, rot bzw. gelb, mit ⚠), bleiben mindestens 30 s (Fehler) bzw.
   15 s (Warnung) stehen und lassen sich per Klick schließen; Hinweise (`info`/`success`) klein unten rechts. Neue
-  Meldungen daran messen.
+  Meldungen daran messen. Ausnahme mit Knopf: Nach dem Entfernen eines Abschnitts bzw. Punkts (ohne Rückfrage) bietet
+  ein Hinweis „Rückgängig“ an (`toast(level, text, timeout, { label, run })`).
 
 ### Infotext des Termins als Predigttitel
 - `churchtools.eventServices` liefert zusätzlich `info` (`eventInfoText`: erste Zeile aus `description`, sonst
@@ -139,6 +141,8 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   beim ersten Abschnitt mit dem Wort „Predigt“ an: „Predigt: Kolosser 2,6-7 Verwurzelt in Christus“ (`baseLabel` merkt den
   ursprünglichen Namen, damit erneutes Laden keine Doppelten erzeugt und der Text nicht zweimal angehängt wird; Regel
   `RoleLogic.takesEventInfo`). Das Etikett ist Abschnittsname, Dateiname-`{abschnitt}` und ID3-Titel.
+  Gerade Anführungszeichen aus ChurchTools (Titel der Ablaufpunkte und Infotext) setzt `typoQuotes` typografisch
+  („…“, Apostroph ’), sonst stünden Schreibmaschinenzeichen in Namen, Dateinamen und ID3-Titeln.
   **Welches ChurchTools-Feld den Infotext trägt, ist nicht gegen eine echte Instanz geprüft** (mehrere Feldnamen
   werden probiert); bei Abweichungen die echte Antwort von `GET /api/events/{id}` ansehen und `eventInfoText` anpassen.
 
@@ -243,7 +247,7 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Segmente tragen `cuts` und `cutSeconds`.
 - **Vorlagen:** Einstellungen `agendaTemplates` (`{id,name,items[]}`) und `defaultTemplateId`. Das frühere
   `defaultAgenda` wird beim Laden zur Vorlage „Gottesdienst“ migriert. `agenda:applyTemplate` ersetzt die
-  offenen Punkte (Quelle `plan`); Auswahl `#plan-template` in der Ablaufplan-Kachel, Editor in den Einstellungen
+  offenen Punkte (Quelle `plan`); Auswahl `#plan-template` über der Liste „Ablauf“, Editor in den Einstellungen
   (Arbeitskopie `state.tpl`, gespeichert über `readTemplatesForSave`).
 - **Health für Netzwerk-Clients:** Hauptprozess hält `health` (`input`: ok/silent/lost, `disk`) und hängt es an
   jeden veröffentlichten Zustand (`net.publishState({...snapshot, health})`). Stille = 20 s unter 0,001 Pegel
@@ -272,11 +276,12 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   der Wellenform zeigt den Interpreten hinter dem Namen (`hoverHandle` blendet „+ Interpret“
   ein); Doppelklick darauf startet den Editor im Interpret-Feld (`onRenameSection(id, 'artist', rect)`,
   `rect` = Fähnchen in Zeichenflächen-Koordinaten).
-- Der Export-Bereich ist eine Auswahlliste mit Häkchen (kein Dropdown): alle echten,
-  beendeten Abschnitte plus „Gesamte Aufnahme“; ein Knopf „Ausgewählte als MP3
-  speichern“ (`export:batch`, nacheinander, ein Fehler stoppt die übrigen nicht,
-  `failed` in der Antwort). Vorausgewählt sind Abschnitte, die noch nicht gesichert
-  wurden; **beim Beenden einer Aufnahme alle** (`exportPrevStatus` erkennt den Wechsel recording/paused → stopped). Fortschritt über `export-progress` mit `index`/`total`.
+- Ausgewählt wird in der Liste „Ablauf“ (nach dem Beenden Häkchen je fertigem Abschnitt plus Zeile „Gesamte
+  Aufnahme“, `fullRow`); der Knopf `#btn-export` steht als Hauptaktion im Transport und nennt, was gespeichert wird
+  („2 Abschnitte als MP3 sichern“, „Alles gesichert ✓“; `updateExportButton`; `export:batch`, nacheinander, ein Fehler
+  stoppt die übrigen nicht, `failed` in der Antwort). Vorausgewählt sind Abschnitte, die noch nicht gesichert
+  wurden; **beim Beenden einer Aufnahme alle**, ohne Abschnitte die ganze Aufnahme (`prepareExportSelection`,
+  `exportPrevStatus` erkennt den Wechsel recording/paused → stopped). Fortschritt über `export-progress` mit `index`/`total`.
 - Gesicherte Abschnitte werden in der Session gemerkt (`exports`, Schlüssel =
   Segment-ID, mit Datei und Zeitraum). Weichen Anfang/Ende später ab, zeigt die
   Liste „geändert seit Export“. `exports` wird bei einer neuen Aufnahme geleert.
@@ -322,26 +327,28 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   nur verkleinert (Mindestgröße 320×164, Standard 360×168 unten rechts – jeweils Inhaltsgröße, Titelleiste/Rahmen kommen über
   `frameSize()` dazu, Lage in `compactBounds`; ältere, größere Lagen verwirft `settings.load` einmalig über `compactLayout: 2`), wahlweise
   immer im Vordergrund (`compactOnTop`). Bewusst kein zweites Fenster und kein Neuladen: Die Audioerfassung
-  läuft in der Oberfläche. Die Ansicht blendet per `body.compact` alles außer Kopfzeile, Transport und den
-  Knöpfen M/N aus; der laufende Abschnitt (`#current-item`, ein Button mit `#current-name`/`#current-artist`) steht groß
-  mit Interpret im Mini-Fenster und öffnet per Klick `editSection` (Anker = Button; auch im großen Fenster nutzbar); die Wellenform bleibt in 1000 px Breite außerhalb des Fensters (sonst Zoom 0 bei Breite 0).
+  läuft in der Oberfläche. Die Ansicht blendet per `body.compact` alles außer Kopfzeile und Transport aus (M/N stehen
+  jetzt im Transport); der laufende Abschnitt (`#current-item`, ein Button mit `#current-name`/`#current-artist`) steht groß
+  mit Interpret im Mini-Fenster und öffnet per Klick `editSection` (nur im Mini-Fenster sichtbar; groß übernimmt das
+  die Karte `#now-card` unter „Jetzt“); die Wellenform bleibt in 1000 px Breite außerhalb des Fensters (sonst Zoom 0 bei Breite 0).
   Nach dem Beenden (`body.review`) ersetzt die Karte `#compact-export` Aufnahme- und Abschnittsknöpfe: Zusammenfassung,
   ein Export-Knopf (`exportFromCompact` → `exportSelected`, wählt angehakte, sonst ungesicherte bzw. seit dem Export geänderte; ohne Abschnitte die ganze
   Aufnahme; ist alles gesichert, entfällt der Knopf) und „Neue Aufnahme“; Ergebnis und Fortschritt spiegelt `setExportResult` in beide Ansichten.
-  Der Knopf „Nächster Ablaufpunkt“ zeigt den Namen des ersten offenen Punkts (`#next-name`, nach `order` sortiert).
+  Der Knopf N zeigt den Namen des ersten offenen Punkts (`#next-name`, `nextPending`, nach `order` sortiert).
   Die Wellenform baut ihre Zeichenfläche bei jeder Größenänderung neu auf (`ResizeObserver`) und beim Umschalten explizit
   (`applyCompact` → `wave.resize()`): Sonst kommt das Fenster-Ereignis vor der Umstellung der Ansicht und alles wirkt gestreckt.
   Die Laufzeit des aktuellen Abschnitts (`#current-elapsed`, `updateSectionElapsed`) tickt mit den `levels`-Meldungen aus
-  `state.duration - state.sectionStart` und steht in beiden Ansichten in der Karte `#current-item`; die Liste der Abschnitte zeigt je Abschnitt `.dur`
+  `state.duration - state.sectionStart` und steht im Mini-Fenster in `#current-item`, groß in `#now-elapsed`; die Liste „Ablauf“ zeigt je Abschnitt `.dur`
   (`fmtLength`; beim laufenden mit `data-live`, von `updateSectionElapsed` mitgezählt).
   Dialoge passen nicht hinein: `openModal`, `confirmDialog` und `?` schalten vorher auf groß zurück.
   Kürzel Strg+Umschalt+M im Renderer, auf dem Mac Cmd+Umschalt+M über das Menü „Fenster“.
-  **Aufbau (Stand 2):** Kopfzeile (Name, „oben“, Umschalter) · Pegel als 5-px-Streifen L|R über die ganze Breite (Beschriftung
-  aus, „Übersteuert“ nur bei Übersteuerung) · Timer (28 px) mit Pause/Beenden rechts daneben; vor dem Start statt dessen
-  „Neue Aufnahme starten“ (gesperrte Pause/Beenden ausgeblendet), während Aufnahme/Pause ist der gesperrte Aufnahmeknopf
-  ausgeblendet · Karte des laufenden Abschnitts · M und N einzeilig („→ Predigt“, Beschriftung nur ohne offenen Punkt,
-  per `:has`). „Immer oben“ heißt unter 380 px nur „oben“ (`.ontop-long`). Nach Änderungen alle vier Zustände bei 320×164
-  messen (kein Überlauf, keine abgeschnittenen Knöpfe).
+  **Aufbau (Stand 3):** `.transport` als Raster mit Bereichen „meters meters“ / „clock ctl“ / „current current“ /
+  „mark next“; `.transport-controls` und `.clock` sind dort `display: contents`, die Knöpfe liegen direkt in den
+  Bereichen. Kopfzeile (Name, „oben“, Umschalter) · Pegel als 5-px-Streifen L|R (Beschriftung, Zahl und Skala aus,
+  „Übersteuert“ nur bei Übersteuerung) · Timer (28 px) mit „Aufnahme starten“ bzw. Pause/Beenden (Symbole, `.rec-ctl`;
+  Beenden auch hier halten) · Karte des laufenden Abschnitts · M (normal) und N (Hauptknopf, „→ Predigt“). Je Phase nur
+  die passenden Knöpfe (`body[data-phase]`, wie groß). „Immer oben“ heißt unter 380 px nur „oben“ (`.ontop-long`). Nach
+  Änderungen alle vier Zustände bei 360×168 und 320×164 messen (kein Überlauf, keine abgeschnittenen Knöpfe).
 - **Kopfleiste (aufgeräumt, Oktober 2026):** Alle Bedienelemente (Gottesdienst-Feld, Schild, Knöpfe, Umschalter) sind gleich
   hoch und gleich groß beschriftet – Variablen `--top-h`/`--top-font`/`--top-pad` auf `.topbar` (groß 40 px/15 px,
   unter 1180 px 36/14, kompakt 28/13, Mini 24/11; Block „Kopfleiste (aufgeräumt)“ am Ende von `styles.css`). Rechts
@@ -398,21 +405,22 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - Wellenform: Standardansicht 5 Minuten (`DEFAULT_VISIBLE_SECONDS`, `setDefaultZoom()` beim Start und
   bei neuer/fortgesetzter Aufnahme), beendete Aufnahmen werden eingepasst (`fitZoom`). Der Zoom wird nicht
   mehr in den Einstellungen gespeichert.
-- Die drei unteren Bereiche sind bewusst groß ausgelegt (Zeilenschrift 16 px, Überschriften 17 px, Knöpfe
-  ✎/× 18 px, Eingabefelder 16 px); die Exportspalte ist 400 px breit, Exportzeilen sind einzeilig
-  (Häkchen, Name, Länge, ✓ gesichert / ⚠ geändert seit Export; Zeitraum und Datei im Tooltip). Beim Ändern der Größen im 1360×880-Fenster mit der Layout-Vorschau prüfen.
+- Die unteren Bereiche sind bewusst groß ausgelegt (Zeilenschrift 16 px, Überschriften 17 px, Knöpfe
+  ✎/× 34 px Fläche, Eingabefelder 16 px); „Jetzt“ ist 360 px breit (unter 1180 px 300, kompakt 290/250). Zeilen der
+  Liste „Ablauf“ sind einzeilig. Beim Ändern der Größen bei 1360×880 und 1024×680 messen.
 - Kopfleiste, Transport und Werkzeugleiste sind ebenfalls groß (Dienstname 21 px, Aufnahmeknopf 18 px,
-  Timer 60 px, Pegel 280 px breit). Für kleine Fenster gibt es zwei Abstufungen: `max-width: 1180px` (kleinere
+  Timer 60 px, Pegel 300 px breit). Für kleine Fenster gibt es zwei Abstufungen: `max-width: 1180px` (kleinere
   Schrift/Abstände, sonst läuft die Seite über) und `max-height: 820px` bzw. `720px` (Wellenform 150/120 px
   hoch, engere Leisten, damit unten genug Platz für die Listen bleibt). Mindestfenster ist 1024×680 (kompakt 760×520); nach
   Änderungen bei 1360×880 **und** 1024×680 messen (kein Überlauf: `scrollWidth == innerWidth`).
-- **Der große Timer darf in keinem Zustand wandern** (bereit, läuft, pausiert, beendet): `.transport-controls` hat feste
-  Mindestbreite (486 px), Aufnahmeknopf 244 px, Pause/Fortsetzen 116 px; im beendeten Zustand (`body.review`) entfallen die
-  ausgegrauten Knöpfe Pause/Beenden zugunsten von „An Aufnahme anhängen“. Ändern sich Beschriftungen oder Größen, mit der
-  Layout-Vorschau in allen vier Zuständen bei 1360 und 1024 px die Timer-Mitte messen (`#timecode`).
+- **Der große Timer darf in keinem Zustand wandern** (bereit, läuft, pausiert, beendet): `.transport-controls` hat in
+  allen Phasen dieselbe feste Breite (486 px, kompakt 412 px); die Knöpfe darin kürzen ihren Text („→ Pre…“) statt die
+  Zone zu verbreitern. Gleiches Schriftgewicht des Timers in allen Zuständen (ein dickeres Gewicht während der Aufnahme
+  verschob ihn um 1 px). Ändern sich Beschriftungen oder Größen, in allen vier Zuständen bei 1360, 1024, kompakt 960
+  und 760 px die Timer-Lage messen (`#timecode`), siehe „Oberfläche nach Phasen“.
   Ab 1340 px Fensterbreite sitzt er exakt in der Fenstermitte (Spalten `1fr 300px 1fr`); darunter (Knöpfe + Pegel brauchen
   mehr Platz) bleibt er zwischen beiden stabil, aber nicht mittig.
-- Layout unter der Wellenform: drei Bereiche (Ablaufplan | Abschnitte | Export), ganz
+- Layout unter der Wellenform: zwei Bereiche (Ablauf | Jetzt, bei Mehrspur Ablauf | Kanäle), ganz
   unten die Tastenleiste (`.keybar`). Die Kürzelliste steht zentral in `shortcutList()`
   (`app.js`) und speist Leiste und Dialog (`?`): neue Kürzel dort eintragen.
   Speicherplatz (`disk:free`, `fs.statfsSync`; Stunden aus der Abtastrate, 16 Bit Stereo) steht dauerhaft nur in den
@@ -536,12 +544,13 @@ Der Ordnername des lokalen Klons ist egal.
 - Geprüft (Mac, Simulator): Tests mit echter Engine (Session-Ablauf inkl. Laden/Anhängen) und die App per
   WebSocket-Fernsteuerung sowie per Knöpfen (Start, Abschnitt, Pause, Stopp, Anhängen, Einstellungen).
 - **Oberfläche (Schritt 4):** Aufnahmeart = Einstellung `recordingMode` (in der Kopfzeile nur das Schild, siehe
-  „Oberfläche“). `body.mt` (`multitrackView()`: folgt der Einstellung, während einer Aufnahme deren Art) ersetzt den
-  Export-Bereich durch
+  „Oberfläche“). `body.mt` (`multitrackView()`: folgt der Einstellung, während einer Aufnahme deren Art) ersetzt rechts
+  „Jetzt“ durch
   den Bereich „Kanäle“ (`renderChannels`, `channelModel`, `applyTrackLevels`); die Spalte ist dann breiter
   (`minmax(380px, 1.25fr)`, kompakt 330 px), damit die Namen passen. Passen Aufnahmeart und angezeigte Aufnahme nicht
-  zusammen: Stereo-Aufnahme bei „Mehrspur“ → Hinweis im Kanal-Bereich „zum Exportieren auf Stereo schalten“;
-  Mehrspuraufnahme bei „Stereo“ → Export-Bereich mit Hinweis „werden nicht als MP3 exportiert“. (Früher blieb der
+  zusammen: Seit dem Umbau nach Phasen richtet sich der Export nach der Art der *angezeigten* Aufnahme
+  (`body.mt-session`): Eine Stereo-Aufnahme lässt sich auch bei „Mehrspur“ sichern (Hinweis im Kanal-Bereich), eine
+  Mehrspuraufnahme bei „Stereo“ zeigt unter „Sichern“ nur „n Spuren als WAV gespeichert“ und keinen Sichern-Knopf. (Früher blieb der
   Kanal-Bereich bei angezeigter Mehrspuraufnahme stehen, egal wie die Aufnahmeart stand – wirkte wie ein Fehler.)
   Gemessen: kein Überlauf, Timer gleich in beiden Modi, keine gekürzten Kanalnamen bei 1360×880, 1024×680, kompakt
   960×640 und 760×520.
@@ -641,7 +650,8 @@ Der Ordnername des lokalen Klons ist egal.
   über `_loudJob`, wenn inzwischen etwas anderes geladen wird); 70 min dauerten etwa 6 s. Anhängen füllt die Kurve bis
   zur Dateilänge mit `null` auf. Mehrspur misst nicht (kein Mix; Schalter ausgeblendet).
   Zeichnen: `Waveform._drawLoudness` (Skala −50…−5 LUFS; Hilfslinien je nach Höhe der Wellenform alle 10 LU, alle
-  20 LU oder keine; Ziel = `loudnessTarget` türkis gestrichelt). Die Zahlen stehen rechts in einer Spalte mit Hintergrund
+  20 LU oder keine; Ziel = `loudnessTarget` gestrichelt in der Farbe der Linie; `--loud` ist seit dem Umbau nach Phasen
+  türkisblau statt gelb, damit sie nicht wie eine Warnung aussieht). Die Zahlen stehen rechts in einer Spalte mit Hintergrund
   (Linien enden davor), eine Zahl zu nah am Ziel entfällt. Herausgezoomt mittelt jeder Pixel über etwa 6 Pixel
   (mindestens 3 s), sonst zappelt die Linie bei Sprache.
   **Messwerte nicht in der Zeichenfläche:** Ein Kasten oben rechts und „Ziel −16“ links verdeckten je nach Größe viel
@@ -649,7 +659,7 @@ Der Ordnername des lokalen Klons ist egal.
   `onLoudness` an `#loud-readout` in der Werkzeugleiste: „LUFS · S · M · I · Abschnitt“, live M/S/I und laufender
   Abschnitt, sonst S an der Mausposition (echte 3 s, kann von der geglätteten Linie abweichen), I gesamt und gewählter
   Abschnitt (`wave.selectedSectionId` aus `state.selectedSectionId`, gesetzt in `renderLists`; vorher zählte nur der Klick
-  in der Export-Liste, die setzt jetzt auch `selectedSectionId`).
+  in der Liste „Ablauf“).
   `renderLoudnessReadout` legt die Elemente einmal an und ändert danach nur Text/`hidden`: Live wechseln die Werte
   mehrmals je Sekunde, neu angelegte Elemente unter der Maus verhinderten jeden Tooltip. Erklärung als eigene Infobox
   `#loud-help` (CSS `:hover` + Geschwister, 0,35 s Verzögerung) statt `title` – der System-Tooltip erscheint auf dem Mac
@@ -686,6 +696,67 @@ Der Ordnername des lokalen Klons ist egal.
   (`exportSummary` in `main.js` aus `exports` der Session-Datei: ✓ gesichert / n von m / ⚠ geändert seit Export / nicht
   gesichert; Mehrspur ohne Angabe), „📂“ zeigt die Session-Datei im Ordner. Aufnahmen ohne Gottesdienstnamen heißen
   „Ohne Gottesdienst“ (vorher stand der Dateiname da).
+
+### Oberfläche nach Phasen (Umbau 2026-10-08)
+Anlass: Designvorschläge (Artifact „Ebbton Designvorschläge“). Die Oberfläche beantwortet in jedem Moment „Was ist jetzt
+dran?“; je Phase genau eine Hauptaktion, der Aufbau bleibt gleich, nur die Betonung wechselt.
+- **Phasen:** `phaseOf(session)` → `body[data-phase]` = `prep` (vor dem Start, auch `stopped` ohne Audio), `rec`
+  (Aufnahme/Pause), `save` (beendet mit Audio; `body.review` bleibt als Alias für das Mini-Fenster). Kopfzeile in der Mitte
+  `#phase-steps` (Vorbereiten › Aufnehmen › Sichern, nur Anzeige; unter 1240 px nur die aktuelle). Unter dem Timer
+  `#status-line` (`renderStatusLine`: Bereit · Pegel live / Aufnahme läuft / Pausiert / Beendet · n ungesichert).
+- **Ausblenden statt ausgrauen:** Welche Transportknöpfe sichtbar sind, regelt nur CSS über `data-phase`: prep =
+  `#btn-record` (rot, `.go`, „Aufnahme starten“ mit Taste) · rec = `#btn-next-item` (Hauptknopf, zweizeilig: klein
+  „Nächster Punkt · N“, darunter groß nur der Name – so hat der Name fast die ganze Knopfbreite; vorher stand „→ Pre…“
+  da), `#btn-marker` schmal und zweizeilig („Abschnitt / beenden“, `#marker-label` = „starten“/„beenden“),
+  `.rec-ctl` mit `#btn-pause`/`#btn-stop` als Symbole. Ist kein Punkt mehr offen (`body[data-next="none"]`), täte N
+  dasselbe wie M: N verschwindet, M wird zum breiten Hauptknopf; die Taste N beendet weiter den laufenden Abschnitt
+  (`nextItem`) · save = `#btn-export` (Hauptknopf) und `#btn-record` leise als
+  „Neue Aufnahme“ (`order: 2`); bei Mehrspur (kein Export) „Neue Aufnahme starten“ und `#btn-continue`. Stereo hat
+  „An Aufnahme anhängen“ als `#now-continue` unter „Sichern“. Vor dem Start entfallen Werkzeugleiste und Übersicht,
+  die Wellenform ist flacher (110 px, kompakt 80 px). M/N/X und Pause/Beenden sind aus der Werkzeugleiste bzw. ihren
+  alten Plätzen in den Transport gewandert; `#btn-cut` („✂ Schnitt“, nur rec) steht links über der Wellenform.
+- **Knopf-Rollen:** `.primary` (Indigo, Hauptaktion), `.go` (rot gefüllt, nur „Aufnahme starten“), normal (grau),
+  `.ghost` (leise), `.danger` (rote Schrift, kein roter Grund). Kürzel als `kbd.k` im Knopf. Knöpfe geben beim Drücken
+  1 px nach; M/N leuchten nach dem Setzen kurz in der Abschnittsfarbe (`flashButton`, `--flash`). Die Klasse `flash`
+  wird nach `animationend` entfernt, sonst leuchtet ein Knopf erneut, sobald er nach dem Ausblenden wieder erscheint.
+- **Beenden halten:** `bindHold` – Maus/Touch oder Enter/Leertaste 600 ms halten (Balken `.hold-bar`), zu kurz → Hinweis.
+  Beim Loslassen zählt die tatsächlich gehaltene Zeit (`performance.now()`), weil Chromium Timer im Hintergrundfenster
+  drosselt – im Test kam der 600-ms-Timer erst nach dem Loslassen. `Strg`/`Cmd`+R und Companion beenden sofort.
+- **Liste „Ablauf“** (`#flow-list`, `renderFlow`/`flowRow`/`fullRow`) ersetzt Ablaufplan, Abschnitte und Export:
+  gesetzte Abschnitte nach Zeit (`data-state` done/now), dahinter offene Punkte nach `order` (open, der erste während
+  der Aufnahme „als Nächstes“), nach dem Beenden „Gesamte Aufnahme“ (full). Spalten fest per Variablen (`--tw` Zeitraum,
+  `--dw` Länge, `--stw` Zustand), damit die Zeilen fluchten; vor dem Start 0. Die Liste richtet sich per
+  Container-Abfrage nach der eigenen Breite (unter 640 px ohne Zeitraum, unter 460 px ohne Zustand); diese Regeln
+  stehen am Ende von `styles.css` mit `body …`, sonst überstimmen sie die Fenstergrößen-Regeln. **Spalten nie mit
+  `display: none` ausblenden** (dann rutschen die übrigen eine Spalte nach links und die Namen verschwinden), sondern
+  `visibility: hidden` plus Breite 0. ✎/× nur beim Darüberfahren/Fokus; nie begonnene Punkte nach dem Beenden blass.
+- **„Jetzt“** (`#panel-now`, `renderNow`): prep = Prüfliste `#prep-checks` (Eingang, Gottesdienst, Ablauf, Punkte ohne
+  Interpret mit „Eintragen“, Speicher, Routing; `fillChecks` baut nur bei Änderung neu, sonst gingen Hover/Tooltips
+  verloren) und „Beim Start beginnt automatisch …“; rec = Karte `#now-card` (laufender Abschnitt, Laufzeit, Klick =
+  bearbeiten) und `#now-next` – bewusst ohne Prüfliste (Eingang/Speichern/Speicherplatz mit lauter ✓ wirkte sinnlos,
+  Probleme melden Warnbalken und Meldungen); save = Zusammenfassung, Zielordner (nur Name, Pfad im Tooltip,
+  `refreshExportTarget`), Format/Lautheit, Fortschritt, Ergebnis. Beim Phasenwechsel blendet der Bereich kurz ein
+  (`fadeNowPanel`). Bei Mehrspur steht rechts „Kanäle“ statt „Jetzt“ (dann nennt `#status-line` den laufenden Abschnitt).
+- **Pegel:** Skala −48 … 0 dBFS, Zonen Grün bis −9 / Gelb bis −3 / Rot (`.bar` mit `--zones`, Füllung über `clip-path`),
+  Spitzenhalter 2 s (`<u>`), Zahl `#db-l/-r`, „Übersteuert“ (`#clip`) bleibt bis zum Klick (`state.clipLatched`).
+  `setMeters` für Session-Pegel, Mehrspur-Kanäle und Vorhören; ohne neue Werte fällt die Anzeige nach 0,6 s auf null.
+- **Pegel vor dem Start** (`prelisten`, Einstellung `prelisten`, Vorgabe an, *Audio*): eigene `Capture`-Instanz `pre`,
+  getrennt von der Aufnahme-Erfassung, schickt nichts an den Hauptprozess. Nur Stereo und Phase prep;
+  `startRecording`/`continueRecording` schließen sie vorher (`stopPrelisten` wartet auch einen gerade laufenden Start
+  ab – zwei gleichzeitige `capture.start` wären undefiniert). Fehlschlag wird nicht in einer Schleife wiederholt.
+- **Farben:** Jede Signalfarbe hat eine Bedeutung: Rot live/Fehler, Bernstein Achtung/Pause, **Grün `--ok` erledigt**
+  (neu: gesichert, Eingang ok, Pegel normal), Indigo `--plan` handeln, Stahlblau Audio. Abschnittsfarben als feste
+  Palette `--sec-0…7` je Farbschema (vorher `hsl(HUES[i], 55%, 62%)`); Zeilen bekommen `--sec: var(--sec-n)`
+  (`window.sectionColorVar`), die Wellenform liest die Werte über `readColors().sections`. In der Wellenform nur ein
+  4-px-Streifen unter den Fähnchen statt Flächentönung (gewählter Abschnitt leicht hinterlegt), neu gesetzte Marken
+  blenden während der Aufnahme 350 ms ein (`_flash`).
+- **Übersichtsleiste** `#overview` (Klasse `Overview` in `waveform.js`, gezeichnet in `Waveform.draw`): ganze Aufnahme
+  mit Umriss, Abschnitten, Schnitten, Live-Stelle, Hörmarke und dem sichtbaren Ausschnitt als Rahmen; Klick springt,
+  Ziehen verschiebt (schaltet „Folgen“ aus). Der Umriss wird nur bei neuen Daten neu gerechnet.
+- Datum in der Kopfzeile menschlich („Do., 8. Okt. 2026“, `serviceDateText`; in Dateinamen bleibt ISO).
+- Gemessen (echte App per DevTools-Protokoll, Zustände auch per `data-phase` nachgestellt): kein Überlauf, Timer fest bei
+  1360×880, 1024×680, kompakt 960×640 und 760×520, Stereo und Mehrspur; Mini 360×168 und 320×164 in allen vier
+  Zuständen; hell und dunkel. Echte Abläufe: Start, N, Beenden halten (kurz → Hinweis), Entfernen + Rückgängig.
 
 ### Entfernt: Mitschrift
 Die lokale Transkription (whisper.cpp, Mitschrift-Panel, Einstellungen) wurde

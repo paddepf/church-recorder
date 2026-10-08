@@ -7,6 +7,20 @@ const settings = require('./settings');
  * Authentifizierung über Personal Access Token:  Authorization: Login <token>
  */
 
+/**
+ * Gerade Anführungszeichen aus ChurchTools typografisch setzen: "Text" → „Text“, Apostroph ' → ’ (in Abschnittsnamen,
+ * Dateinamen und ID3-Titeln sähe man sonst die Schreibmaschinenzeichen). Öffnend ist ein Zeichen am Anfang oder nach
+ * Leerraum bzw. Klammer, sonst schließend.
+ */
+function typoQuotes(text) {
+  if (typeof text !== 'string' || !/["']/.test(text)) return text;
+  return text
+    .replace(/(^|[\s(\[{\/–—-])"/g, '$1„')
+    .replace(/"/g, '“')
+    .replace(/(^|[\s(\[{\/–—-])'/g, '$1‚')
+    .replace(/'/g, '’');
+}
+
 function baseUrl() {
   const url = (settings.get('churchToolsUrl') || '').trim().replace(/\/+$/, '');
   if (!url) throw new Error('Es ist keine ChurchTools-Adresse hinterlegt.');
@@ -146,7 +160,7 @@ async function agenda(eventId) {
     // ihre Punkte). In beiden Fällen wird der Titel zur Kategorie der folgenden Punkte.
     let currentHeader = headerTitle;
     (list || []).forEach((item) => {
-      const title = item.title || item.bezeichnung || 'Programmpunkt';
+      const title = typoQuotes(item.title || item.bezeichnung || 'Programmpunkt');
       if (item.type === 'header' || item.isHeader) {
         const children = item.items || item.children;
         if (children && children.length) walk(children, title);
@@ -262,7 +276,8 @@ function eventInfoText(event) {
       .split(/\r?\n/)
       .map((l) => l.replace(/\s+/g, ' ').trim())
       .find(Boolean);
-    if (line) return line.length > 150 ? line.slice(0, 149).trimEnd() + '…' : line;
+    const text = typoQuotes(line);
+    if (text) return text.length > 150 ? text.slice(0, 149).trimEnd() + '…' : text;
   }
   return null;
 }
@@ -280,4 +295,4 @@ function resetCache() {
   servicesCache = null;
 }
 
-module.exports = { test, listServices, listCalendars, todaysServices, agenda, eventServices, eventInfoText, resetCache, isoDate };
+module.exports = { test, listServices, listCalendars, todaysServices, agenda, eventServices, eventInfoText, typoQuotes, resetCache, isoDate };

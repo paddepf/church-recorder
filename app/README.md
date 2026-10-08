@@ -76,53 +76,75 @@ Die Einstellungen sind in Reiter gegliedert (links: Audio, Ablage & Export, Chur
 
 ## Ablauf eines Gottesdienstes
 
-1. Oben auf den Namen klicken und den Gottesdienst wählen. Ist für heute genau
-   ein Termin eingetragen, wird er beim Start automatisch geladen. Die
-   Programmpunkte erscheinen links als offene Punkte. Dieselbe Auswahl öffnet auch der Knopf
-   „ChurchTools …“ in der Kachel „Ablaufplan“; darunter steht in einer Zeile, ob der Plan aus ChurchTools oder aus welcher Vorlage stammt, mit Zahl der Dienste und Infotext (Details im Tooltip).
-2. **Neue Aufnahme starten.** Die Wellenform wächst mit, die Pegelanzeige zeigt den
-   Eingang, der obere Fensterrand leuchtet rot. **Der erste Punkt des Ablaufplans beginnt dabei
-   automatisch** (bei Sekunde 0); ohne Ablaufpunkte läuft zunächst kein Abschnitt.
-3. Jeder Abschnitt besteht aus zwei Marken: Anfang und Ende. „Abschnitt starten“
-   (Taste **M**) setzt die Anfangsmarke, derselbe Knopf („Abschnitt abschließen“,
-   wieder **M**) die Endmarke. Beginnt ein Programmpunkt des Ablaufplans, auf
-   „Nächster Ablaufpunkt“ drücken (Taste **N**) oder den Punkt in der Liste anklicken:
-   Ein laufender Abschnitt endet dabei an derselben Stelle. Die Marke wird sofort
-   gesetzt, benannt wird danach direkt im Feld (siehe unten). Jeder Abschnitt hat
-   eine eigene dezente Farbe in Wellenform und Liste.
+Die Oberfläche folgt den drei Phasen eines Sonntags; oben in der Mitte steht, in welcher man gerade ist
+(**Vorbereiten › Aufnehmen › Sichern**). Je Phase gibt es genau einen hervorgehobenen Knopf, was gerade nicht geht,
+ist ausgeblendet. Unten links steht die Liste **„Ablauf“** (alle Programmpunkte: offen, laufend, fertig), rechts der
+Bereich **„Jetzt“** mit dem, was die Phase braucht.
+
+1. **Vorbereiten.** Oben auf den Namen klicken und den Gottesdienst wählen. Ist für heute genau
+   ein Termin eingetragen, wird er beim Start automatisch geladen. Die Programmpunkte erscheinen in der
+   Liste „Ablauf“ als offene Punkte (gestrichelte Farbmarke). Dieselbe Auswahl öffnet auch der Knopf
+   „ChurchTools …“ über der Liste; darunter steht in einer Zeile, ob der Plan aus ChurchTools oder aus welcher
+   Vorlage stammt, mit Zahl der Dienste und Infotext (Details im Tooltip). Offene Punkte lassen sich am Griff
+   (⋮⋮) umsortieren, unten kommen neue dazu.
+   Rechts prüft **„Bereit für den Start?“**: Eingang (mit Pegel – der Eingang wird dafür schon vor dem Start
+   geöffnet, gespeichert wird nichts; abschaltbar unter *Einstellungen → Audio*), Gottesdienst, Ablauf, Punkte
+   ohne Interpret („Eintragen“ springt direkt ins Feld), Speicherplatz und ggf. das Mischpult-Routing. Darunter
+   steht, welcher Punkt beim Start automatisch beginnt.
+2. **Aufnahme starten** (roter Knopf, `Strg`/`Cmd` + `R`). Die Wellenform wächst mit, der obere Fensterrand
+   leuchtet rot. **Der erste Punkt des Ablaufs beginnt dabei automatisch** (bei Sekunde 0); ohne Ablaufpunkte
+   läuft zunächst kein Abschnitt.
+3. **Aufnehmen.** Hauptknopf ist jetzt **„Nächster Punkt“** (Taste **N**), darunter groß der Name des Punkts, z. B.
+   „Predigt“: Er beendet den laufenden Abschnitt und beginnt diesen Punkt. Daneben **„Abschnitt starten / beenden“**
+   (Taste **M**) für eigene Abschnitte. Ist kein Punkt mehr offen, verschwindet N und „Abschnitt beenden“ wird zum
+   Hauptknopf (die Taste N beendet den laufenden Abschnitt weiterhin). Ein Klick auf einen offenen Punkt in der Liste beginnt ihn ebenfalls. Die Marke
+   wird sofort gesetzt (der Knopf leuchtet kurz in der Farbe des neuen Abschnitts), benannt wird danach direkt im
+   Feld (siehe unten). Jeder Abschnitt hat eine feste Farbe in Wellenform und Liste.
+   Rechts zeigt **„Jetzt“** den laufenden Abschnitt groß mit Laufzeit (Klick = Name/Interpret bearbeiten), den
+   nächsten Punkt. Probleme mit Eingang, Laufwerk oder Speicherplatz melden der Warnbalken und die Meldungen oben.
+   **Pause** (❚❚) und **Beenden** (■) stehen als Symbole rechts neben M. **Beenden muss man kurz gedrückt halten**
+   (der Balken im Knopf läuft voll), damit ein versehentlicher Klick keinen Gottesdienst beendet; `Strg`/`Cmd` + `R`
+   beendet sofort. Pausiert wird der Pause-Knopf gelb und setzt fort.
    **Pausen zwischen zwei Punkten:** Ist nach einem Punkt eine längere Pause (Ansage, Umbau, Stille), die in keinem
-   der beiden Abschnitte landen soll, zuerst **„Abschnitt abschließen“** (`M`) drücken: Die Aufnahme läuft ohne aktiven
-   Abschnitt weiter („Zwischen den Punkten“), bis **„Nächster Ablaufpunkt“** (`N`) den nächsten beginnt. Ohne
-   Zwischenschritt beginnt der nächste Punkt nahtlos da, wo der vorige endet.
+   der beiden Abschnitte landen soll, zuerst **„Abschnitt beenden“** (`M`) drücken: Die Aufnahme läuft ohne aktiven
+   Abschnitt weiter („Zwischen den Punkten“), bis **N** den nächsten beginnt. Ohne Zwischenschritt beginnt der
+   nächste Punkt nahtlos da, wo der vorige endet.
 4. Marken sitzen selten sofort richtig. Sie lassen sich jederzeit – auch während
    der Aufnahme – am Fähnchen auf der Wellenform verschieben; mit der
-   Leertaste lässt sich dabei in die Aufnahme hineinhören. Nach „Beenden“ werden noch
-   laufende Abschnitte am Ende der Aufnahme geschlossen.
-5. **Beenden.** Danach unten rechts unter „Abschnitte exportieren“ die gewünschten
-   Abschnitte anhaken (neue sind vorausgewählt, „Alle“/„Keine“ schalten um; ein
-   Klick auf den Namen zeigt den Abschnitt in der Wellenform) und mit „Ausgewählte
-   als MP3 speichern" exportieren. Bereits gesicherte Abschnitte tragen den
-   Vermerk „✓“ (oder „⚠“ = geändert seit Export, wenn ihre Marken seitdem
-   verschoben wurden; Zeitraum und Datei im Tooltip, die Zeile zeigt die Länge) und sind nicht mehr vorausgewählt. „Gesamte Aufnahme“ steht
-   ebenfalls zur Wahl. Ist ein Export-Oberordner eingestellt, wird ohne Rückfrage
+   Leertaste lässt sich dabei in die Aufnahme hineinhören. Die **Übersichtsleiste** über der Wellenform zeigt die
+   ganze Aufnahme mit allen Abschnitten und als Rahmen den sichtbaren Ausschnitt: Klick springt hin, der Rahmen
+   lässt sich ziehen. Nach „Beenden“ werden noch laufende Abschnitte am Ende der Aufnahme geschlossen.
+5. **Sichern.** Nach dem Beenden tragen die fertigen Abschnitte in der Liste Häkchen (alle vorausgewählt,
+   „Alle“/„Keine“ schalten um), dazu den Stand: „✓ gesichert“, „⚠ geändert“ (Marken oder Schnitte seit dem Export
+   verändert) oder „ungesichert“; Datei und Zeitraum im Tooltip, die Länge ohne Schnitte. Ganz unten steht
+   „Gesamte Aufnahme“. Der Hauptknopf oben nennt, was gespeichert wird („2 Abschnitte als MP3 sichern“); ist alles
+   gesichert, steht dort „Alles gesichert ✓“. Rechts unter **„Sichern“** stehen Zielordner (ganzer Pfad im Tooltip),
+   Format und Fortschritt; „An Aufnahme anhängen“ nimmt in dieselbe Datei weiter auf. „Neue Aufnahme“ steht bewusst
+   leise neben dem Sichern-Knopf. Nie begonnene Punkte erscheinen blass.
+   Ist ein Export-Oberordner eingestellt, wird ohne Rückfrage
    in dessen Unterordner `Datum_Gottesdienstname` gespeichert (bei gleichem Namen
    mit „ (2)“ usw.); ohne Oberordner wird ein Zielordner abgefragt. Die MP3s
    erhalten ID3-Tags: **Titel** = Abschnittsname, **Album** = Datum des
    Gottesdienstes (z. B. `2026-10-05`), **Jahr**, **Interpret** = der beim
    Abschnitt eingetragene Name, sonst der „Standard-Interpret“ aus den Einstellungen.
    Den Interpreten trägst du direkt im Feld ein (siehe „Name und Interpret direkt
-   bearbeiten") – auch schon bei den offenen Punkten im Ablaufplan, bevor sie
+   bearbeiten") – auch schon bei den offenen Punkten, bevor sie
    aufgenommen werden. Er steht hell hinter dem Namen, fehlt er, erscheint beim
    Darüberfahren „+ Interpret“.
-   Lange Namen werden in den Listen mit „…“ gekürzt; beim Darüberfahren erscheint
-   der ganze Titel samt Interpret.
+   Lange Namen werden in der Liste mit „…“ gekürzt; beim Darüberfahren erscheint
+   der ganze Titel samt Interpret. ✎ und × erscheinen beim Darüberfahren. **Entfernen** geht ohne Rückfrage, dafür
+   bietet ein Hinweis unten rechts „Rückgängig“ an.
+
+**Pegel:** Oben rechts zeigen zwei Balken den Spitzenpegel in dBFS (Skala −48 … 0): grün bis −9, gelb bis −3,
+darüber rot. Der Strich hält die Spitze 2 Sekunden, rechts steht ihr Wert. „Übersteuert“ bleibt stehen, bis man es
+anklickt – so sieht man es auch, wenn man gerade nicht hingeschaut hat.
 
 **Lautheit (LUFS) in der Wellenform:** Der Schalter „LUFS“ unten links in der Wellenform blendet die Lautheit nach EBU R128
-als gelbe Linie ein (Skala rechts −10 … −40, gestrichelt das Ziel aus „Lautstärke angleichen“). Die Linie ist die
+als türkisblaue Linie ein (Skala rechts −10 … −40, gestrichelt in derselben Farbe das Ziel aus „Lautstärke angleichen“). Die Linie ist die
 Short-term-Lautheit, also das Mittel der letzten 3 s; herausgezoomt wird sie zusätzlich geglättet. Die Messwerte stehen
 in der Leiste über der Wellenform: während der Aufnahme S (letzte 3 s), M (letzte 0,4 s), I (integriert über die ganze
 Aufnahme) und der laufende Abschnitt; danach S an der Mausposition, I gesamt und der gewählte Abschnitt (Klick auf
-den Abschnitt in der Liste, auf sein Fähnchen oder auf den Namen in der Export-Liste). Bei wenig Platz fallen die
+den Abschnitt in der Liste „Ablauf“ oder auf sein Fähnchen). Bei wenig Platz fallen die
 hinteren Werte weg. Fährt man mit der Maus über die Anzeige, erklärt eine Infobox S, M und I. Ältere
 Aufnahmen werden beim Öffnen einmal im Hintergrund nachgemessen (etwa 6 s je Stunde). Nur bei Stereo.
 
@@ -165,10 +187,10 @@ Ohne Dialog, direkt am Element: ein kleines Eingabefeld legt sich über das Fäh
 oder die Listenzeile, links der Name, rechts der Interpret.
 - **Wellenform:** Doppelklick auf das Fähnchen eines Abschnitts. Ein Doppelklick auf den
   Interpreten (bzw. „+ Interpret“) springt direkt in dieses Feld.
-- **Abschnittsliste:** Doppelklick auf den Namen, ✎, oder ein Klick auf den Interpreten.
-- **Ablaufplan:** ✎ oder ein Klick auf den Interpreten (ein Klick auf den Punkt selbst
-  beginnt ihn).
-- **F2:** bearbeitet den gewählten Abschnitt in der Abschnittsliste.
+- **Liste „Ablauf“:** Doppelklick auf den Namen, ✎ (beim Darüberfahren), ein Klick auf den Interpreten oder `F2`
+  in der gewählten Zeile. (Ein einfacher Klick wählt einen fertigen Abschnitt bzw. beginnt während der Aufnahme
+  einen offenen Punkt.)
+- **„Jetzt“:** Klick auf die Karte des laufenden Abschnitts.
 
 `Enter` speichert, `Esc` bricht ab, `Tab` wechselt zwischen Name und Interpret, ein Klick
 daneben speichert ebenfalls.
@@ -182,10 +204,10 @@ daneben speichert ebenfalls.
   Rückgängig wie gewohnt auf den Text.
 - **Schnitte (Stellen, die im MP3 fehlen sollen):** Ein Husten oder eine Störung mitten im Abschnitt lässt sich
   auslassen, ohne die Aufnahme zu verändern. Während der Aufnahme beginnt `X` einen Schnitt und beendet ihn
-  mit dem zweiten Druck. Nachträglich: mit `Umschalt` + Ziehen in der Wellenform aufziehen. Schnitte erscheinen
+  mit dem zweiten Druck (oder Knopf „✂ Schnitt“ über der Wellenform). Nachträglich: mit `Umschalt` + Ziehen in der Wellenform aufziehen. Schnitte erscheinen
   rot schraffiert, ihre Ränder lassen sich ziehen, ein Doppelklick entfernt sie. Beim Export fehlen die Stellen
-  (mit kurzer Ein-/Ausblendung an den Nahtstellen); die Exportliste zeigt die gekürzte Länge („✂ −0:12“).
-  Beim Abschnitt „✓ geändert seit Export“ erscheint auch, wenn sich die Schnitte seither geändert haben.
+  (mit kurzer Ein-/Ausblendung an den Nahtstellen); nach dem Beenden zeigt die Liste die gekürzte Länge (Tooltip
+  „✂ −0:12“). „⚠ geändert“ erscheint auch, wenn sich die Schnitte seit dem Export geändert haben.
 - **Eingang überwacht:** Kommt über 20 Sekunden fast kein Pegel (Mischpult stumm, Kabel gezogen), erscheint ein
   oranger Balken. Fällt der Eingang ganz aus, ein roter. Beides sehen auch Companion und Dashboards (`health`).
 
@@ -196,7 +218,7 @@ ohne ChurchTools aufgenommen, trägt die App die **Standard-Programmpunkte** ein
 (Vorgabe: Einleitung, Kinderbeitrag, Predigt, Abschluss). Das ist die **Standardvorlage**.
 Unter **Einstellungen → Vorlagen für Programmpunkte** lassen sich beliebig viele Vorlagen anlegen
 (z. B. „Gottesdienst“, „Jugend“, „Gebetsabend“): Vorlage wählen, Namen und Punkte bearbeiten (↑/↓ zum
-Umsortieren), neue Vorlage mit „Neu“, und eine als Standard festlegen. Im Ablaufplan lädt das Auswahlfeld
+Umsortieren), neue Vorlage mit „Neu“, und eine als Standard festlegen. Über der Liste „Ablauf“ lädt das Auswahlfeld
 **„Vorlage laden …“** jederzeit eine andere Vorlage; die offenen Punkte werden dabei (nach Rückfrage)
 ersetzt, bereits gesetzte Abschnitte bleiben.
 
@@ -204,7 +226,8 @@ ersetzt, bereits gesetzte Abschnitte bleiben.
 „Kolosser 2,6-7 Verwurzelt in Christus“), hängt die App ihn beim Laden an den Abschnitt „Predigt“ an – er heißt
 dann „Predigt: Kolosser 2,6-7 Verwurzelt in Christus“ und landet so auch im Dateinamen und im MP3-Titel. Nur die
 erste Zeile wird genommen; der Name lässt sich jederzeit wie gewohnt ändern. Der Text steht dann im Namen des
-Abschnitts.
+Abschnitts. Gerade Anführungszeichen aus ChurchTools (`"…"`) werden dabei – wie in den Namen der
+Ablaufpunkte – typografisch gesetzt („…“).
 
 **Passende Vorlage automatisch:** Fehlt der Ablaufplan, nimmt die App nicht blind die Standardvorlage,
 sondern die Vorlage, deren **Name zum Titel des Gottesdienstes passt** – ein Termin „Bibelstunde“ (oder
@@ -213,13 +236,13 @@ alle Wörter des Vorlagennamens müssen als ganze Wörter im Titel vorkommen (Gr
 mehreren Treffern gewinnt der längere Name. Ohne Treffer gilt die Standardvorlage. Hat ChurchTools einen
 Ablaufplan, bleibt dieser maßgeblich.
 
-In der Kachel **Ablaufplan** lässt sich die Liste jederzeit anpassen:
+In der Liste **Ablauf** lassen sich die Punkte jederzeit anpassen:
 - **Hinzufügen:** unten Namen eintippen, Enter oder „+“.
-- **Entfernen:** × neben dem Punkt. Ein bereits gesetzter Abschnitt aus dem Ablaufplan
-  geht über × in der Abschnittsliste zurück in den Ablaufplan.
-- **Umsortieren:** einen Punkt in der Liste auf einen anderen ziehen (oberhalb/unterhalb
+- **Entfernen:** × neben dem Punkt (erscheint beim Darüberfahren). Ein bereits gesetzter Abschnitt aus dem Ablaufplan
+  wird dabei wieder ein offener Punkt; „Rückgängig“ im Hinweis nimmt es zurück.
+- **Umsortieren:** einen offenen Punkt am Griff (⋮⋮) auf einen anderen ziehen (oberhalb/unterhalb
   der Mitte entscheidet, davor oder dahinter) oder auf den freien Platz darunter, um ihn ans
-  Ende zu setzen. „Nächster Ablaufpunkt“ (N) nimmt immer den obersten.
+  Ende zu setzen. N nimmt immer den obersten offenen Punkt.
 
 ### Oberfläche rund um die Wellenform
 
@@ -274,10 +297,11 @@ für das, was man ohnehin sieht, gibt es nicht.
 
 ### Laufzeit des aktuellen Abschnitts
 
-Unter dem Timer (und im Mini-Fenster rechts in der Karte des laufenden Abschnitts) steht, **wie lange der aktuelle
+Rechts unter **„Jetzt“** (im Mini-Fenster in der Karte des laufenden Abschnitts) steht groß, **wie lange der aktuelle
 Abschnitt schon läuft** – als `2:20`, ab einer Stunde `1:04:00`. Die Anzeige läuft mit der Aufnahme mit und
-verschwindet, wenn kein Abschnitt aktiv ist (z. B. in der Pause zwischen zwei Punkten). Auch in der Kachel
-**Abschnitte** steht hinter jedem Abschnitt seine **Laufzeit** (bei einem laufenden zählt sie mit).
+verschwindet, wenn kein Abschnitt aktiv ist (z. B. in der Pause zwischen zwei Punkten). Auch in der Liste
+**Ablauf** steht hinter jedem Abschnitt seine **Laufzeit** (bei einem laufenden zählt sie mit). Unter dem Timer steht
+der Zustand: „Bereit“, „Aufnahme läuft“, „Pausiert“ oder „Beendet“ mit Sicherungsstand („2 ungesichert“).
 
 ### Mini-Fenster
 
@@ -285,15 +309,16 @@ Rechts oben wählt **„A A“** die Größe (kleines A = kompakt, großes A = g
 ins **Mini-Fenster** und zurück, das Sonnen- bzw. Mondsymbol wechselt direkt zwischen **hell und dunkel**.
 
 Wird nebenher am PC gearbeitet, verkleinert **„Mini“** die App auf ein sehr kleines
-Fenster (ab 320 × 164) mit Gottesdienstname, Timer, Pegel (schmaler Streifen), dem **laufenden Abschnitt groß mit Interpret** und den Knöpfen für Aufnahme, Pause,
-Beenden, „Abschnitt starten“ und „Nächster Ablaufpunkt“ (der Knopf nennt den Namen des Punktes, der als Nächstes
-beginnt – „→ Predigt“; ist keiner mehr offen, steht dort „→ Abschnitt abschließen“). Ein Klick auf den laufenden Abschnitt (oder ✎) öffnet
+Fenster (ab 320 × 164) mit Gottesdienstname, Timer, Pegel (schmaler Streifen), dem **laufenden Abschnitt groß mit Interpret** und den Knöpfen
+für Aufnahme bzw. Pause und Beenden (gedrückt halten) neben dem Timer, darunter „Abschnitt starten“ und als
+Hauptknopf der nächste Punkt (der Knopf nennt ihn – „→ Predigt“; ist keiner mehr offen, steht dort „→ Abschnitt
+beenden“). Ein Klick auf den laufenden Abschnitt (oder ✎) öffnet
 direkt die Eingabe für Name und Interpret samt Vorschlägen aus der Dienstplanung (Klick auf den Interpret
-setzt den Cursor gleich dorthin); das geht auch im großen Fenster unter dem Timer. Die Tastenkürzel gelten weiter. Es liegt beim
+setzt den Cursor gleich dorthin); im großen Fenster geht das über die Karte unter „Jetzt“. Die Tastenkürzel gelten weiter. Es liegt beim
 ersten Mal unten rechts und merkt sich danach Lage und Größe. Mit **„Immer oben“** bleibt es über
 anderen Programmen (Voreinstellung, abschaltbar). **Nach dem Beenden** der Aufnahme verschwinden die Aufnahmeknöpfe;
 stattdessen zeigt das Mini-Fenster, wie viele Abschnitte noch nicht gesichert sind, und einen Knopf **„… als MP3
-speichern“** (angehakte bzw. noch nicht gesicherte oder seit dem Export geänderte Abschnitte, ohne Abschnitte die gesamte
+sichern“** (angehakte bzw. noch nicht gesicherte oder seit dem Export geänderte Abschnitte, ohne Abschnitte die gesamte
 Aufnahme; ist alles gesichert, steht dort „alles gesichert ✓“ und der Knopf entfällt), dazu Fortschritt
 und „Im Ordner zeigen“. „Neue Aufnahme“ darunter beginnt die nächste. **„Groß“** bzw. **„Kompakt“** stellt die vorherige Größe
 wieder her. Öffnet sich ein Dialog (z. B. Rückfrage beim Start, Einstellungen, `?`), schaltet die App
@@ -302,9 +327,9 @@ selbst auf das große Fenster um. Die Aufnahme läuft beim Umschalten unverände
 ### Kompakte Ansicht
 
 **„Kompakt“** (Voreinstellung) verkleinert Schrift, Knöpfe, Abstände und Wellenform,
-lässt aber **alle Bereiche und Funktionen** stehen: Ablaufplan, Abschnitte, Export, Wellenform und Tastenleiste. So
+lässt aber **alle Bereiche und Funktionen** stehen: Ablauf, „Jetzt“, Wellenform und Tastenleiste. So
 lässt sich auch in einem kleineren Fenster (ab 760 × 520 statt 1024 × 680) vollständig arbeiten. In sehr schmalen
-Fenstern entfallen die Zeitspalte der Abschnitte (Zeitraum im Tooltip), das Datum neben dem Gottesdienstnamen und bei
+Fenstern bzw. schmaler Liste entfallen die Zeitspalte (Zeitraum im Tooltip), bei sehr schmaler Liste auch der Zustand, das Datum neben dem Gottesdienstnamen und bei
 sehr niedrigen die Tastenleiste (Kürzel weiter über `?`). Beim Einschalten wird das Fenster passend verkleinert
 (beim ersten Mal 960 × 640, danach die zuletzt benutzte Größe), beim Ausschalten bekommt es wieder seine vorherige Größe.
 Die Wahl bleibt gespeichert; die App startet dann gleich in der kompakten Größe. Das Mini-Fenster ist davon
@@ -316,9 +341,11 @@ unabhängig und sieht immer gleich aus.
   wählen, deren Termine in der Auswahl erscheinen (ohne Häkchen: alle).
 - **Beenden:** Beim Schließen während einer Aufnahme fragt die App nach, ohne die Aufnahme dabei
   anzuhalten, und schließt erst, wenn die Datei vollständig geschrieben ist.
-- **Pause:** In der Pause zeigt der Aufnahmeknopf „Aufnahme pausiert“, fortgesetzt wird mit dem
-  Pause-Knopf („Fortsetzen“). „An Aufnahme anhängen“ hängt an eine bereits beendete Aufnahme an.
-- **Tastatur:** Die Punkte in Ablaufplan und Abschnittsliste lassen sich mit `Tab` erreichen,
+- **Pause:** In der Pause sind Timer, Fensterrand und Pause-Knopf gelb; derselbe Knopf (jetzt ▶) setzt fort.
+  „An Aufnahme anhängen“ (unter „Sichern“) hängt an eine bereits beendete Aufnahme an.
+- **Beenden der Aufnahme:** den ■-Knopf kurz gedrückt halten (Maus oder `Enter`/Leertaste); ein kurzer Klick zeigt
+  nur einen Hinweis. `Strg`/`Cmd` + `R` und Companion beenden sofort.
+- **Tastatur:** Die Zeilen der Liste „Ablauf“ lassen sich mit `Tab` erreichen,
   mit den Pfeiltasten wechseln, mit `Enter` auslösen (Ablaufpunkt beginnen bzw. Abschnitt
   anzeigen) und mit `F2` bearbeiten.
 
@@ -493,7 +520,7 @@ es fehlt nur die Zeit dazwischen (Meldung mit Stelle und Länge). Gelingt das et
 
 **Bedienung:** Die Aufnahmeart wird unter *Einstellungen → Audio → Aufnahmeart* gewählt (oder per Companion); im
 Normalfall Stereo. Ist Mehrspur eingestellt, steht oben rechts ein farbiges Schild **„● Mehrspur“** – ein Klick darauf
-öffnet die Einstellung. Im Mehrspur-Modus ersetzt der Bereich **Kanäle** den Export: alle Kanäle mit
+öffnet die Einstellung. Im Mehrspur-Modus steht rechts der Bereich **Kanäle** statt „Jetzt“ (es gibt keinen MP3-Export): alle Kanäle mit
 Name und Farbe vom Pult und Pegel – schon vor dem Start, denn das Gerät ist im Mehrspur-Modus ständig offen.
 Ein Klick auf einen Kanal wählt ihn für die nächste Aufnahme ab bzw. wieder an (durchgestrichen = wird nicht
 aufgenommen), „Alle“ und „Nur benannte“ (Kanäle mit Namen am Pult) wählen schnell aus. Rot umrandet = übersteuert,

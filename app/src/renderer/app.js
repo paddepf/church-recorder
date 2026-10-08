@@ -45,7 +45,7 @@
    * Meldung. Fehler und Warnungen erscheinen groß und farbig oben in der Mitte und bleiben länger stehen
    * (Klick schließt); Hinweise bleiben klein unten rechts. Dieselbe Meldung nie doppelt, höchstens drei je Ort.
    */
-  function toast(level, message, timeout = 6000) {
+  function toast(level, message, timeout = 6000, action = null) {
     const alert = level === 'error' || level === 'warn';
     const el = document.createElement('div');
     el.className = alert ? 'alert' : 'toast';
@@ -54,6 +54,15 @@
     text.className = 'msg';
     text.textContent = message;
     el.appendChild(text);
+    // Hinweis mit Knopf, z. B. „Rückgängig“ nach dem Entfernen eines Abschnitts
+    if (action && !alert) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'toast-action';
+      btn.textContent = action.label;
+      btn.addEventListener('click', () => { el.remove(); action.run(); });
+      el.appendChild(btn);
+    }
     if (alert) {
       el.title = 'Klicken zum Schließen';
       el.addEventListener('click', () => el.remove());
@@ -94,6 +103,7 @@
 
     wave = new window.Waveform($('wave'), {
       colors: readColors(),
+      overviewCanvas: $('overview'),
       onEdgeMove: () => {},       // Listen erst nach dem Loslassen aktualisieren
       onEdgeMoveEnd: async (id, edge, time) => {
         await window.api.section.moveEdge(id, edge, time);
@@ -174,10 +184,11 @@
     const el = $('current-elapsed');
     const start = state.sectionStart;
     el.hidden = start == null;
-    if (start == null) return;
+    if (start == null) { $('now-elapsed').textContent = ''; return; }
     el.textContent = fmtLength((state.duration || 0) - start);
+    $('now-elapsed').textContent = el.textContent;
     // Der laufende Abschnitt in der Liste zählt mit
-    const live = document.querySelector('#marker-list .dur[data-live]');
+    const live = document.querySelector('#flow-list .dur[data-live]');
     if (live) live.textContent = fmtLength((state.duration || 0) - Number(live.dataset.start));
   }
 
@@ -242,7 +253,8 @@
       cutText: v('--cut-text'),
       loud: v('--loud'),
       loudGrid: v('--loud-grid'),
-      loudBox: v('--loud-box')
+      loudBox: v('--loud-box'),
+      sections: Array.from({ length: 8 }, (_, i) => v(`--sec-${i}`))
     };
   }
 
@@ -273,8 +285,36 @@
 
   /* ------------------------------------------------------------- Zustandsbild */
 
+  /**
+   * Phase der Oberfläche: prep (vor dem Start), rec (Aufnahme oder Pause), save (beendet, mit Audio). Je Phase gibt es
+   * genau eine Hauptaktion; was nicht passt, blendet CSS über body[data-phase] aus.
+   */
+  function phaseOf(session) {
+    const st = session?.status;
+    if (st === 'recording' || st === 'paused') return 'rec';
+    if (st === 'stopped' && hasAudio(session)) return 'save';
+    return 'prep';
+  }
+
+  /** Datum des Gottesdienstes für Menschen: „So., 11. Okt. 2026“ (in Dateinamen bleibt es ISO). */
+  function serviceDateText(service) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(service?.date || '');
+    if (!m) return service?.date || '';
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  /** Kurzes Einblenden des Bereichs „Jetzt“, wenn die Phase wechselt (Start, Beenden, Neue Aufnahme). */
+  function fadeNowPanel() {
+    const p = $('panel-now');
+    p.classList.remove('fade');
+    void p.offsetWidth;
+    p.classList.add('fade');
+  }
+
   function applyState(session, peaks) {
     const wasRecording = state.session?.status === 'recording';
+    const prevPhase = document.body.dataset.phase;
     state.session = session;
     if (wasRecording && session.status === 'paused' && !peaks) resyncPeaks();
     if (peaks) {
@@ -283,12 +323,18 @@
     }
     state.duration = session.duration || 0;
 
+    const phase = phaseOf(session);
     document.body.dataset.status = session.status;
+    document.body.dataset.phase = phase;
     // Nach dem Beenden zeigt das Mini-Fenster statt der Aufnahmeknöpfe den MP3-Export (bei Mehrspur die Zusammenfassung).
-    document.body.classList.toggle('review', session.status === 'stopped' && hasAudio(session));
+    document.body.classList.toggle('review', phase === 'save');
+    // Art der angezeigten Aufnahme (kann von der eingestellten abweichen): Mehrspur hat keinen MP3-Export.
+    document.body.classList.toggle('mt-session', session.mode === 'multitrack');
+    document.querySelectorAll('#phase-steps li').forEach((li) => li.classList.toggle('on', li.dataset.step === phase));
+    if (prevPhase && prevPhase !== phase) fadeNowPanel();
     applyMode();
     $('service-name').textContent = session.service?.name || 'Kein Gottesdienst gewählt';
-    $('service-date').textContent = session.service?.date || '';
+    $('service-date').textContent = serviceDateText(session.service);
     {
       // Herkunft des Ablaufplans (agendaOrigin; bei alten Sessions aus den Quellen der Punkte abgeleitet) und
       // was sonst noch aus ChurchTools stammt (Termin, Dienstplanung, Infotext).
@@ -317,30 +363,43 @@
     const rec = session.status === 'recording';
     const paused = session.status === 'paused';
     const stopped = session.status === 'stopped';
+    const live = rec || paused;
+    const multi = session.mode === 'multitrack';
 
-    // In der Pause setzt der Pause-Knopf fort; der Aufnahmeknopf zeigt nur den Zustand.
-    $('record-label').textContent = rec ? 'Aufnahme läuft' : (paused ? 'Aufnahme pausiert' : 'Neue Aufnahme starten');
-    $('btn-record').disabled = rec || paused || state.starting;
-    $('btn-continue').hidden = !(stopped && hasAudio(session));
+    // Vorbereiten: „Aufnahme starten“ (rot). Sichern: „Neue Aufnahme“ leise neben dem Sichern-Knopf.
+    $('record-label').textContent = phase === 'save' ? (multi ? 'Neue Aufnahme starten' : 'Neue Aufnahme') : 'Aufnahme starten';
+    $('btn-record').classList.toggle('go', phase === 'prep');
+    $('btn-record').disabled = live || state.starting;
     $('btn-continue').disabled = state.starting;
-    $('btn-pause').disabled = !(rec || paused);
-    $('btn-pause').textContent = paused ? 'Fortsetzen' : 'Pause';
-    $('btn-stop').disabled = !(rec || paused);
-    $('btn-marker').disabled = !(rec || paused);
-    // Läuft ein Abschnitt, schließt der Knopf ihn ab: die Aufnahme läuft ohne aktiven Punkt weiter (Pause zwischen den
-    // Punkten), bis „Nächster Ablaufpunkt“ den nächsten beginnt.
-    $('btn-marker').textContent = session.currentSegment ? 'Abschnitt abschließen' : 'Abschnitt starten';
+    $('now-continue').disabled = state.starting;
+    // Pause als Symbol; pausiert wird daraus „Fortsetzen“ (gelb)
+    const pauseBtn = $('btn-pause');
+    pauseBtn.disabled = !live;
+    pauseBtn.dataset.state = paused ? 'paused' : 'running';
+    $('pause-label').textContent = paused ? 'Fortsetzen' : 'Pause';
+    pauseBtn.setAttribute('aria-label', paused ? 'Fortsetzen' : 'Pause');
+    pauseBtn.title = paused ? 'Aufnahme fortsetzen' : 'Pausieren (die Pause fehlt später in der Datei)';
+    $('btn-stop').disabled = !live;
+    $('btn-marker').disabled = !live;
+    // Läuft ein Abschnitt, beendet M ihn: die Aufnahme läuft ohne aktiven Punkt weiter (Pause zwischen den Punkten),
+    // bis N den nächsten beginnt.
+    $('marker-label').textContent = session.currentSegment ? 'beenden' : 'starten';
     $('btn-marker').title = session.currentSegment
-      ? 'Laufenden Abschnitt abschließen (M): Die Aufnahme läuft weiter, die Pause gehört zu keinem Abschnitt – „Nächster Ablaufpunkt“ (N) beginnt den nächsten.'
-      : 'Eigenen Abschnitt an der aktuellen Stelle beginnen (M). Den nächsten Punkt aus dem Ablaufplan beginnt „Nächster Ablaufpunkt“ (N).';
-    $('btn-next-item').disabled = !(rec || paused) || ((session.pending || []).length === 0 && !session.currentSegment);
-    // Zeigt, was „Nächster Ablaufpunkt“ gleich beginnt (der erste offene Punkt nach der Reihenfolge des Ablaufplans).
-    const nextPoint = (session.pending || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0))[0];
-    const nextText = !(rec || paused) ? '' : (nextPoint ? nextPoint.label : (session.currentSegment ? 'Abschnitt abschließen' : ''));
-    $('next-name').textContent = nextText;
-    $('next-name').hidden = !nextText;
-    $('btn-next-item').title = 'Laufenden Abschnitt beenden und den nächsten Ablaufpunkt beginnen (N)' +
-      (nextPoint ? ` – nächster: ${nextPoint.label}` : '');
+      ? 'Laufenden Abschnitt beenden (M): Die Aufnahme läuft weiter, die Pause gehört zu keinem Abschnitt – N beginnt den nächsten Punkt.'
+      : 'Eigenen Abschnitt an der aktuellen Stelle beginnen (M). Den nächsten Punkt aus dem Ablauf beginnt N.';
+    // N zeigt, was er gleich beginnt (der erste offene Punkt nach der Reihenfolge des Ablaufs). Ist keiner mehr offen,
+    // täte N dasselbe wie M: dann verschwindet der Knopf und M wird zum Hauptknopf (body[data-next="none"]); die Taste N
+    // beendet weiterhin den laufenden Abschnitt.
+    const nextPoint = nextPending(session);
+    document.body.dataset.next = live && nextPoint ? 'yes' : 'none';
+    $('btn-next-item').disabled = !live || !nextPoint;
+    $('next-name').textContent = nextPoint ? nextPoint.label : '';
+    $('btn-next-item').title = nextPoint
+      ? `Nächster Punkt (N): laufenden Abschnitt beenden und „${fullTitle(nextPoint)}“ beginnen`
+      : 'Kein offener Punkt mehr';
+    const openCut = (session.cuts || []).some((c) => c.end == null);
+    $('btn-cut').dataset.on = String(openCut);
+    $('cut-label').textContent = openCut ? 'Schnitt beenden' : 'Schnitt';
     applyPlayControls();
 
     if (stopped && session.wavPath) {
@@ -348,8 +407,7 @@
       if ($('player').getAttribute('src') !== url) $('player').setAttribute('src', url);
     }
 
-    // Laufender Abschnitt mit Interpret; ein Klick darauf bearbeitet beides (besonders im Mini-Fenster nützlich).
-    const live = rec || paused;
+    // Laufender Abschnitt mit Interpret (Mini-Fenster); ein Klick darauf bearbeitet beides.
     const cur = live ? session.currentSegment : null;
     const curSection = cur ? (session.sections || []).find((y) => y.id === cur.markerId) : null;
     $('current-name').textContent = live
@@ -362,9 +420,8 @@
     $('current-item').disabled = !curSection;
     // Laufzeit des aktuellen Abschnitts (tickt mit den Pegelmeldungen weiter)
     state.sectionStart = curSection && cur.open !== false ? cur.start : null;
-    updateSectionElapsed();
-    if (curSection) $('current-item').style.setProperty('--hue', window.sectionHue(curSection));
-    else $('current-item').style.removeProperty('--hue');
+    if (curSection) $('current-item').style.setProperty('--sec', window.sectionColorVar(curSection));
+    else $('current-item').style.removeProperty('--sec');
     $('current-item').dataset.live = curSection ? 'true' : 'false';
 
     if (!rec) $('timecode').textContent = longTime(session.duration || 0);
@@ -379,7 +436,56 @@
     });
 
     renderLists();
-    renderSegments();
+    renderNow();
+    updateSectionElapsed();
+    updatePrelisten();
+  }
+
+  /**
+   * N: laufenden Abschnitt beenden und den nächsten offenen Punkt beginnen. Ohne offenen Punkt beendet N nur den laufenden
+   * Abschnitt (der Knopf ist dann ausgeblendet, M übernimmt das sichtbar).
+   */
+  async function nextItem() {
+    const s = state.session;
+    if (!isLive() || (!nextPending(s) && !s.currentSegment)) return;
+    const res = await window.api.section.next();
+    if (!res.ok) return toast('warn', res.error);
+    const btn = nextPending(s) ? $('btn-next-item') : $('btn-marker');
+    flashButton(btn, res.section?.id);
+  }
+
+  /** Erster offener Ablaufpunkt (nach der Reihenfolge des Ablaufs) – den beginnt N bzw. der Start. */
+  function nextPending(session = state.session) {
+    return (session?.pending || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0))[0] || null;
+  }
+
+  /** Zustand unter dem Timer: Bereit · Aufnahme läuft · Pausiert · Beendet (mit Sicherungsstand). */
+  function renderStatusLine() {
+    const s = state.session;
+    const el = $('status-line');
+    const phase = document.body.dataset.phase;
+    let text = 'Bereit';
+    let warn = false;
+    if (s?.status === 'recording') text = 'Aufnahme läuft';
+    else if (s?.status === 'paused') text = 'Pausiert';
+    else if (phase === 'save') {
+      if (s.mode === 'multitrack') {
+        const n = (s.tracks || []).length;
+        text = `Beendet · ${n} ${n === 1 ? 'Spur' : 'Spuren'}`;
+      } else {
+        const real = (s.segments || []).filter((g) => g.markerId && !g.open);
+        const unsaved = unsavedSegments().length;
+        text = real.length === 0 ? 'Beendet' : (unsaved ? `Beendet · ${unsaved} ungesichert` : 'Beendet · alles gesichert');
+        warn = unsaved > 0;
+      }
+    } else if (prelisten.on) {
+      text = 'Bereit · Pegel live';
+    }
+    // Mehrspur: rechts steht „Kanäle“ statt „Jetzt“, deshalb hier der laufende Abschnitt
+    if (s?.mode === 'multitrack' && isLive() && s.currentSegment?.label) text += ` · ${s.currentSegment.label}`;
+    $('status-text').textContent = text;
+    el.dataset.warn = String(warn);
+    el.title = text;
   }
 
   /** Gleicht die lokal mitgerechnete Wellenform mit der tatsächlich geschriebenen Datei ab. */
@@ -471,6 +577,350 @@
     wave.draw();
   }
 
+  /* ------------------------------------------------------------------ Pegel */
+
+  // Skala −48 … 0 dBFS; Zonen Grün bis −9, Gelb bis −3, darüber Rot (Farben im CSS). Der Strich hält die Spitze 2 s,
+  // die Zahl zeigt diese Spitze. „Übersteuert“ bleibt stehen, bis man es anklickt.
+  const METER_FLOOR_DB = -48;
+  const METER_HOLD_MS = 2000;
+  const meter = { l: { hold: 0, at: 0 }, r: { hold: 0, at: 0 }, lastAt: 0, shown: false };
+  const meterPos = (p) => (p > 0 ? Math.max(0, Math.min(1, (20 * Math.log10(p) - METER_FLOOR_DB) / -METER_FLOOR_DB)) : 0);
+
+  function dbText(p) {
+    if (!(p > 0)) return '–';
+    const db = 20 * Math.log10(p);
+    if (db < -60) return '–';
+    return db > -0.5 ? '0' : String(Math.round(db)).replace('-', '−');
+  }
+
+  function setMeters(l, r, clip) {
+    const now = Date.now();
+    meter.lastAt = now;
+    let any = false;
+    [['l', l || 0], ['r', r || 0]].forEach(([k, p]) => {
+      const m = meter[k];
+      if (p >= m.hold || now - m.at > METER_HOLD_MS) { m.hold = p; m.at = now; }
+      const pos = meterPos(p);
+      const hold = meterPos(m.hold);
+      $(`meter-${k}`).style.clipPath = `inset(0 ${(100 - pos * 100).toFixed(1)}% 0 0)`;
+      const u = $(`hold-${k}`);
+      u.style.left = `${(hold * 100).toFixed(1)}%`;
+      u.style.opacity = hold > 0.01 ? '0.85' : '0';
+      $(`db-${k}`).textContent = dbText(m.hold);
+      if (hold > 0) any = true;
+    });
+    meter.shown = any;
+    if (clip) state.clipLatched = true;
+    $('clip').dataset.on = String(Boolean(state.clipLatched));
+  }
+
+  // Kommen keine Pegel mehr (Aufnahme beendet, Eingang zu), fällt die Anzeige auf null statt stehen zu bleiben.
+  setInterval(() => {
+    if (meter.shown && Date.now() - meter.lastAt > 600) setMeters(0, 0, false);
+  }, 300);
+
+  /* ---------------------------------------------------- Pegel vor dem Start */
+
+  // Stereo: Vor dem Start wird der Eingang über eine eigene, von der Aufnahme getrennte Erfassung geöffnet, damit
+  // man den Pegel prüfen kann. Es wird nichts an den Hauptprozess geschickt und nichts gespeichert; vor dem Start der
+  // Aufnahme wird sie geschlossen (Einstellung `prelisten`).
+  const pre = new window.Capture();
+  const prelisten = { on: false, busy: null, again: false, device: null, error: null, fallback: false, loudAt: 0, signal: null };
+  const PRELISTEN_SIGNAL = 0.003;        // etwa −50 dBFS: darunter gilt der Eingang als still
+
+  pre.onChunk = (buffer) => {
+    const v = new Int16Array(buffer);
+    let l = 0;
+    let r = 0;
+    for (let i = 0; i < v.length; i += 2) {
+      const a = Math.abs(v[i]);
+      const b = Math.abs(v[i + 1]);
+      if (a > l) l = a;
+      if (b > r) r = b;
+    }
+    l /= 32768;
+    r /= 32768;
+    setMeters(l, r, l >= 0.999 || r >= 0.999);
+    const now = Date.now();
+    if (Math.max(l, r) > PRELISTEN_SIGNAL) prelisten.loudAt = now;
+    const signal = now - prelisten.loudAt < 4000;
+    if (signal !== prelisten.signal) {
+      prelisten.signal = signal;
+      renderNow();
+    }
+  };
+  pre.onError = (message) => {
+    prelisten.error = message;
+    renderNow();
+  };
+
+  function wantPrelisten() {
+    return Boolean(state.settings) && state.settings.prelisten !== false && settingMode() === 'stereo'
+      && document.body.dataset.phase === 'prep' && !state.starting && !isLive();
+  }
+
+  /** Öffnet bzw. schließt den Eingang für die Pegelanzeige vor dem Start (auch bei geändertem Gerät). */
+  async function updatePrelisten() {
+    if (prelisten.busy) { prelisten.again = true; return; }
+    const want = wantPrelisten();
+    const device = state.settings?.inputDeviceId || '';
+    const restart = prelisten.on && want && prelisten.device !== device;
+    if (want === prelisten.on && !restart) return;
+    if (want && !prelisten.on && prelisten.error && prelisten.device === device) return;   // nicht dauernd neu versuchen
+    prelisten.busy = (async () => {
+      try {
+        if (prelisten.on) {
+          await pre.stop();
+          prelisten.on = false;
+        }
+        if (want) {
+          prelisten.device = device;
+          const res = await pre.start(device, state.settings.sampleRate);
+          prelisten.on = true;
+          prelisten.error = null;
+          prelisten.fallback = Boolean(res?.deviceFallback);
+          prelisten.label = res?.deviceLabel || '';
+          prelisten.loudAt = Date.now();
+          prelisten.signal = null;
+        }
+      } catch (err) {
+        prelisten.on = false;
+        prelisten.error = err.message;
+        await pre.stop();
+      }
+    })();
+    await prelisten.busy;
+    prelisten.busy = null;
+    renderNow();
+    renderStatusLine();
+    if (prelisten.again) {
+      prelisten.again = false;
+      updatePrelisten();
+    }
+  }
+
+  /** Vor dem Start einer Aufnahme: Pegel-Erfassung sicher schließen (auch wenn sie gerade erst öffnet). */
+  async function stopPrelisten() {
+    if (prelisten.busy) await prelisten.busy;
+    if (prelisten.on) {
+      await pre.stop();
+      prelisten.on = false;
+    }
+  }
+
+  /* -------------------------------------------------------------- Bereich „Jetzt“ */
+
+  /** Prüfliste vor dem Start, laufender und nächster Punkt während der Aufnahme, Sichern danach. */
+  function renderNow() {
+    const s = state.session;
+    if (!s) return;
+    const phase = document.body.dataset.phase;
+    $('now-title').textContent = { prep: 'Bereit für den Start?', rec: 'Jetzt', save: 'Sichern' }[phase] || '';
+    if (phase === 'prep') renderPrepChecks(s);
+    else if (phase === 'rec') renderRecNow(s);
+    else renderSaveNow(s);
+  }
+
+  /** Eine Zeile der Prüfliste: Symbol (ok ✓ / warn ! / bad ✕), Text, Wert oder Knopf. */
+  function checkRow({ level, text, value = '', title = '', action = null }) {
+    const li = document.createElement('li');
+    li.dataset.level = level;
+    const ic = span('ic', { ok: '✓', warn: '!', bad: '✕' }[level] || '·');
+    ic.setAttribute('aria-hidden', 'true');
+    const txt = span('txt', text);
+    txt.title = title || text;
+    let val;
+    if (action) {
+      val = document.createElement('button');
+      val.type = 'button';
+      val.className = 'val';
+      val.textContent = action.label;
+      val.addEventListener('click', action.run);
+    } else {
+      val = span('val', value);
+    }
+    li.append(ic, txt, val);
+    return li;
+  }
+
+  /** Füllt eine Prüfliste nur, wenn sich etwas geändert hat (sonst verschwänden Tooltips und Hover). */
+  function fillChecks(id, rows) {
+    const key = JSON.stringify(rows.map((r) => [r.level, r.text, r.value, r.title, r.action?.label]));
+    const el = $(id);
+    if (el.dataset.key === key) return;
+    el.dataset.key = key;
+    el.replaceChildren(...rows.map(checkRow));
+  }
+
+  function diskRow() {
+    const h = state.diskHoursLeft;
+    if (h == null) return { level: 'warn', text: 'Speicherplatz unbekannt' };
+    return {
+      level: h < DISK_LOW_HOURS ? 'bad' : (h < DISK_WARN_HOURS ? 'warn' : 'ok'),
+      text: 'Speicherplatz',
+      value: `ca. ${formatHours(h)}`
+    };
+  }
+
+  function renderPrepChecks(s) {
+    const rows = [];
+    const deviceName = state.settings?.inputDeviceLabel || 'Systemstandard';
+    if (prelisten.error) {
+      rows.push({ level: 'bad', text: `Eingang: ${deviceName}`, value: 'nicht verfügbar', title: prelisten.error });
+    } else if (state.inputMissing || prelisten.fallback) {
+      rows.push({ level: 'warn', text: 'Gewählter Eingang fehlt', value: 'Systemstandard', title: `„${deviceName}“ ist nicht angeschlossen – aufgenommen würde über den Standardeingang.` });
+    } else if (prelisten.on && prelisten.signal === false) {
+      rows.push({ level: 'warn', text: `Eingang: ${deviceName}`, value: 'kein Signal', title: 'Seit ein paar Sekunden kein Pegel – Mischpult, Kabel oder Eingang prüfen.' });
+    } else {
+      rows.push({ level: 'ok', text: `Eingang: ${deviceName}`, value: prelisten.on ? 'Signal da' : '' });
+    }
+    const svc = s.service || {};
+    if (svc.name) rows.push({ level: 'ok', text: svc.name, value: serviceDateText(svc), title: 'Gottesdienst' });
+    else rows.push({ level: 'warn', text: 'Kein Gottesdienst gewählt', action: { label: 'Wählen …', run: openServicePicker } });
+    const pending = (s.pending || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+    if (pending.length) {
+      rows.push({ level: 'ok', text: `Ablauf: ${pending.length} ${pending.length === 1 ? 'Punkt' : 'Punkte'}`, value: s.agendaOrigin?.source === 'churchtools' ? 'ChurchTools' : 'Vorlage' });
+      const missing = pending.filter((x) => !x.artist);
+      const fallbackArtist = state.settings?.defaultArtist;
+      if (missing.length && !fallbackArtist) {
+        rows.push({
+          level: 'warn',
+          text: `${missing.length} ${missing.length === 1 ? 'Punkt' : 'Punkte'} ohne Interpret`,
+          title: missing.map((x) => x.label).join(', '),
+          action: { label: 'Eintragen', run: () => editSection(missing[0].id, 'artist') }
+        });
+      } else if (missing.length) {
+        rows.push({ level: 'ok', text: `Interpret: „${fallbackArtist}“ für ${missing.length} ${missing.length === 1 ? 'Punkt' : 'Punkte'}`, title: 'Standard-Interpret aus den Einstellungen' });
+      } else {
+        rows.push({ level: 'ok', text: 'Interpreten eingetragen' });
+      }
+    } else {
+      rows.push({ level: 'warn', text: 'Kein Ablauf geladen', title: 'Ohne Ablauf werden Abschnitte während der Aufnahme mit M gesetzt.', action: { label: 'ChurchTools …', run: openServicePicker } });
+    }
+    rows.push(diskRow());
+    if (state.health?.routing === 'mismatch') rows.push({ level: 'bad', text: 'Mischpult-Routing passt nicht', title: 'Die USB-Ausgänge des Pults passen nicht zur Aufnahmeart.' });
+    fillChecks('prep-checks', rows);
+
+    const first = pending[0];
+    const hint = $('prep-first');
+    hint.replaceChildren();
+    if (first) {
+      hint.append('Beim Start beginnt automatisch');
+      const b = document.createElement('b');
+      b.textContent = fullTitle(first);
+      hint.appendChild(b);
+    } else {
+      hint.textContent = 'Ohne Ablauf: Abschnitte während der Aufnahme mit M setzen.';
+    }
+  }
+
+  function renderRecNow(s) {
+    const paused = s.status === 'paused';
+    const cur = s.currentSegment;
+    const curSection = cur ? (s.sections || []).find((y) => y.id === cur.markerId) : null;
+    const card = $('now-card');
+    card.dataset.state = curSection ? (paused ? 'paused' : 'live') : 'idle';
+    card.disabled = !curSection;
+    card.style.setProperty('--sec', curSection ? window.sectionColorVar(curSection) : 'var(--line)');
+    $('now-label').textContent = paused ? '❚❚ Pausiert' : (curSection ? '● Läuft' : '● Aufnahme läuft');
+    const pending = s.pending || [];
+    $('now-name').textContent = curSection ? (cur.label || curSection.label) : (pending.length ? 'Zwischen den Punkten' : 'Kein Abschnitt');
+    const artist = $('now-artist');
+    artist.textContent = curSection ? (curSection.artist || 'Interpret ergänzen') : (pending.length ? 'N beginnt den nächsten Punkt' : 'M setzt einen Abschnitt');
+    artist.classList.toggle('unset', Boolean(curSection) && !curSection.artist);
+    const next = nextPending(s);
+    $('now-next').hidden = !next;
+    $('now-next-name').textContent = next ? fullTitle(next) : '';
+    $('now-next-name').title = next ? fullTitle(next) : '';
+    // Keine Prüfliste während der Aufnahme: Probleme melden Warnbalken und Meldungen ohnehin, eine Liste mit lauter ✓
+    // brachte nichts.
+  }
+
+  function renderSaveNow(s) {
+    const box = $('save-summary');
+    box.replaceChildren();
+    const small = document.createElement('small');
+    small.textContent = `Aufnahme: ${fmtLength(s.duration)}`;
+    if (s.mode === 'multitrack') {
+      const n = (s.tracks || []).length;
+      small.textContent += ' · Mehrspur wird nicht als MP3 exportiert, die Spuren liegen im Aufnahmeordner.';
+      box.append(`${n} ${n === 1 ? 'Spur' : 'Spuren'} als WAV gespeichert ✓`, small);
+      return;
+    }
+    const real = (s.segments || []).filter((g) => g.markerId && !g.open);
+    const unsaved = unsavedSegments().length;
+    let text;
+    if (real.length === 0) text = 'Keine Abschnitte – die ganze Aufnahme lässt sich sichern.';
+    else if (unsaved === 0) text = `${real.length} ${real.length === 1 ? 'Abschnitt' : 'Abschnitte'} – alles gesichert ✓`;
+    else text = `${real.length} ${real.length === 1 ? 'Abschnitt' : 'Abschnitte'} · ${unsaved} noch nicht gesichert`;
+    box.append(text, small);
+  }
+
+  /* ------------------------------------------------------- Bediengefühl */
+
+  /** M/N: kurzes Aufleuchten in der Farbe des eben gesetzten Abschnitts (auch per Taste ausgelöst). */
+  function flashButton(btn, sectionId) {
+    const x = (state.session?.sections || []).find((y) => y.id === sectionId);
+    btn.style.setProperty('--flash', x ? window.sectionColorVar(x) : 'var(--plan)');
+    btn.classList.remove('flash');
+    void btn.offsetWidth;
+    btn.classList.add('flash');
+    // Danach wieder entfernen: sonst leuchtet der Knopf erneut, sobald er nach dem Ausblenden wieder erscheint.
+    btn.addEventListener('animationend', () => btn.classList.remove('flash'), { once: true });
+  }
+
+  /**
+   * Knopf, der erst nach kurzem Halten auslöst (Beenden der Aufnahme): Maus/Touch gedrückt halten oder Enter/Leertaste
+   * halten; der Balken unten läuft dabei voll. Zu kurz → Hinweis statt Aktion.
+   */
+  const HOLD_MS = 600;
+  function bindHold(btn, action) {
+    let timer = null;
+    let since = 0;
+    btn.style.setProperty('--hold-ms', `${HOLD_MS}ms`);
+    const fire = () => {
+      clearTimeout(timer);
+      timer = null;
+      btn.classList.remove('holding');
+      action();
+    };
+    const start = () => {
+      if (btn.disabled || timer) return;
+      since = performance.now();
+      btn.classList.add('holding');
+      timer = setTimeout(fire, HOLD_MS);
+    };
+    // Beim Loslassen zählt die tatsächlich gehaltene Zeit (Timer können verspätet kommen, z. B. im Hintergrund).
+    const release = (hint) => {
+      if (!timer) return;
+      if (hint && performance.now() - since >= HOLD_MS) return fire();
+      clearTimeout(timer);
+      timer = null;
+      btn.classList.remove('holding');
+      if (hint) toast('info', 'Zum Beenden den Knopf kurz gedrückt halten.', 3000);
+    };
+    const cancel = release;
+    btn.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      try { btn.setPointerCapture(e.pointerId); } catch { /* ohne Capture geht es auch */ }
+      start();
+    });
+    btn.addEventListener('pointerup', () => cancel(true));
+    btn.addEventListener('pointercancel', () => cancel(false));
+    btn.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      e.stopPropagation();          // sonst wirkt die Leertaste zusätzlich als Abspielen
+      if (!e.repeat) start();
+    });
+    btn.addEventListener('keyup', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      cancel(true);
+    });
+    btn.addEventListener('blur', () => cancel(false));
+  }
+
   /* --------------------------------------------------------------- Aufnahme */
 
   /** @param {{remote?: boolean}} [opts] remote: per Fernsteuerung (Companion) – ohne Rückfrage am PC */
@@ -492,6 +942,8 @@
       }
 
       $('btn-record').disabled = true;
+      await stopPrelisten();
+      state.clipLatched = false;
       refreshDisk().then((hours) => {
         if (hours != null && hours < DISK_WARN_HOURS) {
           toast('warn', `Wenig Speicherplatz: nur noch für ca. ${formatHours(hours)} Aufnahme.`, 12000);
@@ -548,6 +1000,7 @@
       // Knopf nur sperren, solange tatsächlich aufgenommen wird (auch nach Abbruch oder Fehler wieder frei).
       const st = state.session?.status;
       $('btn-record').disabled = st === 'recording' || st === 'paused';
+      updatePrelisten();              // Start abgebrochen oder gescheitert: Pegel wieder anzeigen
     }
   }
 
@@ -566,6 +1019,7 @@
   /** Warnbalken für leise/stumme Eingänge, solange keine Wiederverbindung läuft. */
   function applyHealth(h) {
     state.health = h;
+    renderNow();
     if (state.recovering) return;
     if (h && h.write === 'error' && isLive()) {
       showAudioWarning(true, `Audio kann nicht gespeichert werden – Laufwerk prüfen! (${h.writeMessage || 'Schreibfehler'})`, 'lost');
@@ -663,6 +1117,8 @@
     state.starting = true;
     $('btn-continue').disabled = true;
     try {
+      await stopPrelisten();
+      state.clipLatched = false;
       const rate = state.session.sampleRate;
       if (!isMultitrack()) {
         const result = await capture.start(state.settings.inputDeviceId, rate);
@@ -745,141 +1201,282 @@
 
   /* ----------------------------------------------------------------- Listen */
 
+  /*
+   * Eine Liste „Ablauf“ statt Ablaufplan, Abschnitte und Export: zuerst die gesetzten Abschnitte nach Zeit (fertig bzw.
+   * läuft), dahinter die offenen Punkte nach Reihenfolge. Nach dem Beenden tragen die Zeilen Häkchen und
+   * Sicherungsstand, am Ende steht „Gesamte Aufnahme“.
+   */
   function renderLists() {
-    // Gewählter Abschnitt auch für die Lautheitsanzeige (I des Abschnitts)
+    // Gewählter Abschnitt auch für die Lautheitsanzeige (I des Abschnitts) und die Hinterlegung in der Wellenform
     if (wave.selectedSectionId !== state.selectedSectionId) {
       wave.selectedSectionId = state.selectedSectionId;
       wave.draw();
     }
-    // Tastaturfokus über das Neuaufbauen der Listen hinweg erhalten
-    const focusedRow = document.activeElement?.closest?.('#pending-list .item, #marker-list .item');
+    // Tastaturfokus über das Neuaufbauen der Liste hinweg erhalten
+    const focusedRow = document.activeElement?.closest?.('#flow-list .item');
     const focusId = focusedRow?.dataset.id;
-    renderListsInner();
-    if (focusId) document.querySelector(`#pending-list .item[data-id="${focusId}"], #marker-list .item[data-id="${focusId}"]`)?.focus();
+    prepareExportSelection();
+    renderFlow();
+    if (focusId) document.querySelector(`#flow-list .item[data-id="${focusId}"]`)?.focus();
+    updateExportButton();
+    renderStatusLine();
+    refreshExportTarget();
   }
 
-  function renderListsInner() {
+  /** Vorauswahl zum Sichern: neue, noch nicht gesicherte Abschnitte; beim Beenden einer Aufnahme alle. */
+  function prepareExportSelection() {
     const session = state.session;
-    const pendingEl = $('pending-list');
-    const sectionEl = $('marker-list');
-    pendingEl.innerHTML = '';
-    sectionEl.innerHTML = '';
-    if (!session) return;
-    const live = session.status === 'recording' || session.status === 'paused';
-
-    const pending = (session.pending || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
-    if (pending.length === 0) {
-      pendingEl.innerHTML = '<li class="empty">Keine offenen Ablaufpunkte.</li>';
+    const segments = session?.segments || [];
+    const exports = session?.exports || {};
+    const status = session?.status;
+    const justStopped = status === 'stopped' && (state.exportPrevStatus === 'recording' || state.exportPrevStatus === 'paused');
+    state.exportPrevStatus = status;
+    if (justStopped) {
+      const real = segments.filter((seg) => seg.markerId && !seg.open);
+      segments.forEach((seg) => {
+        state.exportSeen.add(seg.id);
+        if (seg.markerId && !seg.open) state.exportChecked.add(seg.id);
+        // Ohne Abschnitte ist die ganze Aufnahme das, was gesichert werden soll.
+        if (!seg.markerId && real.length === 0) state.exportChecked.add(seg.id);
+      });
     }
-    pending.forEach((x) => {
+    segments.forEach((seg) => {
+      if (state.exportSeen.has(seg.id)) return;
+      state.exportSeen.add(seg.id);
+      if (seg.markerId && !seg.open && !exports[seg.id]) state.exportChecked.add(seg.id);
+    });
+  }
+
+  function renderFlow() {
+    const el = $('flow-list');
+    el.innerHTML = '';
+    const session = state.session;
+    if (!session) return;
+    const phase = document.body.dataset.phase;
+    const live = phase === 'rec';
+    const exportable = phase === 'save' && session.mode !== 'multitrack';
+    const segments = session.segments || [];
+    const segOf = new Map(segments.filter((g) => g.markerId).map((g) => [g.markerId, g]));
+    const exports = session.exports || {};
+    const placed = (session.sections || []).filter((x) => x.start != null).sort((a, b) => a.start - b.start);
+    const pending = (session.pending || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+
+    if (!placed.length && !pending.length) {
       const li = document.createElement('li');
-      li.className = 'item';
-      li.dataset.hue = '';
-      li.style.setProperty('--hue', window.sectionHue(x));
-      li.draggable = true;
-      li.innerHTML = `<span class="label"></span>
-        <button class="mini" data-rename title="Name und Interpret bearbeiten" aria-label="Name und Interpret bearbeiten">✎</button>
-        <button class="mini" data-remove title="Punkt aus dem Ablaufplan entfernen" aria-label="Punkt aus dem Ablaufplan entfernen">×</button>`;
-      // Klick auf den Punkt beginnt ihn jetzt (nur während der Aufnahme); Ziehen auf die Wellenform bleibt möglich.
-      li.classList.toggle('clickable', live);
-      li.title = live
-        ? 'Klicken: jetzt beginnen · auf die Wellenform ziehen: an die Stelle legen'
-        : 'Auf die Wellenform ziehen, um den Punkt an eine Stelle zu legen';
-      li.querySelector('.label').textContent = x.label;
-      // Lange Titel werden mit „…“ gekürzt: beim Darüberfahren den ganzen Titel zeigen.
-      li.querySelector('.label').title = `${fullTitle(x)}\n\n${li.title}`;
-      li.querySelector('.label').appendChild(artistTag(x, () => li.getBoundingClientRect()));
-      li.querySelector('[data-rename]').addEventListener('click', (e) => {
-        e.stopPropagation();
-        editSection(x.id, 'name', li.getBoundingClientRect());
-      });
-      li.querySelector('[data-remove]').addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await window.api.section.remove(x.id);
-      });
-      li.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/marker-id', x.id);
-        e.dataTransfer.effectAllowed = 'move';
-      });
-      // Umsortieren: einen Punkt auf einen anderen Punkt der Liste ziehen (auf die Wellenform = ablegen).
-      li.addEventListener('dragover', (e) => {
-        if (!e.dataTransfer.types.includes('text/marker-id')) return;
-        e.preventDefault();
-        const before = e.clientY - li.getBoundingClientRect().top < li.offsetHeight / 2;
-        li.classList.toggle('drop-before', before);
-        li.classList.toggle('drop-after', !before);
-      });
-      li.addEventListener('dragleave', () => li.classList.remove('drop-before', 'drop-after'));
-      li.addEventListener('drop', async (e) => {
-        const dragged = e.dataTransfer.getData('text/marker-id');
-        const before = e.clientY - li.getBoundingClientRect().top < li.offsetHeight / 2;
-        li.classList.remove('drop-before', 'drop-after');
-        if (!dragged || dragged === x.id) return;
-        e.preventDefault();
-        let nextEl = li.nextElementSibling;
-        if (nextEl && nextEl.dataset.id === dragged) nextEl = nextEl.nextElementSibling;   // der gezogene Punkt selbst
-        const next = before ? x.id : (nextEl?.dataset.id || null);
-        await window.api.section.reorder(dragged, next);
-      });
-      li.dataset.id = x.id;
-      li.tabIndex = 0;
+      li.className = 'empty';
+      li.textContent = live
+        ? 'Noch kein Abschnitt – M setzt einen an der Live-Stelle.'
+        : 'Noch kein Ablauf. ChurchTools oder eine Vorlage laden oder unten Punkte hinzufügen – während der Aufnahme setzt M Abschnitte.';
+      el.appendChild(li);
+    }
+    placed.forEach((x) => el.appendChild(flowRow(x, x.end == null && live ? 'now' : 'done', { live, exportable, seg: segOf.get(x.id), exports })));
+    pending.forEach((x, i) => el.appendChild(flowRow(x, 'open', { live, next: live && i === 0 })));
+    if (exportable) {
+      const full = segments.find((g) => !g.markerId);
+      if (full) el.appendChild(fullRow(full, exports));
+    }
+    // Die laufende Zeile im Blick behalten
+    const nowRow = el.querySelector('.item[data-state="now"]');
+    if (nowRow && state.lastNowId !== nowRow.dataset.id) nowRow.scrollIntoView({ block: 'nearest' });
+    state.lastNowId = nowRow ? nowRow.dataset.id : null;
+  }
+
+  /** Sicherungsstand eines Segments für die Zeile: gesichert, geändert seit Export oder noch nicht gesichert. */
+  function exportStatus(seg, exports) {
+    const done = exports[seg.id];
+    if (!done) return { cls: '', text: 'ungesichert', title: 'Noch nicht als MP3 gesichert' };
+    const changed = exportChanged(done, seg);
+    return changed
+      ? { cls: 'warn', text: '⚠ geändert', title: `Geändert seit dem Export: ${done.file}` }
+      : { cls: 'ok', text: '✓ gesichert', title: `Gesichert: ${done.file}` };
+  }
+
+  function span(cls, text = '') {
+    const el = document.createElement('span');
+    el.className = cls;
+    el.textContent = text;
+    return el;
+  }
+
+  /** Häkchen zum Sichern eines Segments (nur nach dem Beenden). */
+  function exportBox(seg, label) {
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = state.exportChecked.has(seg.id);
+    box.disabled = Boolean(state.exporting);
+    box.setAttribute('aria-label', `${label} als MP3 sichern`);
+    box.title = 'Zum Sichern auswählen';
+    box.addEventListener('click', (e) => e.stopPropagation());
+    box.addEventListener('change', () => {
+      if (box.checked) state.exportChecked.add(seg.id); else state.exportChecked.delete(seg.id);
+      updateExportButton();
+    });
+    return box;
+  }
+
+  /**
+   * Zeile eines Programmpunkts. kind: 'done' (gesetzt, beendet), 'now' (läuft), 'open' (noch offen).
+   * Offene Punkte lassen sich in der Liste umsortieren und auf die Wellenform ziehen; während der Aufnahme beginnt
+   * ein Klick sie sofort. Gesetzte Abschnitte: Klick wählt und zeigt sie in der Wellenform.
+   */
+  function flowRow(x, kind, { live, exportable, seg, exports, next } = {}) {
+    const li = document.createElement('li');
+    li.className = 'item' + (state.selectedSectionId === x.id && kind !== 'open' ? ' selected' : '') + (next ? ' next' : '');
+    li.dataset.id = x.id;
+    li.dataset.state = kind;
+    li.tabIndex = 0;
+    li.style.setProperty('--sec', window.sectionColorVar(x));
+
+    // Spalte 1: Häkchen (Sichern) bzw. Griff (offene Punkte)
+    let lead;
+    if (exportable && seg && !seg.open) lead = exportBox(seg, x.label);
+    else if (kind === 'open') { lead = span('grip', '⋮⋮'); lead.setAttribute('aria-hidden', 'true'); }
+    else lead = span('lead');
+
+    let range = '';
+    if (kind === 'done') range = `${fmt(x.start)} – ${fmt(x.end)}`;
+    if (kind === 'now') range = `${fmt(x.start)} – läuft`;
+    const time = span('time', range);
+
+    const label = span('label', x.label);
+    label.appendChild(artistTag(x, () => li.getBoundingClientRect()));
+
+    const dur = span('dur');
+    if (kind === 'done') {
+      const len = exportable && seg ? Math.max(0, seg.end - seg.start - (seg.cutSeconds || 0)) : x.end - x.start;
+      dur.textContent = fmtLength(len);
+      if (exportable && seg?.cutSeconds > 0.05) dur.title = `Ohne Schnitte (✂ −${fmt(seg.cutSeconds)})`;
+    } else if (kind === 'now') {
+      // läuft noch: zählt mit den Pegelmeldungen weiter (updateSectionElapsed)
+      dur.dataset.live = 'true';
+      dur.dataset.start = String(x.start);
+      dur.textContent = fmtLength((state.duration || 0) - x.start);
+    }
+
+    const st = span('st');
+    if (kind === 'now') {
+      st.textContent = state.session?.status === 'paused' ? '❚❚ Pause' : '● läuft';
+      st.classList.add('live');
+    } else if (next) {
+      st.textContent = 'als Nächstes';
+      st.classList.add('next');
+    } else if (exportable && seg && !seg.open) {
+      const info = exportStatus(seg, exports);
+      st.textContent = info.text;
+      st.title = info.title;
+      if (info.cls) st.classList.add(info.cls);
+    }
+
+    const acts = span('acts');
+    acts.innerHTML = `<button class="mini" data-rename title="Name und Interpret bearbeiten (F2)" aria-label="Name und Interpret bearbeiten">✎</button>
+      <button class="mini" data-remove aria-label="Entfernen">×</button>`;
+    const removeBtn = acts.querySelector('[data-remove]');
+    const backToPlan = kind !== 'open' && x.source !== 'manual';
+    removeBtn.title = kind === 'open' ? 'Punkt aus dem Ablauf entfernen'
+      : (backToPlan ? 'Abschnitt entfernen – der Punkt wird wieder offen' : 'Abschnitt entfernen');
+    acts.querySelector('[data-rename]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      editSection(x.id, 'name', li.getBoundingClientRect());
+    });
+    removeBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const res = await window.api.section.remove(x.id);
+      if (res && res.ok === false) return toast('error', res.error);
+      // Ohne Rückfrage, dafür mit „Rückgängig“
+      toast('info', backToPlan ? `„${x.label}“ ist wieder offen.` : `„${x.label}“ entfernt.`, 7000,
+        { label: 'Rückgängig', run: undoEdit });
+    });
+
+    li.append(lead, span('sw'), time, label, dur, st, acts);
+
+    if (kind === 'open') {
+      li.classList.toggle('clickable', Boolean(live));
+      const hint = live
+        ? 'Klicken: jetzt beginnen · Ziehen: in der Liste umsortieren oder auf die Wellenform legen'
+        : 'Ziehen: in der Liste umsortieren oder auf die Wellenform legen · Doppelklick: bearbeiten';
+      label.title = `${fullTitle(x)}\n\n${hint}`;
+      bindPendingDrag(li, x);
       li.addEventListener('click', async () => {
         if (!live) return;
         const res = await window.api.section.start(x.id, null);
         if (!res.ok) toast('error', res.error);
       });
-      pendingEl.appendChild(li);
-    });
-
-    const placed = (session.sections || []).filter((x) => x.start != null).sort((a, b) => a.start - b.start);
-    if (placed.length === 0) {
-      sectionEl.innerHTML = '<li class="empty">Noch keine Abschnitte.</li>';
+    } else {
+      li.classList.add('clickable');
+      label.title = `${fullTitle(x)}\n${range}`;
+      li.title = range;              // sichtbar, wenn die Zeitspalte im schmalen Fenster entfällt
+      li.addEventListener('click', () => selectSection(x, seg));
     }
-    placed.forEach((x) => {
-      const li = document.createElement('li');
-      li.className = 'item' + (state.selectedSectionId === x.id ? ' selected' : '');
-      li.dataset.hue = '';
-      li.style.setProperty('--hue', window.sectionHue(x));
-      li.innerHTML = `<span class="time"></span><span class="label"></span><span class="dur" title="Laufzeit des Abschnitts"></span>
-        <button class="mini" data-rename title="Name und Interpret bearbeiten" aria-label="Name und Interpret bearbeiten">✎</button>
-        <button class="mini" data-remove title="Abschnitt entfernen (Ablaufpunkte gehen zurück in den Ablaufplan)" aria-label="Abschnitt entfernen">×</button>`;
-      const range = `${fmt(x.start)} – ${x.end != null ? fmt(x.end) : 'läuft'}`;
-      li.querySelector('.time').textContent = range;
-      li.title = range;                 // sichtbar, wenn die Zeitspalte im schmalen Fenster entfällt
-      const dur = li.querySelector('.dur');
-      if (x.end != null) {
-        dur.textContent = fmtLength(x.end - x.start);
-      } else {
-        // läuft noch: zählt mit den Pegelmeldungen weiter (updateSectionElapsed)
-        dur.dataset.live = 'true';
-        dur.dataset.start = String(x.start);
-        dur.textContent = fmtLength((state.duration || 0) - x.start);
-      }
-      li.querySelector('.label').textContent = x.label;
-      li.querySelector('.label').title = `${fullTitle(x)}\n${range}`;
-      li.dataset.id = x.id;
-      li.tabIndex = 0;
-      li.querySelector('.label').appendChild(artistTag(x, () => li.getBoundingClientRect()));
-      li.addEventListener('click', () => {
-        state.selectedSectionId = x.id;
-        wave.scrollTo(x.start);
-        renderLists();
-        // Mehrspur: an den Abschnittsanfang springen; mit Schleife wird dieser Abschnitt wiederholt.
-        if (isMultitrack() && state.session.status === 'stopped') {
-          setPlayhead(x.start, true);
-          if (mt.play?.playing) window.api.multitrack.loop(playbackLoop());
-        }
-      });
-      li.querySelector('[data-rename]').addEventListener('click', (e) => {
-        e.stopPropagation();
-        editSection(x.id, 'name', li.getBoundingClientRect());
-      });
-      li.querySelector('.label').addEventListener('dblclick', () => editSection(x.id, 'name', li.getBoundingClientRect()));
-      li.querySelector('[data-remove]').addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await window.api.section.remove(x.id);
-      });
-      sectionEl.appendChild(li);
+    label.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      editSection(x.id, 'name', li.getBoundingClientRect());
+    });
+    return li;
+  }
+
+  /** Zeile „Gesamte Aufnahme“ (nur nach dem Beenden, zum Sichern). */
+  function fullRow(seg, exports) {
+    const li = document.createElement('li');
+    li.className = 'item clickable' + (state.selectedSegmentId === seg.id ? ' selected' : '');
+    li.dataset.id = seg.id;
+    li.dataset.state = 'full';
+    li.tabIndex = 0;
+    const len = Math.max(0, seg.end - seg.start - (seg.cutSeconds || 0));
+    const info = exportStatus(seg, exports);
+    const st = span('st' + (info.cls ? ` ${info.cls}` : ''), info.text);
+    st.title = info.title;
+    const label = span('label', 'Gesamte Aufnahme');
+    label.title = 'Die ganze Aufnahme als eine MP3-Datei (Schnitte fehlen darin)';
+    li.append(exportBox(seg, 'Gesamte Aufnahme'), span('sw'), span('time', `${fmt(seg.start)} – ${fmt(seg.end)}`), label,
+      span('dur', fmtLength(len)), st, span('acts'));
+    li.addEventListener('click', () => {
+      state.selectedSegmentId = state.selectedSegmentId === seg.id ? null : seg.id;
+      state.selectedSectionId = null;
+      wave.update({ selectedSegment: state.selectedSegmentId ? seg : null });
+      renderLists();
+    });
+    return li;
+  }
+
+  /** Gesetzten Abschnitt wählen: in der Wellenform zeigen (Lautheit I des Abschnitts, Hinterlegung). */
+  function selectSection(x, seg) {
+    state.selectedSectionId = x.id;
+    state.selectedSegmentId = seg ? seg.id : null;
+    wave.update({ selectedSegment: seg || null });
+    wave.scrollTo(x.start);
+    renderLists();
+    // Mehrspur: an den Abschnittsanfang springen; mit Schleife wird dieser Abschnitt wiederholt.
+    if (isMultitrack() && state.session.status === 'stopped') {
+      setPlayhead(x.start, true);
+      if (mt.play?.playing) window.api.multitrack.loop(playbackLoop());
+    }
+  }
+
+  /** Offene Punkte: auf die Wellenform ziehen (ablegen) oder auf einen anderen offenen Punkt (umsortieren). */
+  function bindPendingDrag(li, x) {
+    li.draggable = true;
+    li.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/marker-id', x.id);
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    li.addEventListener('dragover', (e) => {
+      if (!e.dataTransfer.types.includes('text/marker-id')) return;
+      e.preventDefault();
+      const before = e.clientY - li.getBoundingClientRect().top < li.offsetHeight / 2;
+      li.classList.toggle('drop-before', before);
+      li.classList.toggle('drop-after', !before);
+    });
+    li.addEventListener('dragleave', () => li.classList.remove('drop-before', 'drop-after'));
+    li.addEventListener('drop', async (e) => {
+      const dragged = e.dataTransfer.getData('text/marker-id');
+      const before = e.clientY - li.getBoundingClientRect().top < li.offsetHeight / 2;
+      li.classList.remove('drop-before', 'drop-after');
+      if (!dragged || dragged === x.id) return;
+      e.preventDefault();
+      let nextEl = li.nextElementSibling;
+      if (nextEl && nextEl.dataset.id === dragged) nextEl = nextEl.nextElementSibling;   // der gezogene Punkt selbst
+      const nextId = nextEl && nextEl.dataset.state === 'open' ? nextEl.dataset.id : null;
+      await window.api.section.reorder(dragged, before ? x.id : nextId);
     });
   }
 
@@ -913,14 +1510,14 @@
     // Die Liste kann sich inzwischen neu aufgebaut haben (Klick vor dem Doppelklick): dann ist das alte
     // Element weg und hat keine Größe – die aktuelle Zeile suchen.
     if (!anchor || !anchor.width) {
-      const row = document.querySelector(`#marker-list .item[data-id="${id}"], #pending-list .item[data-id="${id}"]`);
+      const row = document.querySelector(`#flow-list .item[data-id="${id}"]`);
       if (!row) return;
       anchor = row.getBoundingClientRect();
     }
 
     const box = document.createElement('div');
     box.className = 'inline-edit';
-    box.style.setProperty('--hue', window.sectionHue(x));
+    box.style.setProperty('--sec', window.sectionColorVar(x));
     box.innerHTML = '<input class="ie-name" type="text" aria-label="Name" /><input class="ie-artist" type="text" placeholder="Interpret" aria-label="Interpret" />';
     const name = box.querySelector('.ie-name');
     const artist = box.querySelector('.ie-artist');
@@ -987,113 +1584,42 @@
     first.select();
   }
 
-  /** Abschnitte zum Export; beendete Abschnitte sind anklickbar, bereits gesicherte tragen einen Vermerk. */
-  function renderSegments() {
-    const list = $('export-list');
-    const session = state.session;
-    const segments = session?.segments || [];
-    const canExport = session?.status === 'stopped';
-    const sections = new Map((session?.sections || []).map((x) => [x.id, x]));
-    list.innerHTML = '';
-
-    // Beim Beenden einer Aufnahme sind alle Abschnitte zum Export vorausgewählt, auch schon gesicherte.
-    const status = session?.status;
-    const justStopped = status === 'stopped' && (state.exportPrevStatus === 'recording' || state.exportPrevStatus === 'paused');
-    state.exportPrevStatus = status;
-    if (justStopped) {
-      segments.forEach((seg) => {
-        state.exportSeen.add(seg.id);
-        if (seg.markerId && !seg.open) state.exportChecked.add(seg.id);
-      });
-    }
-
-    // Angezeigt wird eine Mehrspuraufnahme (Umschalter auf Stereo): kein MP3-Export, dafür ein Hinweis.
-    if (session?.mode === 'multitrack') {
-      list.innerHTML = '<div class="empty">Mehrspuraufnahmen werden nicht als MP3 exportiert – die Spuren liegen als WAV im Aufnahmeordner.</div>';
-      $('export-target').textContent = '';
-      $('btn-export').disabled = true;
-      return;
-    }
-
-    if (segments.length === 0) {
-      list.innerHTML = '<div class="empty">Abschnitt starten und beenden, um ihn zu exportieren.</div>';
-      $('export-target').textContent = '';
-      $('btn-export').disabled = true;
-      updateExportButton();
-      return;
-    }
-
-    segments.forEach((seg) => {
-      // Neue Abschnitte sind vorausgewählt, sofern sie noch nicht gesichert wurden (die ganze Aufnahme nie).
-      const done = (session.exports || {})[seg.id];
-      if (!state.exportSeen.has(seg.id)) {
-        state.exportSeen.add(seg.id);
-        if (seg.markerId && !seg.open && !done) state.exportChecked.add(seg.id);
-      }
-
-      const row = document.createElement('div');
-      row.className = 'export-item' + (state.selectedSegmentId === seg.id ? ' selected' : '');
-      row.dataset.id = seg.id;
-      row.style.setProperty('--hue', window.sectionHue(sections.get(seg.markerId) || { color: 4 }));
-      row.innerHTML = '<input type="checkbox" /><span class="name"></span><span class="meta"></span><span class="done"></span>';
-
-      const box = row.querySelector('input');
-      box.checked = state.exportChecked.has(seg.id);
-      box.disabled = !canExport || seg.open;
-      box.addEventListener('change', () => {
-        if (box.checked) state.exportChecked.add(seg.id); else state.exportChecked.delete(seg.id);
-        updateExportButton();
-      });
-
-      const name = row.querySelector('.name');
-      name.textContent = seg.label;
-      name.title = 'Abschnitt in der Wellenform zeigen';
-      name.addEventListener('click', () => {
-        state.selectedSegmentId = state.selectedSegmentId === seg.id ? null : seg.id;
-        if (state.selectedSegmentId && seg.markerId) state.selectedSectionId = seg.markerId;
-        renderSegments();
-        renderLists();
-        wave.update({ selectedSegment: segments.find((x) => x.id === state.selectedSegmentId) || null });
-        if (state.selectedSegmentId) wave.scrollTo(seg.start);
-      });
-      const len = Math.max(0, seg.end - seg.start - (seg.cutSeconds || 0));
-      const meta = row.querySelector('.meta');
-      meta.textContent = fmt(len);
-      meta.title = `${fmt(seg.start)}–${fmt(seg.end)}` +
-        (seg.cutSeconds > 0.05 ? ` · ✂ −${fmt(seg.cutSeconds)}` : '');
-
-      const mark = row.querySelector('.done');
-      if (done) {
-        const changed = exportChanged(done, seg);
-        mark.textContent = changed ? '⚠' : '✓';
-        mark.classList.toggle('stale', changed);
-        mark.title = (changed ? 'Geändert seit Export: ' : 'Gesichert: ') + done.file;
-      }
-      list.appendChild(row);
-    });
-
-    $('export-target').textContent = canExport
-      ? ''
-      : 'Der Export ist nach dem Beenden der Aufnahme möglich.';
-    updateExportButton();
-    refreshExportTarget();
-  }
-
+  /** Sichern-Knopf im Transport: nennt, was gespeichert wird; ist alles gesichert, sagt er das. */
   function updateExportButton() {
-    const canExport = state.session?.status === 'stopped' && !state.exporting;
-    const n = $('export-list').querySelectorAll('input:checked').length;
-    $('btn-export').disabled = !canExport || n === 0;
-    $('btn-export').textContent = n > 1 ? `${n} Ausgewählte als MP3 speichern` : 'Ausgewählte als MP3 speichern';
+    const s = state.session;
+    const canExport = s?.status === 'stopped' && s.mode !== 'multitrack' && !state.exporting;
+    const segments = (s?.segments || []).filter((g) => !g.open);
+    const picked = segments.filter((g) => state.exportChecked.has(g.id));
+    const n = picked.length;
+    const btn = $('btn-export');
+    btn.disabled = !canExport || n === 0;
+    const full = segments.find((g) => !g.markerId);
+    const real = segments.filter((g) => g.markerId);
+    const anyUnsaved = unsavedSegments().length > 0 || (real.length === 0 && full && !(s.exports || {})[full.id]);
+    let label;
+    if (state.exporting) label = 'Wird gesichert …';
+    else if (n === 0) label = anyUnsaved ? 'Nichts ausgewählt' : 'Alles gesichert ✓';
+    else if (picked.some((g) => !g.markerId)) label = n === 1 ? 'Gesamte Aufnahme als MP3 sichern' : `${n} MP3-Dateien sichern`;
+    else label = `${n} ${n === 1 ? 'Abschnitt' : 'Abschnitte'} als MP3 sichern`;
+    btn.textContent = label;
+    btn.title = n ? `Als MP3 sichern: ${picked.map((g) => g.label).join(', ')}` : 'In der Liste „Ablauf“ Häkchen setzen, was gesichert werden soll';
     updateCompactExport();
   }
 
-  /** Zeigt, wohin exportiert wird (Unterordner des Export-Oberordners). */
+  function baseName(p) {
+    return String(p || '').split(/[\\/]/).filter(Boolean).pop() || String(p || '');
+  }
+
+  /** Zielordner (nur der Name, der ganze Pfad im Tooltip) und Format des Exports im Bereich „Sichern“. */
   async function refreshExportTarget() {
-    if (state.session?.status !== 'stopped') return;
+    if (document.body.dataset.phase !== 'save' || isMultitrack()) return;
     const target = await window.api.exportTarget();
-    $('export-target').textContent = target.ok && target.folder
-      ? `Ziel: ${target.folder}`
-      : 'Der Zielordner wird beim Speichern abgefragt.';
+    const folder = target.ok && target.folder ? target.folder : null;
+    $('export-folder').textContent = folder ? baseName(folder) : 'wird beim Sichern abgefragt';
+    $('export-folder').title = folder || 'Kein Exportordner eingestellt (Einstellungen → Ablage & Export)';
+    const t = Number(state.settings?.loudnessTarget);
+    const lufs = Number.isFinite(t) && t < 0 ? `Lautheit ${String(t).replace('-', '−')} LUFS` : 'Lautheit unverändert';
+    $('export-target').textContent = `MP3 · ${state.settings?.mp3Bitrate || 192} kbit/s · ${lufs}`;
   }
 
   /* -------------------------------------------------------------- Playhead */
@@ -1198,21 +1724,28 @@
       const res = s === 'paused' ? await window.api.record.resume() : await window.api.record.pause();
       if (!res.ok) toast('error', res.error);
     });
-    $('btn-stop').addEventListener('click', stopRecording);
+    // Beenden nur durch kurzes Halten (ein versehentlicher Klick beendet keinen Gottesdienst)
+    bindHold($('btn-stop'), () => stopRecording());
     $('btn-continue').addEventListener('click', continueRecording);
+    $('now-continue').addEventListener('click', continueRecording);
+    $('btn-cut').addEventListener('click', (e) => { e.currentTarget.blur(); toggleCut(); });
+    $('clip').addEventListener('click', () => { state.clipLatched = false; $('clip').dataset.on = 'false'; });
+    $('now-card').addEventListener('click', () => {
+      const cur = state.session?.currentSegment;
+      if (!cur) return;
+      editSection(cur.markerId, 'name', $('now-card').getBoundingClientRect());
+    });
 
     // Beginnt sofort einen Abschnitt bzw. beendet den laufenden; umbenannt wird bei Bedarf danach.
     $('btn-marker').addEventListener('click', async () => {
       const res = await window.api.section.toggle({});
       if (!res.ok) return toast('error', res.error);
+      flashButton($('btn-marker'), res.section?.id);
       state.selectedSectionId = res.section.id;
       renderLists();
     });
 
-    $('btn-next-item').addEventListener('click', async () => {
-      const res = await window.api.section.next();
-      if (!res.ok) toast('warn', res.error);
-    });
+    $('btn-next-item').addEventListener('click', () => nextItem());
 
     $('btn-zoom-in').addEventListener('click', () => wave.setZoom(wave.pxPerSec * 1.5));
     $('btn-zoom-out').addEventListener('click', () => wave.setZoom(wave.pxPerSec / 1.5));
@@ -1239,33 +1772,31 @@
       input.focus();
     };
     $('btn-plan-add').addEventListener('click', addPlanPoint);
-    // Listen per Tastatur: Pfeiltasten wandern, Enter = Klick, F2 = Name/Interpret bearbeiten
-    ['pending-list', 'marker-list'].forEach((listId) => {
-      $(listId).addEventListener('keydown', (e) => {
-        const row = e.target.closest('.item');
-        if (!row || e.target !== row) return;
-        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-          e.preventDefault();
-          const next = e.key === 'ArrowDown' ? row.nextElementSibling : row.previousElementSibling;
-          if (next && next.classList.contains('item')) next.focus();
-        } else if (e.key === 'Enter') {
-          e.preventDefault();
-          row.click();
-        } else if (e.key === 'F2') {
-          e.preventDefault();
-          e.stopPropagation();
-          editSection(row.dataset.id, 'name', row.getBoundingClientRect());
-        }
-      });
+    // Liste per Tastatur: Pfeiltasten wandern, Enter = Klick, F2 = Name/Interpret bearbeiten
+    $('flow-list').addEventListener('keydown', (e) => {
+      const row = e.target.closest('.item');
+      if (!row || e.target !== row) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const next = e.key === 'ArrowDown' ? row.nextElementSibling : row.previousElementSibling;
+        if (next && next.classList.contains('item')) next.focus();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        row.click();
+      } else if (e.key === 'F2' && row.dataset.state !== 'full') {
+        e.preventDefault();
+        e.stopPropagation();
+        editSection(row.dataset.id, 'name', row.getBoundingClientRect());
+      }
     });
     $('plan-template').addEventListener('change', (e) => { e.target.blur(); applyPlanTemplate(e.target.value); });
     $('plan-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addPlanPoint(); } });
     // Auf den freien Platz unter der Liste ziehen: ans Ende sortieren.
-    $('pending-list').addEventListener('dragover', (e) => {
-      if (e.target === $('pending-list') && e.dataTransfer.types.includes('text/marker-id')) e.preventDefault();
+    $('flow-list').addEventListener('dragover', (e) => {
+      if (e.target === $('flow-list') && e.dataTransfer.types.includes('text/marker-id')) e.preventDefault();
     });
-    $('pending-list').addEventListener('drop', async (e) => {
-      if (e.target !== $('pending-list')) return;
+    $('flow-list').addEventListener('drop', async (e) => {
+      if (e.target !== $('flow-list')) return;
       const dragged = e.dataTransfer.getData('text/marker-id');
       if (dragged) await window.api.section.reorder(dragged, null);
     });
@@ -1674,7 +2205,7 @@
         return;
       }
       if (e.key.toLowerCase() === 'n' && !e.ctrlKey && !e.metaKey) {
-        if (!$('btn-next-item').disabled) { e.preventDefault(); $('btn-next-item').click(); }
+        if (isLive()) { e.preventDefault(); nextItem(); }
         return;
       }
       // Rückgängig/Wiederholen (Windows/Linux: Strg+Z, Strg+Y bzw. Strg+Umschalt+Z; auf dem Mac über das Menü)
@@ -1719,9 +2250,7 @@
     window.api.on('state', (s) => applyState(s));
 
     window.api.on('levels', (levels) => {
-      $('meter-l').style.width = Math.min(100, levels.l * 100) + '%';
-      $('meter-r').style.width = Math.min(100, levels.r * 100) + '%';
-      $('clip').dataset.on = String(Boolean(levels.clip));
+      setMeters(levels.l, levels.r, levels.clip);
       // Mehrspur: Die Wellenform kommt fertig aus dem Mehrspur-Prozess (Stereo rechnet sie hier aus den Blöcken).
       if (levels.buckets) for (const b of levels.buckets) state.peaks.push(b);
       if (levels.loudness?.steps?.length) state.loud.push(levels.loudness.steps);
@@ -1749,6 +2278,8 @@
       $('set-rec-mode').value = settingMode();
       applyMode();
       refreshDisk();
+      renderNow();
+      updatePrelisten();
     });
     $('chk-loop').addEventListener('change', () => {
       if (mt.play?.playing) window.api.multitrack.loop(playbackLoop()).then((r) => { if (!r.ok) toast('error', r.error); });
@@ -1774,7 +2305,7 @@
         else if (action === 'undo') undoEdit(); else redoEdit();
       }
       if (action === 'marker' && !$('btn-marker').disabled) $('btn-marker').click();
-      if (action === 'next-item' && !$('btn-next-item').disabled) $('btn-next-item').click();
+      if (action === 'next-item' && isLive()) nextItem();
     });
 
     window.api.on('compact', ({ on, onTop }) => applyCompact(on, onTop));
@@ -1794,12 +2325,10 @@
   /* ----------------------------------------------------------------- Export */
 
   function setExportChecks(on) {
-    $('export-list').querySelectorAll('input:not(:disabled)').forEach((box) => {
-      box.checked = on;
-      const id = box.closest('.export-item').dataset.id;
-      if (on) state.exportChecked.add(id); else state.exportChecked.delete(id);
+    (state.session?.segments || []).filter((g) => !g.open).forEach((g) => {
+      if (on) state.exportChecked.add(g.id); else state.exportChecked.delete(g.id);
     });
-    updateExportButton();
+    renderLists();
   }
 
   /** Wurde der Abschnitt seit dem Export verändert (Zeitraum oder Schnitte)? */
@@ -1852,13 +2381,13 @@
     let label;
     if (real.length === 0) {
       summary = 'Keine Abschnitte gesetzt.';
-      label = 'Gesamte Aufnahme als MP3 speichern';
+      label = 'Gesamte Aufnahme als MP3 sichern';
     } else if (unsaved.length === 0) {
       summary = `${word(real.length)} – alles gesichert ✓`;
       label = null;                          // nichts mehr zu tun: kein Knopf
     } else {
       summary = `${word(real.length)} – ${unsaved.length} noch nicht gesichert`;
-      label = `${word(checked || unsaved.length)} als MP3 speichern`;
+      label = `${word(checked || unsaved.length)} als MP3 sichern`;
     }
     $('ce-summary').textContent = summary;
     $('ce-export').hidden = label == null;
@@ -1889,7 +2418,7 @@
     if (items.length === 0) return;
 
     state.exporting = true;            // verhindert einen zweiten, parallelen Export
-    $('btn-export').disabled = true;
+    updateExportButton();
     setExportResult(`MP3 1 von ${items.length} wird erstellt …`);
     try {
       const res = await window.api.exportBatch(items);
@@ -1915,7 +2444,8 @@
       }
     } finally {
       state.exporting = false;
-      renderSegments();
+      renderLists();
+      renderNow();
     }
   }
 
@@ -1927,7 +2457,7 @@
     return [
       { keys: [mod, 'R'], text: 'Aufnahme starten / beenden', main: true },
       { keys: ['M'], text: 'Abschnitt starten / beenden', main: true },
-      { keys: ['N'], text: 'Nächster Ablaufpunkt', main: true },
+      { keys: ['N'], text: 'Nächster Punkt', main: true },
       { keys: ['X'], text: 'Schnitt starten / beenden', main: true },
       { keys: [mod, 'Z'], text: 'Rückgängig', main: true },
       { keys: ['Leertaste'], text: 'Mithören / Abspielen', main: true },
@@ -1950,8 +2480,9 @@
   /** Tooltips mit der passenden Taste (Cmd auf dem Mac, sonst Strg). */
   function applyPlatformTitles(platform) {
     const mod = platform === 'darwin' ? 'Cmd' : 'Strg';
-    $('btn-record').title = `Neue Aufnahme starten (${mod}+R)`;
-    $('btn-stop').title = `Aufnahme beenden (${mod}+R)`;
+    $('btn-record').title = `Aufnahme starten (${mod}+R)`;
+    $('record-key').textContent = `${mod} R`;
+    $('btn-stop').title = `Aufnahme beenden: kurz gedrückt halten (${mod}+R beendet sofort)`;
     $('btn-compact').title = `Mini-Fenster mit den nötigsten Knöpfen, z. B. wenn nebenher am PC gearbeitet wird (${mod}+Umschalt+M)`;
   }
 
@@ -2008,7 +2539,9 @@
     badge.title = `Freier Speicherplatz auf ${res.dir}: reicht für ca. ${formatHours(res.hoursLeft)} Aufnahme`;
     $('disk-info').textContent = `Frei: ${formatBytes(res.freeBytes)} (ca. ${formatHours(res.hoursLeft)} Aufnahme)`;
     badge.dataset.level = res.hoursLeft < DISK_LOW_HOURS ? 'low' : (res.hoursLeft < DISK_WARN_HOURS ? 'warn' : 'ok');
+    const changed = state.diskHoursLeft == null || Math.abs(state.diskHoursLeft - res.hoursLeft) > 0.05;
     state.diskHoursLeft = res.hoursLeft;
+    if (changed) renderNow();
     if (multitrackView()) renderChannelStatus();
 
     if (res.hoursLeft < DISK_LOW_HOURS && state.session?.status === 'recording' && !diskLowToastShown) {
@@ -2340,7 +2873,9 @@
       });
       if (devices.length === 0) std.textContent = emptyText;
       // Gespeichertes Gerät nicht mehr angeschlossen: bei Systemstandard bleiben.
-      sel.value = devices.some((d) => d.id === savedId) ? savedId : '';
+      const present = devices.some((d) => d.id === savedId);
+      sel.value = present ? savedId : '';
+      if (kind === 'audioinput') state.inputMissing = Boolean(savedId) && !present;
     } catch (err) {
       std.textContent = 'Zugriff auf Audiogeräte fehlgeschlagen';
     }
@@ -2350,6 +2885,7 @@
     await fillDeviceSelect($('set-device'), 'audioinput', state.settings.inputDeviceId, 'Systemstandard (kein Eingang gefunden)');
     await fillDeviceSelect($('set-output'), 'audiooutput', state.settings.outputDeviceId, 'Systemstandard');
     applyOutputDevice();
+    renderNow();
   }
 
   /** Pultfarben (Wert 0–15, ab 8 invertiert) als Name für CSS. */
@@ -2541,7 +3077,7 @@
         parts.push('Gerät wird geöffnet …');
       }
       if (s?.status === 'stopped' && s.mode !== 'multitrack' && s.wavPath) {
-        parts.push('Angezeigt wird eine Stereo-Aufnahme – zum Exportieren die Aufnahmeart (Einstellungen → Audio) auf Stereo stellen.');
+        parts.push('Angezeigt wird eine Stereo-Aufnahme – gesichert wird wie gewohnt über den Knopf oben links.');
       }
     }
     if (mt.playText) parts.push(mt.playText);
@@ -2655,11 +3191,7 @@
       renderChannelStatus();
     }
     // Vor dem Start zeigt der große Pegel den lautesten gewählten Kanal (während der Aufnahme kommt er aus der Session).
-    if (!isLive()) {
-      $('meter-l').style.width = `${Math.min(100, max * 100)}%`;
-      $('meter-r').style.width = `${Math.min(100, max * 100)}%`;
-      $('clip').dataset.on = String(anyClip);
-    }
+    if (!isLive()) setMeters(max, max, anyClip);
   }
 
   /**
@@ -2753,6 +3285,7 @@
     $('set-theme').value = s.theme || 'dark';
     $('set-loudness-monitor').checked = s.loudnessMonitor !== false;
     $('set-follow-live').checked = s.followLive !== false;
+    $('set-prelisten').checked = s.prelisten !== false;
   }
 
   /** Editor für die Standard-Programmpunkte (Name, nach oben/unten, entfernen). */
@@ -3013,7 +3546,8 @@
       autoUpdateCheck: $('set-autoupdate').checked,
       theme: $('set-theme').value,
       loudnessMonitor: $('set-loudness-monitor').checked,
-      followLive: $('set-follow-live').checked
+      followLive: $('set-follow-live').checked,
+      prelisten: $('set-prelisten').checked
     };
     const token = $('set-ct-token').value;
     if (token) patch.churchToolsToken = token;
@@ -3030,6 +3564,8 @@
     applyOutputDevice();
     applyMode();
     refreshDisk();
+    renderNow();
+    updatePrelisten();
     $('set-ct-token').value = '';
     applySettingsToForm();
     if (!keepOpen) {

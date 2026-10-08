@@ -1,5 +1,8 @@
 /* Ebbton – Oberfläche im Regiepult-Look:
-   dunkles Anthrazit mit Blaustich, Tally-Rot nur für "Aufnahme läuft". */
+   dunkles Anthrazit mit Blaustich. Jede Signalfarbe hat genau eine Bedeutung (in hell und dunkel gleich):
+   Rot = live (Aufnahme, Tally, Fehler) · Bernstein = Achtung (Pause, Warnung) · Grün = erledigt (gesichert, ok)
+   · Indigo (--plan) = handeln (Hauptknöpfe, Auswahl, Fokus) · Stahlblau = Audio (Wellenform).
+   Aufbau nach Phasen: body[data-phase] = prep (vor dem Start) | rec (Aufnahme/Pause) | save (beendet, sichern). */
 
 :root {
   --bg: #0F1418;
@@ -10,18 +13,23 @@
   --text: #E6EBF0;
   --muted: #7D8CA0;
   --tally: #FF3B30;
+  --tally-soft: rgba(255,59,48,.13);
   --amber: #FFB020;
+  --amber-soft: rgba(255,176,32,.13);
+  --ok: #34C38F;
+  --ok-soft: rgba(52,195,143,.13);
   --plan: #6C7CE0;
+  --plan-hover: #7d8ce6;
   --manual: #2BB3A3;
-  --loud: #F2C14E;                /* Lautheitslinie in der Wellenform */
-  --loud-grid: rgba(242,193,78,0.13);
+  --loud: #4FC3E8;                /* Lautheitslinie in der Wellenform (eigene Farbe, keine Warnfarbe) */
+  --loud-grid: rgba(79,195,232,0.13);
   --loud-box: rgba(16,20,25,0.84);
   --wave: #4E6C8A;
   --hover-border: #3B4A5C;
   --hover-bg: #26323F;
   --on-accent: #0D1117;
   --on-tally: #14090A;
-  --tally-text: #FFD9D6;
+  --tally-text: #FF8A80;
   --bar-bg: #0B1015;
   --wave-bg: #131A21;
   --ruler-bg: #101720;
@@ -34,6 +42,9 @@
   --overlay: rgba(6, 9, 12, .72);
   --shadow: rgba(0,0,0,.4);
   --strong: #fff;
+  /* Feste Palette der Abschnitte (Index = section.color): gleich hell, gut unterscheidbar, dunkle Schrift darauf */
+  --sec-0: #6E9BEB; --sec-1: #E9A15A; --sec-2: #57C298; --sec-3: #C485DB;
+  --sec-4: #DDBA4A; --sec-5: #4FC1CF; --sec-6: #E57C96; --sec-7: #9C8CF0;
   color-scheme: dark;
   --radius: 6px;
   --sans: system-ui, "Segoe UI", Roboto, sans-serif;
@@ -49,11 +60,16 @@
   --text: #1B232C;
   --muted: #5F6E80;
   --tally: #E5281C;
+  --tally-soft: rgba(229,40,28,.09);
   --amber: #C77F00;
+  --amber-soft: rgba(199,127,0,.11);
+  --ok: #178A5A;
+  --ok-soft: rgba(23,138,90,.10);
   --plan: #4F5FD0;
+  --plan-hover: #4352c4;
   --manual: #178A7D;
-  --loud: #B7791F;
-  --loud-grid: rgba(183,121,31,0.16);
+  --loud: #0B87AE;
+  --loud-grid: rgba(11,135,174,0.15);
   --loud-box: rgba(255,255,255,0.9);
   --wave: #6F8CAB;
   --hover-border: #B5C0CD;
@@ -73,6 +89,8 @@
   --overlay: rgba(20, 28, 38, .45);
   --shadow: rgba(20,30,45,.18);
   --strong: #000;
+  --sec-0: #5B8DE6; --sec-1: #E8964A; --sec-2: #3FB284; --sec-3: #B774D0;
+  --sec-4: #D9AE2C; --sec-5: #36B2C2; --sec-6: #E06A88; --sec-7: #8C7BEA;
   color-scheme: light;
 }
 
@@ -88,9 +106,10 @@ body {
   color: var(--text);
   font-family: var(--sans);
   font-size: 14px;
-  display: grid;
-  grid-template-rows: auto auto auto 1fr auto;
-  grid-template-columns: minmax(0, 1fr);   /* nie breiter als das Fenster: lange Namen werden gekürzt */
+  /* Spalte: Kopf, Warnbalken, Transport, Wellenform, (Mini-Export), unten die Bereiche (füllen den Rest), Tastenleiste.
+     Als Flex-Spalte nie breiter als das Fenster: lange Namen werden gekürzt statt die Seite zu verbreitern. */
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   user-select: none;
 }
@@ -107,6 +126,10 @@ body {
 body[data-status="recording"] #tally { background: var(--tally); }
 body[data-status="paused"] #tally { background: var(--amber); }
 
+/* ------------------------------------------------------------------ Knöpfe
+   Vier Rollen: Hauptaktion (.primary bzw. .go = „Aufnahme starten“, gefüllt, einmal je Phase) · Normal (grau mit Rand)
+   · Leise (.ghost, ohne Rand, erst beim Darüberfahren hinterlegt) · Folgenreich (.danger, rote Schrift, kein roter
+   Grund). Was in einer Phase nicht geht, wird ausgeblendet statt ausgegraut. */
 button {
   font: inherit;
   color: inherit;
@@ -115,18 +138,41 @@ button {
   border-radius: var(--radius);
   padding: 7px 14px;
   cursor: pointer;
+  transition: background-color .12s, border-color .12s, color .12s, filter .12s, transform .06s;
 }
 button:hover:not(:disabled) { border-color: var(--hover-border); background: var(--hover-bg); }
+button:active:not(:disabled) { transform: translateY(1px); }
 button:disabled { opacity: .4; cursor: default; }
 button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   outline: 2px solid var(--plan);
   outline-offset: 1px;
 }
 button.ghost { background: transparent; border-color: transparent; color: var(--muted); }
-button.ghost:hover { background: var(--panel-2); color: var(--text); }
+button.ghost:hover:not(:disabled) { background: var(--raised); border-color: transparent; color: var(--text); }
 button.primary { background: var(--plan); border-color: var(--plan); color: var(--on-accent); font-weight: 600; }
-button.primary:hover:not(:disabled) { background: #7d8ce6; border-color: #7d8ce6; }
+button.primary:hover:not(:disabled) { background: var(--plan-hover); border-color: var(--plan-hover); }
+button.go { background: var(--tally); border-color: var(--tally); color: #fff; font-weight: 600; }
+button.go:hover:not(:disabled) { background: var(--tally); border-color: var(--tally); filter: brightness(1.1); }
+button.danger { background: transparent; color: var(--tally); border-color: color-mix(in srgb, var(--tally) 45%, var(--line)); }
+button.danger:hover:not(:disabled) { background: var(--tally-soft); border-color: var(--tally); }
 button.icon { padding: 4px 10px; line-height: 1; }
+/* Kürzel als kleine Taste im Knopf (statt nur unten in der Leiste) */
+kbd.k {
+  font: 600 11px/1.35 var(--sans);
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  opacity: .6;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+button.primary kbd.k, button.go kbd.k { opacity: .8; }
+/* Kurzes Aufleuchten in der Farbe des eben gesetzten Abschnitts (M/N) */
+button.flash { animation: btn-flash .45s ease-out; }
+@keyframes btn-flash { 0% { box-shadow: 0 0 0 0 var(--flash, var(--plan)); background: var(--flash, var(--plan)); } 100% { box-shadow: 0 0 0 10px transparent; } }
+@media (prefers-reduced-motion: reduce) { button.flash { animation: none; } button:active:not(:disabled) { transform: none; } }
 
 input[type="text"], input[type="password"], input[type="number"], input[type="date"], select {
   background: var(--bg);
@@ -138,6 +184,7 @@ input[type="text"], input[type="password"], input[type="number"], input[type="da
   width: 100%;
 }
 input[readonly] { color: var(--muted); }
+input::placeholder { color: var(--muted); opacity: .8; }
 
 /* ------------------------------------------------------------------ Kopf */
 
@@ -198,6 +245,24 @@ input[readonly] { color: var(--muted); }
 .badge[data-level="warn"] { color: var(--amber); border-color: rgba(255,176,32,.4); }
 .badge[data-level="low"] { color: var(--tally-text); border-color: var(--tally); }
 
+/* Phasenleiste in der Kopfzeile: Vorbereiten › Aufnehmen › Sichern (nur Anzeige) */
+.phase-steps {
+  list-style: none; margin: 0 auto; padding: 0;
+  display: flex; align-items: center; gap: 22px;
+  font-size: 14px; color: var(--muted); min-width: 0; flex-shrink: 1;
+}
+.phase-steps li { position: relative; padding: 5px 12px; border-radius: 999px; white-space: nowrap; transition: background-color .2s, color .2s; }
+.phase-steps li + li::before { content: "›"; position: absolute; left: -15px; top: 50%; transform: translateY(-52%); opacity: .55; color: var(--muted); font-weight: 400; }
+.phase-steps li.on { color: var(--text); font-weight: 600; background: var(--raised); }
+body[data-phase="prep"] .phase-steps li.on { color: var(--plan); background: color-mix(in srgb, var(--plan) 14%, transparent); }
+body[data-phase="rec"] .phase-steps li.on { color: var(--tally-text); background: var(--tally-soft); }
+body[data-status="paused"] .phase-steps li.on { color: var(--amber); background: var(--amber-soft); }
+body[data-phase="save"] .phase-steps li.on { color: var(--ok); background: var(--ok-soft); }
+@media (max-width: 1240px) {
+  .phase-steps li:not(.on) { display: none; }
+  .phase-steps li + li::before { content: none; }
+}
+
 /* ------------------------------------------------------------- Transport */
 
 .transport {
@@ -205,24 +270,78 @@ input[readonly] { color: var(--muted); }
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 28px;
-  padding: 18px 20px;
+  padding: 16px 20px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
 }
-
-.transport-controls { display: flex; gap: 12px; min-width: 486px; }
 /* Breit genug: Timer exakt in der Fenstermitte (gleich breite Außenspalten); schmaler: Timer zwischen Knöpfen und Pegel */
 @media (min-width: 1340px) {
-  .transport { grid-template-columns: minmax(0, 1fr) 300px minmax(0, 1fr); column-gap: 20px; }   /* 1360 px: Knöpfe passen in die Außenspalte */
+  .transport { grid-template-columns: minmax(0, 1fr) 300px minmax(0, 1fr); column-gap: 20px; }
   .transport .meters { justify-self: end; }
   .transport .clock { justify-self: center; width: 300px; }
 }
-.transport-controls button { font-size: 18px; padding: 15px 24px; white-space: nowrap; }
-/* Feste Breiten, damit der große Timer in allen Zuständen (bereit, läuft, pausiert, beendet) am selben Platz bleibt */
-body:not(.compact) button.record { min-width: 244px; justify-content: center; }
-body:not(.compact) #btn-pause { min-width: 116px; }
-body.review:not(.compact) #btn-pause,
-body.review:not(.compact) #btn-stop { display: none; }
+
+/* Die Knopfzone hat in allen Phasen dieselbe feste Breite, damit der große Timer nie wandert. Je Phase sind nur
+   die passenden Knöpfe sichtbar: prep = Aufnahme starten · rec = N, M, Pause, Beenden · save = Sichern, Neue Aufnahme
+   (Mehrspur: Neue Aufnahme, Anhängen). */
+.transport-controls { display: flex; align-items: center; gap: 10px; width: 486px; min-width: 0; }
+.transport-controls > button, .rec-ctl > button {
+  --h: 54px;
+  height: var(--h); padding: 0 18px; font-size: 16px; white-space: nowrap;
+  display: none; align-items: center; justify-content: center; gap: 10px; min-width: 0; flex-shrink: 0;
+}
+.rec-ctl { display: none; gap: 10px; margin-left: auto; flex-shrink: 0; }
+.rec-ctl > button { display: inline-flex; }
+body[data-phase="prep"] #btn-record,
+body[data-phase="rec"] #btn-next-item,
+body[data-phase="rec"] #btn-marker,
+body[data-phase="save"] #btn-record,
+body[data-phase="save"].mt-session #btn-continue { display: inline-flex; }
+body[data-phase="rec"] .rec-ctl { display: flex; }
+body[data-phase="save"]:not(.mt-session) #btn-export { display: block; }
+
+/* Vorbereiten: „Aufnahme starten“ rot gefüllt und groß */
+#btn-record.go { font-size: 18px; padding: 0 26px; gap: 12px; min-width: 244px; }
+button.record .dot { width: 14px; height: 14px; flex-shrink: 0; border-radius: 50%; background: currentColor; }
+/* Sichern: „Neue Aufnahme“ bewusst leise; bei Mehrspur (kein Export) als normaler Knopf */
+body[data-phase="save"] #btn-record { order: 2; background: transparent; border-color: var(--line); color: var(--text); font-weight: 500; min-width: 0; padding: 0 16px; font-size: 16px; filter: none; }
+body[data-phase="save"] #btn-record:hover { background: var(--raised); border-color: var(--hover-border); }
+body[data-phase="save"] #btn-record .dot, body[data-phase="save"] #btn-record kbd { display: none; }
+body[data-phase="save"].mt-session #btn-record { background: var(--raised); }
+#btn-export { flex: 1 1 auto; font-size: 17px; line-height: calc(var(--h) - 2px); overflow: hidden; text-overflow: ellipsis; text-align: center; }
+
+/* Aufnehmen: N ist die Hauptaktion, zweizeilig – oben klein „Nächster Punkt · N“, darunter groß nur der Name, damit
+   er die ganze Knopfbreite hat. M daneben schmal und ebenfalls zweizeilig („Abschnitt / beenden“). Pause und Beenden
+   als Symbole rechts. Ist kein Punkt mehr offen (data-next="none"), entfällt N und M wird zum breiten Hauptknopf. */
+#btn-next-item { flex: 1 1 auto; justify-content: flex-start; text-align: left; padding: 0 16px; }
+.nb-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.nb-cap { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; opacity: .85; }
+.nb-cap kbd.k { font-size: 10px; line-height: 1.25; text-transform: none; letter-spacing: 0; }
+.nb-name { font-size: 18px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body[data-next="none"] #btn-next-item { display: none; }
+#btn-marker { font-weight: 500; font-size: 15px; padding: 0 14px; gap: 10px; }
+.mk-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
+.mk-cap { font-size: 12px; color: var(--muted); }
+#marker-label { font-size: 15px; font-weight: 600; }
+body[data-next="none"] #btn-marker { flex: 1 1 auto; background: var(--plan); border-color: var(--plan); color: var(--on-accent); }
+body[data-next="none"] #btn-marker:hover:not(:disabled) { background: var(--plan-hover); border-color: var(--plan-hover); }
+body[data-next="none"] .mk-text { flex-direction: row; gap: 6px; font-size: 17px; }
+body[data-next="none"] .mk-cap, body[data-next="none"] #marker-label { font-size: 17px; font-weight: 600; color: inherit; }
+/* Aufnehmen: etwas engere Abstände, damit der Name des nächsten Punkts Platz hat */
+body[data-phase="rec"] .transport-controls, .rec-ctl { gap: 8px; }
+.rec-ctl > .icon-only { width: calc(var(--h) - 4px); }
+.icon-only { width: var(--h); padding: 0 !important; position: relative; }
+.icon-only svg { width: 22px; height: 22px; fill: currentColor; flex-shrink: 0; }
+.icon-only .ctl-label { display: none; }
+.pause-btn .i-resume, .pause-btn[data-state="paused"] .i-pause { display: none; }
+.pause-btn[data-state="paused"] .i-resume { display: block; }
+.pause-btn[data-state="paused"] { background: var(--amber); border-color: var(--amber); color: #1a1200; }
+.pause-btn[data-state="paused"]:hover:not(:disabled) { background: var(--amber); border-color: var(--amber); filter: brightness(1.08); }
+/* „Beenden“ muss man kurz gedrückt halten: der Balken unten läuft voll */
+.hold-btn { overflow: hidden; }
+.hold-btn .hold-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: currentColor; transform: scaleX(0); transform-origin: left; pointer-events: none; }
+.hold-btn.holding .hold-bar { transform: scaleX(1); transition: transform var(--hold-ms, 600ms) linear; }
+.hold-btn.holding { background: var(--tally-soft); }
 
 .audio-warning {
   padding: 8px 16px;
@@ -237,40 +356,7 @@ body.review:not(.compact) #btn-stop { display: none; }
 @keyframes warn-blink { 50% { opacity: .65; } }
 @media (prefers-reduced-motion: reduce) { .audio-warning { animation: none; } }
 
-button.record {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 15px 26px;
-  font-weight: 600;
-  background: var(--raised);
-}
-button.record .dot {
-  width: 14px; height: 14px;
-  flex-shrink: 0;                 /* sonst drückt ein knapper Knopf den Punkt bei manchen Fensterbreiten auf 0 px */
-  border-radius: 50%;
-  background: var(--tally);
-  box-shadow: 0 0 0 0 rgba(255,59,48,.6);
-}
-body[data-status="recording"] button.record {
-  background: var(--tally);
-  border-color: var(--tally);
-  color: var(--on-tally);
-}
-body[data-status="recording"] button.record .dot {
-  background: var(--on-tally);
-  animation: pulse 1.6s ease-out infinite;
-}
-@keyframes pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(20,9,10,.5); }
-  70%  { box-shadow: 0 0 0 9px rgba(20,9,10,0); }
-  100% { box-shadow: 0 0 0 0 rgba(20,9,10,0); }
-}
-@media (prefers-reduced-motion: reduce) {
-  body[data-status="recording"] button.record .dot { animation: none; }
-}
-
-.clock { display: flex; flex-direction: column; align-items: center; }
+.clock { display: flex; flex-direction: column; align-items: center; min-width: 0; max-width: 100%; }
 .timecode {
   font-family: var(--sans);
   font-size: 60px;
@@ -279,68 +365,79 @@ body[data-status="recording"] button.record .dot {
   letter-spacing: -0.5px;
   line-height: 1;
 }
-body[data-status="recording"] .timecode { color: var(--tally-text); }
-.current-item {
-  color: var(--muted);
-  margin-top: 8px;
-  font-size: 17px;
-  background: transparent;
-  border: none;
-  padding: 2px 6px;
-  text-align: center;
+body[data-status="recording"] .timecode { color: var(--tally-text); }   /* gleiches Gewicht: sonst wandert der Timer */
+body[data-status="paused"] .timecode { color: var(--amber); }
+/* Zustand unter dem Timer: Bereit · Aufnahme läuft · Pausiert · Beendet (mit Sicherungsstand) */
+.status-line {
+  margin-top: 8px; display: inline-flex; align-items: center; gap: 8px; max-width: 100%;
+  font-size: 15px; font-weight: 600; color: var(--muted); white-space: nowrap;
 }
-.current-item:disabled { opacity: 1; cursor: default; }
-.current-item[data-live="true"] { cursor: pointer; color: var(--text); }
-.current-item[data-live="true"]:hover { background: var(--panel-2); }
-.ci-text { display: inline; }
+.status-line #status-text { overflow: hidden; text-overflow: ellipsis; }
+.status-line .sd { width: 9px; height: 9px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+body[data-phase="prep"] .status-line { color: var(--plan); }
+body[data-status="recording"] .status-line { color: var(--tally-text); }
+body[data-status="recording"] .status-line .sd { animation: sd-blink 1.6s ease-in-out infinite; }
+body[data-status="paused"] .status-line { color: var(--amber); }
+body[data-phase="save"] .status-line { color: var(--ok); }
+body[data-phase="save"] .status-line[data-warn="true"] { color: var(--amber); }
+@keyframes sd-blink { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { body[data-status="recording"] .status-line .sd { animation: none; } }
+
+/* Laufender Abschnitt unter dem Timer nur im Mini-Fenster (groß steht er rechts unter „Jetzt“) */
+.current-item { display: none; }
 .ci-artist { color: var(--muted); }
-.ci-artist::before { content: " · "; }
 .ci-artist.unset { font-style: italic; opacity: .7; }
 .ci-edit { display: none; }
+.ci-elapsed { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); white-space: nowrap; }
+.ci-elapsed[hidden] { display: none; }
 
-.meters { display: grid; gap: 7px; width: 280px; }
-.meter { display: flex; align-items: center; gap: 8px; }
-.meter-label { color: var(--muted); font-family: var(--sans); font-variant-numeric: tabular-nums; font-size: 14px; width: 14px; }
+/* Pegel: Skala −48 … 0 dBFS, Zonen Grün bis −9, Gelb bis −3, darüber Rot; Spitzenhalter und Zahlenwert */
+.meters { display: grid; grid-template-areas: "l" "r" "s"; gap: 5px; width: 300px; }
+.meter { display: grid; grid-template-columns: 14px minmax(0, 1fr) 40px; align-items: center; gap: 8px; }
+.meter:first-child { grid-area: l; }
+.meter:nth-child(2) { grid-area: r; }
+.meter-label { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
 .bar {
-  flex: 1;
-  height: 13px;
+  --zones: linear-gradient(90deg, var(--ok) 0 81.25%, var(--amber) 81.25% 93.75%, var(--tally) 93.75%);
+  position: relative;
+  height: 12px;
   background: var(--bar-bg);
   border: 1px solid var(--line);
   border-radius: 3px;
   overflow: hidden;
 }
-.bar i {
-  display: block;
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, var(--manual) 0%, var(--manual) 72%, var(--amber) 88%, var(--tally) 100%);
-  transition: width 60ms linear;
-}
+.bar::before { content: ""; position: absolute; inset: 0; background: var(--zones); opacity: .14; }
+.bar i { position: absolute; inset: 0; background: var(--zones); clip-path: inset(0 100% 0 0); transition: clip-path 60ms linear; }
+.bar u { position: absolute; top: 0; bottom: 0; left: 0; width: 2px; margin-left: -2px; background: var(--text); opacity: 0; }
+.meter-db { font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
+.meter-scale { grid-area: s; display: grid; grid-template-columns: 14px minmax(0, 1fr) 40px; gap: 8px; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.meter-scale .ticks { position: relative; height: 12px; }
+.meter-scale .ticks span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.meter-scale .ticks span:first-child { transform: none; }
+.meter-scale .ticks span:last-child { transform: translateX(-100%); }
+/* „Übersteuert“ bleibt stehen, bis man es anklickt (liegt über der Skala) */
 .clip {
-  font-size: 14px;
-  color: var(--amber);
-  visibility: hidden;
-  text-align: right;
+  grid-area: s; justify-self: end; align-self: center; visibility: hidden;
+  font-size: 11px; font-weight: 700; letter-spacing: .03em; line-height: 1.3;
+  padding: 1px 8px; border-radius: 4px; border: none; background: var(--tally); color: #fff;
 }
+.clip:hover:not(:disabled) { background: var(--tally); border: none; filter: brightness(1.1); }
 .clip[data-on="true"] { visibility: visible; }
 
 /* ------------------------------------------------------------ Wellenform */
 
 .wave-section {
-  padding: 14px 20px 0;
+  padding: 12px 20px 0;
   background: var(--bg);
 }
 .wave-toolbar {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding-bottom: 12px;
+  gap: 10px;
+  padding-bottom: 10px;
 }
-.wave-toolbar button { font-size: 16px; padding: 10px 20px; }
-.wave-toolbar .spacer { flex: 1; }
-.follow { color: var(--muted); font-size: 16px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.follow[hidden] { display: none; }   /* sonst gewinnt display: flex gegen das hidden-Attribut („Schleife“) */
-.follow input { width: 20px; height: 20px; accent-color: var(--plan); cursor: pointer; }
+.wave-toolbar button { font-size: 16px; padding: 9px 16px; }
 /* Abspielen als Symbolknopf (Symbol je Zustand über data-icon), Ecken wie die übrigen Knöpfe; Zoom als Gruppe */
 .wave-toolbar .play-btn {
   --size: 44px;
@@ -359,6 +456,13 @@ body[data-status="recording"] .timecode { color: var(--tally-text); }
 .play-btn[data-icon="pause"], .play-btn[data-icon="stop"] { color: var(--plan); border-color: var(--plan); }
 .play-label { font-size: 15px; font-weight: 600; white-space: nowrap; }
 .play-label[hidden] { display: none; }
+/* Vor dem Start gibt es nichts abzuspielen */
+body[data-phase="prep"] #btn-play { display: none; }
+/* Schnitt an der Live-Stelle: nur während der Aufnahme (danach Umschalt + Ziehen in der Wellenform) */
+.cut-btn { display: none; align-items: center; gap: 8px; height: 44px; flex-shrink: 0; }
+body[data-phase="rec"] .cut-btn { display: inline-flex; }
+.cut-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.cut-btn[data-on="true"] { color: var(--cut-text); background: rgba(var(--cut), .12); }
 
 .zoom { display: flex; flex-shrink: 0; }
 .wave-toolbar .zoom button {
@@ -369,6 +473,21 @@ body[data-status="recording"] .timecode { color: var(--tally-text); }
 .wave-toolbar .zoom button:last-child { border-radius: 0 var(--radius) var(--radius) 0; margin-left: -1px; }
 .wave-toolbar .zoom button:hover { color: var(--text); }
 .zoom svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; }
+
+/* Übersicht der ganzen Aufnahme (Abschnitte, Ausschnitt, Live-Stelle) */
+canvas.overview {
+  display: block; width: 100%; height: 20px; margin-bottom: 6px;
+  border: 1px solid var(--line); border-radius: 4px; background: var(--ruler-bg);
+  cursor: pointer; touch-action: none;
+}
+body[data-phase="prep"] canvas.overview { display: none; }
+/* Vor dem Start: keine Werkzeuge (es gibt nichts zu zoomen oder abzuspielen), die Wellenform nur als Ablagefläche
+   für Ablaufpunkte – flacher, damit die Liste und die Prüfliste Platz haben. */
+body[data-phase="prep"] .wave-toolbar { display: none; }
+body[data-phase="prep"]:not(.compact) canvas.wave { height: 110px; }
+body.dense[data-phase="prep"] canvas.wave { height: 80px; }
+body[data-phase="prep"] .wave-section { padding-top: 12px; }
+body.dense[data-phase="prep"] .wave-section { padding-top: 6px; }
 
 /* Lautheit in der Werkzeugleiste: füllt den freien Platz, rechtsbündig vor dem Abspielknopf. Ist es zu eng, rutschen
    die hinteren (unwichtigeren) Werte in eine zweite Zeile, die abgeschnitten ist – vorne bleibt immer S bzw. I stehen. */
@@ -450,15 +569,19 @@ canvas.wave {
   touch-action: none;
 }
 
-/* ---------------------------------------------------------------- Panels */
+/* ---------------------------------------------------------------- Panels
+   Links „Ablauf“ (eine Liste für Plan, Abschnitte und Export), rechts „Jetzt“; bei Mehrspur rechts „Kanäle“. */
 
 .panels {
+  flex: 1 1 0;
   display: grid;
-  grid-template-columns: 1fr 1fr 400px;
+  grid-template-columns: minmax(0, 1fr) 360px;
   gap: 14px;
   padding: 14px 20px 18px;
   min-height: 0;
 }
+body.mt .panels { grid-template-columns: minmax(0, 1fr) minmax(380px, 1.25fr); }
+body.mt .panel-now, body:not(.mt) .panel-channels { display: none; }
 
 .panel {
   background: var(--panel);
@@ -467,79 +590,190 @@ canvas.wave {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 .panel-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 13px 16px;
+  min-height: 52px;
+  padding: 8px 12px 8px 16px;
   border-bottom: 1px solid var(--line);
 }
-.panel-head h2 { font-size: 17px; margin: 0; font-weight: 600; }
-.head-actions { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
-.head-actions .secondary { font-size: 14px; padding: 5px 9px; white-space: nowrap; }
+.panel-head h2 { font-size: 17px; margin: 0; font-weight: 600; white-space: nowrap; }
+.head-actions { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.head-actions button { font-size: 14px; padding: 0 12px; height: 34px; white-space: nowrap; }
+.panel-head .select { width: auto; max-width: 220px; font-size: 14px; height: 34px; padding: 0 9px; }
+/* Kopf der Ablauf-Liste: Plan laden vor und während der Aufnahme, Auswahl zum Sichern danach */
+.plan-only, .save-only { display: none; }
+.export-select { display: flex; gap: 2px; }
+body:not([data-phase="save"]) .plan-only { display: inline-flex; align-items: center; }
+body:not([data-phase="save"]) select.plan-only { display: block; }
+body:not([data-phase="save"]) .save-only, body.mt-session .save-only { display: none; }
+.export-select button { font-size: 14px; padding: 0 12px; height: 34px; }
 .plan-source { color: var(--muted); font-size: 13px; padding: 6px 16px; border-bottom: 1px solid var(--line); }
 .plan-source div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hint { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.panel-head h2 { white-space: nowrap; }
 
-.pending, .markers {
+/* Eine Zeile je Programmpunkt: [Häkchen | Griff] Farbe Zeitraum Name·Interpret Länge Zustand [✎ ×] */
+.flow {
   list-style: none;
   margin: 0;
-  padding: 10px;
+  padding: 8px;
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+  display: grid;
+  gap: 4px;
+  align-content: start;
 }
-
 .item {
-  display: flex;
+  --tw: 136px;             /* Zeitraum */
+  --dw: 70px;              /* Länge */
+  --stw: 104px;            /* Zustand */
+  display: grid;
+  grid-template-columns: 18px 6px var(--tw) minmax(0, 1fr) var(--dw) var(--stw) auto;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
+  column-gap: 10px;
+  min-height: 46px;
+  padding: 6px 8px 6px 10px;
   border-radius: 6px;
-  border-left: 4px solid transparent;
-  margin-bottom: 6px;
+  border: 1px solid transparent;
   background: var(--panel-2);
   font-size: 16px;
 }
 .item:hover { background: var(--raised); }
-.item[data-hue] { border-left-color: hsl(var(--hue), 55%, 62%); }
+.item .sw { width: 6px; height: 28px; border-radius: 3px; background: var(--sec, var(--line)); }
+.item[data-state="open"] .sw { background: transparent; border: 2px dashed color-mix(in srgb, var(--sec, var(--line)) 70%, transparent); }
+.item[data-state="full"] .sw { background: var(--wave); }
+.item .time { font-variant-numeric: tabular-nums; font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+.item .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .dur { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 15px; text-align: right; white-space: nowrap; }
+.item .st { font-size: 13px; color: var(--muted); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item .st.ok { color: var(--ok); }
+.item .st.warn { color: var(--amber); }
+.item .st.live { color: var(--tally-text); font-weight: 700; }
+.item .st.next { color: var(--plan); font-weight: 600; }
+.item .grip { color: var(--muted); opacity: 0; font-size: 13px; letter-spacing: -2px; text-align: center; cursor: grab; transition: opacity .12s; }
+.item:hover .grip, .item:focus-visible .grip { opacity: .75; }
+.item input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--plan); cursor: pointer; }
 .item[draggable="true"] { cursor: grab; }
 .item.clickable { cursor: pointer; }
-.item.clickable:hover { background: var(--raised); outline: 1px solid var(--line); }
-.item.selected { outline: 1px solid var(--plan); }
-.item .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.panel-head .select { width: auto; max-width: 52%; font-size: 14px; padding: 5px 9px; }
-.add-row { display: flex; gap: 8px; padding: 12px 14px 14px; border-top: 1px solid var(--line); }
-.add-row input { flex: 1; min-width: 0; font-size: 16px; padding: 10px 12px; }
-.add-row button { padding: 8px 20px; font-size: 20px; line-height: 1; }
-.item.drop-before { box-shadow: 0 -2px 0 var(--plan); }
-.item.drop-after { box-shadow: 0 2px 0 var(--plan); }
-.agenda-editor { display: grid; gap: 6px; }
-.agenda-row { display: flex; gap: 4px; align-items: center; }
-.agenda-row input { flex: 1; min-width: 0; }
-.agenda-row button { padding: 3px 8px; }
+.item.selected { border-color: var(--plan); }
+.item[data-state="now"] { background: var(--tally-soft); border-color: color-mix(in srgb, var(--tally) 70%, transparent); }
+body[data-status="paused"] .item[data-state="now"] { background: var(--amber-soft); border-color: color-mix(in srgb, var(--amber) 70%, transparent); }
+.item[data-state="now"] .dur { color: var(--tally-text); }
+/* Vor dem Start gibt es weder Zeiten noch Längen: Spalten zusammenlegen */
+body[data-phase="prep"] .item { --tw: 0px; --dw: 0px; --stw: 0px; }
+body[data-phase="rec"] .item[data-state="open"] .label { color: var(--muted); }
+body[data-phase="rec"] .item[data-state="open"].next .label { color: var(--text); }
+body.mt-session .now-save .dest, body.mt-session .now-continue { display: none; }
+/* Nach dem Beenden: nie begonnene Punkte blass, sie gehören zu keinem Export */
+body[data-phase="save"] .item[data-state="open"] { background: transparent; border-style: dashed; border-color: var(--line); }
+body[data-phase="save"] .item[data-state="open"] .label { color: var(--muted); }
 .item .artist { color: var(--muted); font-size: 14px; cursor: text; }
 .item .artist.empty { display: none; }          /* belegt sonst Platz und kürzt den Namen */
 .item:hover .artist.empty, .item:focus-within .artist.empty, .item:focus .artist.empty { display: inline; opacity: .7; }
-.item:focus-visible { outline: 2px solid var(--plan); outline-offset: 1px; }
-.calendar-list { display: grid; gap: 4px; max-height: 160px; overflow-y: auto; }
-.calendar-list label { display: flex; gap: 8px; align-items: center; font-size: 14px; }
-.field { display: grid; gap: 6px; }
 .item .artist:hover { color: var(--text); }
+.item:focus-visible { outline: 2px solid var(--plan); outline-offset: 1px; }
+/* ✎ und × nur beim Darüberfahren bzw. mit Tastaturfokus */
+.item .acts { display: flex; opacity: 0; transition: opacity .12s; }
+.item:hover .acts, .item:focus-within .acts, .item:focus .acts { opacity: 1; }
+.item .mini {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  width: 34px; height: 34px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+.item .mini:hover:not(:disabled) { color: var(--text); background: var(--panel); }
+.item.drop-before { box-shadow: 0 -2px 0 var(--plan); }
+.item.drop-after { box-shadow: 0 2px 0 var(--plan); }
+.flow .empty { grid-column: 1 / -1; }
+.add-row { display: flex; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--line); }
+.add-row input { flex: 1; min-width: 0; font-size: 16px; padding: 9px 12px; border-style: dashed; }
+.add-row input:focus { border-style: solid; }
+.add-row button { padding: 0 18px; font-size: 20px; line-height: 1; }
+body[data-phase="save"] .add-row { display: none; }
+
+/* „Jetzt“: je Phase ein Block. Beim Wechsel blendet er kurz ein. */
+.now-block { display: none; flex-direction: column; gap: 12px; padding: 12px 16px 16px; overflow-y: auto; min-height: 0; }
+body[data-phase="prep"] .now-prep,
+body[data-phase="rec"] .now-rec,
+body[data-phase="save"] .now-save { display: flex; }
+.panel-now.fade .now-block { animation: now-in .28s ease-out; }
+@keyframes now-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .panel-now.fade .now-block { animation: none; } }
+
+.checks { list-style: none; margin: 0; padding: 0; display: grid; }
+.checks li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 40px; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.checks li:last-child { border-bottom: 0; }
+.checks .ic { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; color: #fff; background: var(--muted); }
+.checks li[data-level="ok"] .ic { background: var(--ok); }
+.checks li[data-level="warn"] .ic { background: var(--amber); color: #1a1200; }
+.checks li[data-level="bad"] .ic { background: var(--tally); }
+.checks .txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.checks .val { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.checks button.val { color: var(--plan); font-weight: 600; background: transparent; border-color: transparent; padding: 0 8px; height: 30px; }
+.checks button.val:hover:not(:disabled) { background: var(--raised); border-color: transparent; }
+.now-hint { color: var(--muted); font-size: 14px; line-height: 1.4; }
+.now-hint b { display: block; color: var(--text); font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.now-card {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 2px; width: 100%; text-align: left; align-items: center;
+  padding: 12px 14px; border-radius: 8px;
+  background: var(--tally-soft); border: 1px solid color-mix(in srgb, var(--tally) 70%, transparent); color: var(--text);
+}
+.now-card:hover:not(:disabled) { background: var(--tally-soft); border-color: var(--tally); }
+.now-card[data-state="paused"] { background: var(--amber-soft); border-color: color-mix(in srgb, var(--amber) 70%, transparent); }
+.now-card[data-state="idle"] { background: var(--panel-2); border-color: var(--line); cursor: default; }
+.nc-label { font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--tally-text); }
+.now-card[data-state="paused"] .nc-label { color: var(--amber); }
+.now-card[data-state="idle"] .nc-label { color: var(--muted); }
+.nc-name { font-size: 20px; font-weight: 700; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nc-artist { color: var(--muted); font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nc-artist.unset { font-style: italic; opacity: .75; }
+.now-card > :not(.nc-elapsed) { grid-column: 1; }
+.nc-elapsed { grid-column: 2; grid-row: 1 / span 3; font-size: 30px; font-weight: 300; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.nc-name:empty, .nc-artist:empty, .nc-elapsed:empty { display: none; }
+.next-card { display: grid; gap: 2px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; }
+.next-card .nc-label { color: var(--plan); }
+.next-card[hidden] { display: none; }
+.nn-name { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.save-summary { font-size: 16px; font-weight: 600; line-height: 1.35; }
+.save-summary small { display: block; color: var(--muted); font-size: 13px; font-weight: 400; }
+.dest { display: grid; gap: 1px; min-width: 0; }
+.dest-label { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dest b { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dest small { color: var(--muted); font-size: 13px; }
+.export-result { font-size: 14px; }
+.export-result:empty { display: none; }
+.now-continue { align-self: flex-start; margin-left: -10px; }
+.progress {
+  height: 6px;
+  background: var(--raised);
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.progress i { display: block; height: 100%; width: 0; background: var(--ok); transition: width .2s; }
+
+/* Bearbeiten an Ort und Stelle (Fähnchen, Listenzeile, Karte) */
 .inline-edit {
   position: fixed;
   z-index: 90;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   padding: 5px 8px;
   background: var(--raised);
   border: 1px solid var(--plan);
-  border-left: 3px solid hsl(var(--hue, 0), 55%, 62%);
+  border-left: 3px solid var(--sec, var(--plan));
   border-radius: 4px;
   box-shadow: 0 6px 18px var(--shadow);
   user-select: text;
@@ -552,8 +786,9 @@ canvas.wave {
   border-radius: 4px;
   font-size: 15px;
 }
-.inline-edit { flex-wrap: wrap; }
 .inline-edit .ie-suggest { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 3px; }
+.inline-edit .ie-name { flex: 2; }
+.inline-edit .ie-artist { flex: 1; }
 .chip {
   font-size: 13px;
   padding: 4px 11px;
@@ -564,20 +799,15 @@ canvas.wave {
   cursor: pointer;
 }
 .chip:hover { color: var(--text); border-color: var(--plan); }
-.chip.match { color: var(--text); border-color: var(--manual); }
-.inline-edit .ie-name { flex: 2; }
-.inline-edit .ie-artist { flex: 1; }
-.item .time { font-family: var(--sans); font-variant-numeric: tabular-nums; font-size: 14px; color: var(--muted); }
-.item .mini {
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  padding: 4px 10px;
-  font-size: 18px;
-  line-height: 1;
-}
-.item .mini:hover { color: var(--text); background: transparent; }
-.empty { color: var(--muted); font-size: 14px; padding: 16px; text-align: center; }
+.chip.match { color: var(--text); border-color: var(--ok); }
+.agenda-editor { display: grid; gap: 6px; }
+.agenda-row { display: flex; gap: 4px; align-items: center; }
+.agenda-row input { flex: 1; min-width: 0; }
+.agenda-row button { padding: 3px 8px; }
+.calendar-list { display: grid; gap: 4px; max-height: 160px; overflow-y: auto; }
+.calendar-list label { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.field { display: grid; gap: 6px; }
+.empty { color: var(--muted); font-size: 14px; padding: 16px; text-align: center; line-height: 1.45; }
 
 /* Tastenleiste ganz unten */
 .keybar {
@@ -623,22 +853,6 @@ kbd {
 .keys-all { gap: 8px; font-size: 13px; }
 .keys-all .keys { min-width: 150px; }
 
-
-.panel-export { padding: 0; }
-.panel-export .select, .panel-export button, .segment-info, .export-result { margin: 12px 14px 0; width: calc(100% - 28px); }
-.panel-export > button.primary { padding: 14px 16px; font-size: 17px; flex-shrink: 0; }
-.segment-info { color: var(--muted); font-size: 13px; font-family: var(--sans); font-variant-numeric: tabular-nums; }
-.export-result { font-size: 14px; padding-bottom: 14px; }
-.export-result a { color: var(--manual); cursor: pointer; text-decoration: underline; }
-.progress {
-  height: 4px;
-  background: var(--bg);
-  border-radius: 2px;
-  overflow: hidden;
-  margin: 10px 12px 0;
-  width: calc(100% - 24px);
-}
-.progress i { display: block; height: 100%; width: 0; background: var(--plan); }
 
 /* ---------------------------------------------------------------- Dialoge */
 
@@ -711,10 +925,8 @@ label small { color: var(--muted); font-size: 11px; }
 .net-status-page small { color: var(--muted); }
 
 /* Mehrspur: Kanal-Bereich statt Export (body.mt) */
-body.mt .panel-export { display: none; }
 /* Lautheit gibt es nur für Stereo (Mehrspur hat keinen Mix) */
 body.mt .loud-toggle { display: none; }
-body:not(.mt) .panel-channels { display: none; }
 .panel-channels { padding: 0; }
 .ch-status { margin: 10px 14px 0; color: var(--muted); font-size: 13px; line-height: 1.4; flex-shrink: 0; }
 .ch-status .bad { color: var(--amber); }
@@ -732,7 +944,7 @@ body:not(.mt) .panel-channels { display: none; }
 .ch b { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; }
 .ch .ch-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ch .ch-meter { position: relative; height: 8px; background: var(--bar-bg); border-radius: 2px; overflow: hidden; }
-.ch .ch-meter i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--manual); }
+.ch .ch-meter i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--ok); }
 .ch .ch-meter i[data-level="hot"] { background: var(--amber); }
 .ch .ch-meter i[data-level="clip"] { background: var(--tally); }
 .ch .ch-meter u { position: absolute; top: 0; bottom: 0; width: 2px; left: 0; background: var(--text); opacity: .7; }
@@ -752,7 +964,7 @@ body.dense .ch-list { padding: 8px 10px 10px; gap: 2px 6px; }
 
 /* Einstellungen → Mischpult */
 .mixer-line { font-size: 14px; line-height: 1.5; }
-.mixer-line .ok { color: var(--manual); }
+.mixer-line .ok { color: var(--ok); }
 .mixer-line .bad { color: var(--amber); }
 .mixer-channels { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 12px; font-size: 13px; }
 .mixer-empty { grid-column: 1 / -1; color: var(--muted); }
@@ -783,29 +995,6 @@ body.dense .ch-list { padding: 8px 10px 10px; gap: 2px 6px; }
 .list-item:hover { border-color: var(--plan); }
 .list-item .meta { color: var(--muted); font-size: 12px; font-family: var(--sans); font-variant-numeric: tabular-nums; }
 .list-item.unfinished { border-color: rgba(255,176,32,.5); }
-.export-list { margin: 12px 14px 0; display: grid; gap: 4px; overflow-y: auto; flex: 0 1 auto; min-height: 72px; align-content: start; }
-.panel-export .segment-info, .panel-export .progress, .panel-export .export-result { flex-shrink: 0; }
-.export-item {
-  display: grid;
-  grid-template-columns: auto 1fr auto auto;
-  align-items: center;
-  column-gap: 10px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  border-left: 4px solid hsl(var(--hue, 0), 55%, 62%);
-  background: var(--panel-2);
-  font-size: 15px;
-}
-.export-item.selected { outline: 1px solid var(--plan); }
-.export-item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.export-item .meta { color: var(--muted); font-size: 13px; font-family: var(--sans); font-variant-numeric: tabular-nums; }
-.export-item .done { color: var(--manual); font-size: 14px; white-space: nowrap; min-width: 14px; }
-.export-item input[type="checkbox"] { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--plan); cursor: pointer; margin: 0; }
-.export-item .done.stale { color: var(--amber); }
-.export-item input:disabled + .name { color: var(--muted); cursor: default; }
-.export-select { display: flex; gap: 2px; }
-.export-select .mini { margin: 0; width: auto; border: none; background: transparent; color: var(--muted); padding: 4px 8px; font-size: 14px; }
-.export-select .mini:hover { color: var(--text); background: transparent; }
 .list-item.current { border-color: var(--plan); }
 .list-head { color: var(--muted); font-size: 12px; font-weight: 500; padding: 6px 2px 0; }
 
@@ -838,7 +1027,7 @@ body.dense .ch-list { padding: 8px 10px 10px; gap: 2px 6px; }
 .library-item .what .meta { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .library-item .tags { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 .library-item .tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
-.library-item .tag.ok { color: var(--manual); border-color: color-mix(in srgb, var(--manual) 50%, transparent); }
+.library-item .tag.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
 .library-item .tag.warn { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 50%, transparent); }
 .library-item .tag.mt { color: var(--plan); border-color: color-mix(in srgb, var(--plan) 50%, transparent); }
 .library-item .reveal { margin: 0; width: auto; padding: 4px 8px; border: none; background: transparent; color: var(--muted); font-size: 16px; }
@@ -870,7 +1059,7 @@ body.dense .ch-list { padding: 8px 10px 10px; gap: 2px 6px; }
   box-shadow: 0 8px 24px var(--shadow);
 }
 .toast[data-level="info"] { border-left-color: var(--plan); }
-.toast[data-level="success"] { border-left-color: var(--manual); }
+.toast[data-level="success"] { border-left-color: var(--ok); }
 
 /* Fehler und Warnungen: groß, farbig, oben in der Mitte – müssen auffallen */
 .alerts {
@@ -906,6 +1095,16 @@ body.dense .ch-list { padding: 8px 10px 10px; gap: 2px 6px; }
 @keyframes alert-in { from { opacity: 0; transform: translateY(-14px) scale(.97); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .alert { animation: none; } }
 
+/* Hinweis mit Knopf (z. B. „Rückgängig“ nach dem Entfernen) */
+.toast { display: flex; align-items: center; gap: 12px; }
+.toast .msg { flex: 1; }
+.toast .toast-action { font-size: 13px; font-weight: 600; padding: 3px 10px; color: var(--plan); background: transparent; border-color: color-mix(in srgb, var(--plan) 50%, transparent); white-space: nowrap; }
+
+.item .acts { min-width: 68px; justify-content: flex-end; }
+
+
+/* ------------------------------------------------------- Kleinere Fenster */
+
 @media (max-width: 1180px) {
   .topbar { gap: 8px; padding-left: 14px; padding-right: 14px; }
   .topbar button { font-size: 15px; padding: 8px 11px; }
@@ -914,52 +1113,60 @@ body.dense .ch-list { padding: 8px 10px 10px; gap: 2px 6px; }
   .service-date { font-size: 14px; }
   .badge { font-size: 13px; padding: 4px 10px; }
   .wave-toolbar { gap: 8px; }
-  .wave-toolbar button { font-size: 15px; padding: 9px 14px; }
-  .follow { font-size: 15px; }
   .transport { gap: 16px; }
-  .transport-controls { gap: 8px; }
-  .transport-controls button { font-size: 16px; padding: 12px 16px; }
-  button.record { padding: 12px 18px; }
   .timecode { font-size: 48px; }
-  .meters { width: 190px; }
-  .panels { grid-template-columns: 1fr 1fr 300px; }
+  .meters { width: 200px; }
+  .meter { grid-template-columns: 12px minmax(0, 1fr) 34px; gap: 6px; }
+  .meter-scale { grid-template-columns: 12px minmax(0, 1fr) 34px; gap: 6px; }
+  .meter-scale .ticks span:nth-child(5) { display: none; }
+  .panels { grid-template-columns: minmax(0, 1fr) 300px; }
   .panel-head h2 { font-size: 15px; }
-  .panel-head { padding: 12px 12px; }
+  .item { --tw: 118px; --dw: 62px; --stw: 92px; column-gap: 8px; font-size: 15px; }
+  .item .time { font-size: 13px; }
 }
 
 /* Niedrige Fenster: Kopfbereich und Wellenform enger, damit unten genug Platz für die Listen bleibt */
 @media (max-height: 820px) {
   .topbar { padding: 8px 20px; }
   .transport { padding: 10px 20px; }
-  .transport-controls button, button.record { font-size: 16px; padding: 10px 18px; }
+  .transport-controls > button, .rec-ctl > button { --h: 46px; }
+  #btn-record.go { font-size: 16px; }
   .timecode { font-size: 44px; }
-  .current-item { margin-top: 4px; font-size: 15px; }
+  .status-line { margin-top: 4px; font-size: 14px; }
   .wave-section { padding-top: 8px; }
   .wave-toolbar { padding-bottom: 8px; }
-  .wave-toolbar button { padding: 7px 16px; }
+  .wave-toolbar button { padding: 7px 14px; }
   .wave-toolbar .zoom button, .wave-toolbar .play-btn { --size: 38px; width: 38px; height: 38px; }
+  .cut-btn { height: 38px; }
   canvas.wave { height: 150px; }
+  canvas.overview { height: 16px; margin-bottom: 4px; }
   .panels { padding-top: 10px; padding-bottom: 12px; }
+  .panel-head { min-height: 44px; padding-top: 5px; padding-bottom: 5px; }
+  .item { min-height: 40px; }
+  .now-block { gap: 8px; padding-top: 8px; }
+  .checks li { min-height: 34px; }
+  .nc-elapsed { font-size: 24px; }
 }
 @media (max-height: 720px) {
   canvas.wave { height: 120px; }
-  .meters { gap: 4px; }
+  .meters { gap: 3px; }
 }
 
 /* ---------------------------------------------------------- Mini-Fenster
-   body.compact: nur Kopfzeile, Timer, Pegel, Aufnahme- und Abschnittsknöpfe. Die Wellenform bleibt in
-   voller Breite außerhalb des Fensters, damit Zoom und Ansicht beim Zurückschalten stimmen.
-   Aufbau (ab 320×164): Kopfzeile · Pegel als schmaler Streifen · Timer mit Pause/Beenden (bzw. Start) ·
-   laufender Abschnitt · „Abschnitt …“ und „→ nächster Punkt“. */
+   body.compact: nur Kopfzeile, Pegelstreifen, Timer mit Start bzw. Pause/Beenden, laufender Abschnitt und M/N.
+   Die Wellenform bleibt in voller Breite außerhalb des Fensters, damit Zoom und Ansicht beim Zurückschalten stimmen.
+   Aufbau (ab 320×164): Kopfzeile · Pegel als schmaler Streifen · Timer + Knöpfe · laufender Abschnitt · M | N. */
 
 .compact-only { display: none; }
 .ontop { color: var(--muted); font-size: 13px; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
 .ontop input { width: 16px; height: 16px; accent-color: var(--plan); cursor: pointer; }
 
-body.compact { display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; }
+body.compact { overflow-y: auto; overflow-x: hidden; }
 body.compact .compact-only { display: flex; }
 body.compact .panels,
-body.compact .keybar { display: none; }
+body.compact .keybar,
+body.compact .phase-steps,
+body.compact .status-line { display: none; }
 
 body.compact .topbar { padding: 4px 8px; gap: 6px; }
 body.compact .topbar button { font-size: 12px; padding: 3px 8px; }
@@ -979,16 +1186,38 @@ body.compact .audio-warning { padding: 4px 8px; font-size: 12px; }
 
 body.compact .transport {
   grid-template-columns: auto minmax(0, 1fr);
-  grid-template-areas: "meters meters" "clock controls" "current current";
+  grid-template-areas: "meters meters" "clock ctl" "current current" "mark next";
   align-content: start;
   align-items: center;
-  gap: 5px 10px;
-  padding: 5px 8px;
+  gap: 5px 8px;
+  padding: 5px 8px 6px;
   border-bottom: none;
 }
 body.compact .clock { display: contents; }
-body.compact .timecode { grid-area: clock; }
-body.compact .timecode { font-size: 28px; }
+body.compact .timecode { grid-area: clock; font-size: 28px; }
+body.compact .transport-controls { display: contents; }
+body.compact #btn-record { grid-area: ctl; }
+body.compact .rec-ctl { grid-area: ctl; justify-self: end; gap: 5px; margin: 0; }
+body.compact #btn-marker { grid-area: mark; }
+body.compact #btn-next-item { grid-area: next; }
+body.compact .transport-controls > button,
+body.compact .rec-ctl > button { --h: 28px; font-size: 13px; padding: 0 9px; gap: 6px; min-width: 0; }
+body.compact .icon-only svg { width: 15px; height: 15px; }
+body.compact kbd.k { font-size: 9px; padding: 0 3px; }
+body.compact #btn-record.go { min-width: 0; font-size: 13px; gap: 6px; justify-content: center; }
+body.compact button.record .dot { width: 9px; height: 9px; }
+body.compact #record-label { overflow: hidden; text-overflow: ellipsis; }
+body.compact #record-key { display: none; }
+body.compact #btn-next-item kbd, body.compact #btn-marker kbd { display: none; }
+body.compact .nb-cap { display: none; }
+body.compact .nb-name { font-size: 13px; font-weight: 600; }
+body.compact .nb-name::before { content: "→ "; font-weight: 400; opacity: .8; }
+body.compact .mk-text, body.compact[data-next="none"] .mk-text { flex-direction: row; gap: 4px; }
+body.compact .mk-cap, body.compact #marker-label, body.compact[data-next="none"] .mk-cap, body.compact[data-next="none"] #marker-label { font-size: 13px; color: inherit; font-weight: 500; }
+body.compact[data-next="none"] #btn-marker { grid-column: 1 / -1; }
+body.compact #btn-export, body.compact #btn-continue { display: none !important; }
+body.compact .hold-btn .hold-bar { height: 3px; }
+
 /* Laufender Abschnitt groß: Name und Interpret, Klick bearbeitet beides */
 body.compact .current-item {
   grid-area: current;
@@ -1001,42 +1230,34 @@ body.compact .current-item {
   text-align: left;
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-left: 4px solid hsl(var(--hue, 0), 55%, 62%);
+  border-left: 4px solid var(--sec, var(--line));
   border-radius: var(--radius);
   font-size: 15px;
   font-weight: 600;
+  color: var(--text);
 }
+body.compact .current-item:disabled { opacity: 1; cursor: default; }
 body.compact .current-item:not([data-live="true"]) { border-left-color: var(--line); color: var(--muted); font-weight: 400; }
 body.compact .ci-text { display: flex; flex-direction: column; align-items: flex-start; flex: 1; min-width: 0; text-align: left; }
 body.compact .ci-text > * { max-width: 100%; }
 body.compact .ci-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; }
 body.compact .ci-artist { font-size: 12px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3; }
-body.compact .ci-artist::before { content: none; }
 body.compact .ci-edit { display: block; color: var(--muted); font-size: 14px; font-weight: 400; }
 body.compact .current-item[data-live="true"]:hover .ci-edit { color: var(--text); }
+body.compact .ci-elapsed { font-size: 16px; }
+body.compact[data-phase="prep"] .current-item { display: none; }
+
 /* Pegel als schmaler Streifen über die ganze Breite: L und R nebeneinander, „Übersteuert“ rechts */
 body.compact .meters { grid-area: meters; width: auto; display: flex; align-items: center; gap: 6px; }
-body.compact .meter { flex: 1; gap: 0; }
-body.compact .meter-label { display: none; }
+body.compact .meter { flex: 1; display: block; }
+body.compact .meter-label, body.compact .meter-db, body.compact .meter-scale { display: none; }
 body.compact .bar { height: 5px; border: none; border-radius: 2px; }
-body.compact .clip { font-size: 10px; line-height: 1; }
+body.compact .bar u { width: 1px; }
+body.compact .clip { font-size: 10px; line-height: 1.2; padding: 0 5px; }
 body.compact .clip:not([data-on="true"]) { display: none; }
-body.compact .transport-controls { grid-area: controls; gap: 5px; min-width: 0; justify-content: flex-end; }
-body.compact .transport-controls button { font-size: 13px; padding: 5px 9px; white-space: nowrap; }
-body.compact .transport-controls button.record { flex: 1; justify-content: center; gap: 6px; min-width: 0; }
-body.compact button.record .dot { width: 9px; height: 9px; flex-shrink: 0; }
-body.compact #record-label { overflow: hidden; text-overflow: ellipsis; }
-/* Während der Aufnahme zeigt der (gesperrte) Aufnahmeknopf nur den Zustand: Timer und roter Rand sagen das schon */
-body.compact[data-status="recording"] #btn-record,
-body.compact[data-status="paused"] #btn-record { display: none; }
-/* Vor dem Start sind Pause/Beenden gesperrt: ausblenden, damit „Neue Aufnahme starten“ Platz hat */
-body.compact:not([data-status="recording"]):not([data-status="paused"]) #btn-pause,
-body.compact:not([data-status="recording"]):not([data-status="paused"]) #btn-stop { display: none; }
 
-body.compact .wave-section { padding: 0 8px 6px; background: var(--panel); }
-body.compact .wave-toolbar { padding-bottom: 0; gap: 5px; align-items: stretch; }
-body.compact .wave-toolbar > :not(#btn-marker):not(#btn-next-item) { display: none; }
-body.compact .wave-toolbar button { font-size: 12px; padding: 5px 6px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.compact .wave-section { padding: 0; background: var(--panel); }
+body.compact .wave-toolbar, body.compact canvas.overview, body.compact .wave-chips { display: none; }
 body.compact canvas.wave { position: fixed; left: -10000px; top: 0; width: 1000px; }
 
 body.compact .alerts { top: 6px; width: calc(100vw - 16px); }
@@ -1044,6 +1265,7 @@ body.compact .alert { padding: 8px 10px; font-size: 13px; gap: 8px; }
 body.compact .alert::before { font-size: 17px; }
 body.compact .toasts { left: 8px; right: 8px; bottom: 8px; max-width: none; }
 body.compact .toast { font-size: 12px; padding: 5px 8px; }
+body.compact .loud-help { display: none; }
 
 /* Mini-Fenster nach dem Beenden (body.review): keine Aufnahmeknöpfe, dafür der MP3-Export */
 .compact-export { display: none; }
@@ -1054,12 +1276,10 @@ body.compact.review .compact-export {
   padding: 4px 8px 6px;
   background: var(--panel);
 }
-body.compact.review .transport-controls,
-body.compact.review .wave-toolbar,
+body.compact.review .transport-controls > *,
 body.compact.review .meters,
-body.compact.review .current-item { display: none; }
-body.compact.review .wave-section { padding: 0; }
-body.compact.review .transport { grid-template-areas: "clock controls"; padding-bottom: 2px; }
+body.compact.review .current-item { display: none !important; }
+body.compact.review .transport { grid-template-areas: "clock ctl"; padding-bottom: 2px; }
 .ce-summary { font-size: 13px; color: var(--muted); }
 .compact-export > button.primary { padding: 6px 10px; font-size: 14px; }
 .compact-export .progress { margin: 0; width: 100%; }
@@ -1068,43 +1288,10 @@ body.compact.review .transport { grid-template-areas: "clock controls"; padding-
 .ce-result .mini-link { margin-left: 4px; }
 .compact-export > button.ghost { align-self: flex-start; font-size: 12px; padding: 2px 6px; }
 
-/* „Nächster Ablaufpunkt“ nennt den Namen des Punktes */
-.nb-name { margin-left: 8px; color: var(--text); font-weight: 600; max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; display: inline-block; }
-.nb-name[hidden] { display: none; }
-.nb-name::before { content: "→ "; font-weight: 400; color: var(--muted); }
-/* Im Mini-Fenster einzeilig: „→ Predigt“ (ohne Punkt: „Nächster Ablaufpunkt“), voller Text im Tooltip */
-body.compact #btn-next-item { display: flex; align-items: center; justify-content: center; min-width: 0; }
-body.compact #btn-next-item:has(.nb-name:not([hidden])) .nb-label { display: none; }
-body.compact .nb-name { margin: 0; max-width: 100%; font-size: 12px; display: block; }
-body.compact .nb-name[hidden] { display: none; }
-
-/* Große Ansicht: Name · Interpret in einer Zeile (gekürzt), die Laufzeit daneben */
-.clock { min-width: 0; max-width: 100%; }
-.current-item { display: inline-flex; align-items: baseline; max-width: 100%; }
-.current-item .ci-text { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.current-item .ci-elapsed { flex-shrink: 0; }
-/* Laufzeit des aktuellen Abschnitts */
-.ci-elapsed { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); margin-left: 12px; white-space: nowrap; }
-.ci-elapsed::before { content: "⏱ "; font-weight: 400; color: var(--muted); }
-.ci-elapsed[hidden] { display: none; }
-body.compact .ci-elapsed { margin-left: 0; font-size: 16px; }
-body.compact .ci-elapsed::before { content: none; }
-
-/* Laufzeit je Abschnitt in der Liste */
-.item .dur { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 15px; color: var(--text); white-space: nowrap; margin-left: 4px; }
-.item .dur[data-live] { color: var(--tally-text); }
-.item .time { white-space: nowrap; }
-@media (max-width: 1180px) {
-  .item .time { font-size: 12px; }
-  .item .dur { font-size: 14px; margin-left: 2px; }
-  #marker-list .item { gap: 6px; padding-left: 10px; padding-right: 8px; }
-}
-
 /* ------------------------------------------------------- Kompakte Ansicht
    body.dense (Schalter „Kompakt“, Einstellung denseLayout): alle Bereiche und Funktionen wie in der großen
    Ansicht, nur kleiner und dichter, damit auch ein kleines Fenster (ab 760×520) voll bedienbar bleibt.
    Im Mini-Fenster wird die Klasse nicht gesetzt (dort gelten die eigenen Regeln). */
-
 
 body.dense { font-size: 13px; }
 body.dense button { padding: 5px 10px; }
@@ -1117,21 +1304,42 @@ body.dense .service-name { padding: 3px 6px; gap: 8px; }
 body.dense #service-name { font-size: 15px; }
 body.dense .service-date { font-size: 13px; }
 body.dense .badge { font-size: 12px; padding: 2px 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }   /* im schmalen Fenster gekürzt */
+body.dense .phase-steps { font-size: 12px; gap: 18px; }
+body.dense .phase-steps li { padding: 3px 9px; }
+body.dense .phase-steps li + li::before { left: -12px; }
 body.dense .audio-warning { padding: 4px 10px; font-size: 13px; }
 
 body.dense .transport { gap: 14px; padding: 6px 12px; }
-body.dense .transport-controls { gap: 6px; min-width: 412px; }
-body.dense .transport-controls button,
-body.dense button.record { font-size: 14px; padding: 7px 12px; }
-body.dense button.record { gap: 8px; min-width: 210px; }
+body.dense .transport-controls { gap: 6px; width: 412px; }
+body.dense .transport-controls > button,
+body.dense .rec-ctl > button { --h: 36px; font-size: 14px; padding: 0 12px; gap: 7px; }
+body.dense .rec-ctl { gap: 6px; }
+body.dense #btn-record.go { font-size: 15px; min-width: 210px; gap: 8px; }
 body.dense button.record .dot { width: 10px; height: 10px; }
-body.dense #btn-pause { min-width: 100px; }
+body.dense #btn-export { font-size: 14px; }
+body.dense #btn-next-item { padding: 0 12px; }
+body.dense .nb-cap { font-size: 9px; gap: 4px; }
+body.dense .nb-cap kbd.k { font-size: 8px; padding: 0 3px; }
+body.dense .nb-name { font-size: 14px; line-height: 1.15; }
+body.dense #btn-marker { padding: 0 10px; gap: 6px; }
+body.dense .mk-text { line-height: 1.1; }
+body.dense .mk-cap { font-size: 10px; }
+body.dense #marker-label { font-size: 12px; }
+body.dense[data-next="none"] .mk-cap, body.dense[data-next="none"] #marker-label { font-size: 14px; }
+body.dense[data-phase="save"] #btn-record { font-size: 14px; padding: 0 12px; }
+body.dense .icon-only svg { width: 17px; height: 17px; }
+body.dense kbd.k { font-size: 10px; padding: 0 4px; }
 body.dense .timecode { font-size: 34px; }
-body.dense .current-item { margin-top: 2px; font-size: 13px; padding: 1px 6px; }
-body.dense .ci-elapsed { margin-left: 8px; }
-body.dense .meters { width: 190px; gap: 4px; }
-body.dense .bar { height: 9px; }
-body.dense .meter-label, body.dense .clip { font-size: 11px; }
+body.dense .status-line { margin-top: 2px; font-size: 12px; gap: 6px; }
+body.dense .status-line .sd { width: 7px; height: 7px; }
+body.dense .meters { width: 210px; gap: 3px; }
+body.dense .meter, body.dense .meter-scale { grid-template-columns: 10px minmax(0, 1fr) 30px; gap: 5px; }
+body.dense .bar { height: 8px; }
+body.dense .meter-label, body.dense .meter-db { font-size: 11px; }
+body.dense .meter-scale { font-size: 9px; }
+body.dense .meter-scale .ticks { height: 10px; }
+body.dense .meter-scale .ticks span:nth-child(5) { display: none; }
+body.dense .clip { font-size: 10px; padding: 0 6px; }
 @media (min-width: 1340px) {
   body.dense .transport { grid-template-columns: minmax(0, 1fr) 260px minmax(0, 1fr); }
   body.dense .transport .clock { width: 260px; }
@@ -1142,6 +1350,8 @@ body.dense .wave-toolbar { gap: 6px; padding-bottom: 6px; }
 body.dense .wave-toolbar button { font-size: 13px; padding: 4px 10px; }
 body.dense .wave-toolbar .zoom button, body.dense .wave-toolbar .play-btn { --size: 30px; width: 30px; height: 30px; padding: 0; }
 body.dense .wave-toolbar .play-btn.with-label { width: auto; padding: 0 12px 0 8px; }
+body.dense .cut-btn { height: 30px; gap: 6px; }
+body.dense .cut-btn svg { width: 15px; height: 15px; }
 body.dense .play-btn svg { width: 17px; height: 17px; }
 body.dense .zoom svg { width: 17px; height: 17px; }
 body.dense .play-label { font-size: 13px; }
@@ -1150,40 +1360,49 @@ body.dense .wave-chip span { display: none; }
 body.dense .wave-chip svg { width: 13px; height: 13px; }
 body.dense .wave-chips { left: 6px; bottom: 6px; }
 body.dense .zoom { gap: 4px; }
-body.dense .follow { font-size: 13px; gap: 5px; }
-body.dense .follow input { width: 15px; height: 15px; }
-body.dense .nb-name { max-width: 16ch; }
 body.dense canvas.wave { height: 150px; }
+body.dense canvas.overview { height: 14px; margin-bottom: 4px; }
 
-body.dense .panels { grid-template-columns: 1fr 1fr 300px; gap: 8px; padding: 8px 12px 10px; }
-body.dense .panel-head { padding: 6px 10px; gap: 6px; flex-wrap: wrap; align-items: center; }
+body.dense .panels { grid-template-columns: minmax(0, 1fr) 290px; gap: 8px; padding: 8px 12px 10px; }
+body.dense.mt .panels { grid-template-columns: minmax(0, 1fr) minmax(330px, 1.25fr); }
+body.dense .panel-head { min-height: 34px; padding: 3px 8px 3px 10px; gap: 6px; }
 body.dense .panel-head h2 { font-size: 14px; }
-body.dense .head-actions { gap: 4px; align-items: center; }
-body.dense .head-actions .secondary { font-size: 12px; padding: 3px 7px; }
-body.dense .panel-head .select { font-size: 12px; padding: 3px 6px; }
+body.dense .head-actions { gap: 4px; }
+body.dense .head-actions button, body.dense .export-select button { font-size: 12px; height: 26px; padding: 0 8px; }
+body.dense .panel-head .select { font-size: 12px; height: 26px; padding: 0 6px; max-width: 160px; }
 body.dense .plan-source { font-size: 12px; padding: 3px 10px; }
-body.dense .hint { font-size: 12px; }
-body.dense .pending, body.dense .markers { padding: 6px; }
-body.dense .item { padding: 5px 8px; gap: 6px; margin-bottom: 3px; font-size: 13px; border-left-width: 3px; border-radius: 4px; }
-body.dense .item .mini { font-size: 14px; padding: 2px 5px; }
+body.dense .flow { padding: 6px; gap: 3px; }
+body.dense .item { --tw: 104px; --dw: 52px; --stw: 78px; min-height: 30px; padding: 2px 6px 2px 8px; column-gap: 7px; font-size: 13px; border-radius: 4px; grid-template-columns: 14px 4px var(--tw) minmax(0, 1fr) var(--dw) var(--stw) auto; }
+body.dense .item .sw { width: 4px; height: 20px; }
 body.dense .item .time { font-size: 11px; }
-body.dense .item .dur { font-size: 12px; margin-left: 2px; }
+body.dense .item .dur { font-size: 12px; }
+body.dense .item .st { font-size: 11px; }
 body.dense .item .artist { font-size: 12px; }
+body.dense .item .mini { width: 24px; height: 24px; font-size: 14px; }
+body.dense .item .acts { min-width: 48px; }
+body.dense .item input[type="checkbox"] { width: 14px; height: 14px; }
 body.dense .empty { font-size: 12px; padding: 10px; }
 body.dense .add-row { gap: 6px; padding: 6px 8px 8px; }
 body.dense .add-row input { font-size: 13px; padding: 5px 8px; }
-body.dense .add-row button { font-size: 16px; padding: 3px 12px; }
+body.dense .add-row button { font-size: 16px; padding: 0 12px; }
 
-body.dense .panel-export .select, body.dense .panel-export button,
-body.dense .segment-info, body.dense .export-result { margin: 8px 10px 0; width: calc(100% - 20px); }
-body.dense .panel-export > button.primary { padding: 7px 10px; font-size: 14px; }
-body.dense .export-list { margin: 8px 10px 0; gap: 3px; min-height: 52px; }
-body.dense .export-item { padding: 3px 8px; font-size: 13px; column-gap: 8px; border-left-width: 3px; border-radius: 4px; }
-body.dense .export-item input[type="checkbox"] { width: 14px; height: 14px; }
-body.dense .export-item .meta, body.dense .segment-info { font-size: 12px; }
-body.dense .export-item .done { font-size: 12px; }
-body.dense .export-select .mini { font-size: 12px; padding: 2px 6px; }
-body.dense .export-result { font-size: 12px; padding-bottom: 10px; }
+body.dense .now-block { gap: 8px; padding: 8px 10px 10px; }
+body.dense .checks li { min-height: 28px; padding: 2px 0; font-size: 13px; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 8px; }
+body.dense .checks .ic { width: 16px; height: 16px; font-size: 10px; }
+body.dense .checks .val { font-size: 12px; }
+body.dense .checks button.val { height: 24px; }
+body.dense .now-hint { font-size: 12px; }
+body.dense .now-hint b { font-size: 13px; }
+body.dense .now-card { padding: 8px 10px; }
+body.dense .nc-label { font-size: 10px; }
+body.dense .nc-name { font-size: 16px; }
+body.dense .nc-artist { font-size: 13px; }
+body.dense .nc-elapsed { font-size: 22px; margin-top: 2px; }
+body.dense .next-card { padding: 6px 10px; }
+body.dense .nn-name { font-size: 13px; }
+body.dense .save-summary { font-size: 14px; }
+body.dense .dest b { font-size: 13px; }
+body.dense .dest small, body.dense .export-result { font-size: 12px; }
 
 body.dense .keybar { padding: 3px 12px; font-size: 11px; gap: 10px; }
 body.dense .keybar-list { gap: 2px 14px; }
@@ -1195,11 +1414,14 @@ body.dense .alert::before { font-size: 20px; }
 
 /* Schmale Fenster in der kompakten Ansicht */
 @media (max-width: 1020px) {
-  body.dense .panels { grid-template-columns: 1fr 1fr 250px; }
-  body.dense .meters { width: 130px; }
+  body.dense .panels { grid-template-columns: minmax(0, 1fr) 250px; }
+  body.dense .meters { width: 150px; }
+  body.dense .meter-db { display: none; }
+  body.dense .meter, body.dense .meter-scale { grid-template-columns: 10px minmax(0, 1fr) 0; gap: 4px; }
+  body.dense .meter-scale .ticks span:nth-child(2), body.dense .meter-scale .ticks span:nth-child(4) { display: none; }
   body.dense .transport { gap: 10px; }
-  body.dense .item .time { display: none; }      /* Zeitraum steht im Tooltip, die Länge bleibt */
-  body.dense .hint { display: none; }
+  body.dense .item { --tw: 0px; column-gap: 6px; }
+  body.dense .item .time { visibility: hidden; }   /* Zeitraum steht im Tooltip, die Länge bleibt (nicht display: none – sonst rutschen die Spalten) */
   body.dense .service-date { display: none; }   /* Platz für den Namen; das Datum steht im Termin-Dialog */
   body.dense .badge { max-width: 120px; }
 }
@@ -1209,6 +1431,7 @@ body.dense .alert::before { font-size: 20px; }
 @media (max-height: 580px) {
   body.dense canvas.wave { height: 90px; }
   body.dense .keybar { display: none; }        /* Kürzel weiter über „?“ */
+  body.dense .nc-elapsed { font-size: 18px; }
 }
 body.compact .topbar .view-switch button { font-size: 11px; padding: 2px 6px; }
 
@@ -1225,9 +1448,6 @@ body.compact .topbar .view-switch button { font-size: 11px; padding: 2px 6px; }
 #version-info[data-level="error"] { color: var(--cut-text); }
 #update-page { margin-right: auto; }
 
-/* Mehrspur: Der Kanal-Bereich braucht mehr Breite als der Export (sonst nur „Pr…“ statt der Kanalnamen). */
-body.mt .panels { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(380px, 1.25fr); }
-body.dense.mt .panels { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(330px, 1.25fr); }
 @media (max-width: 1180px) {
   .ch { grid-template-columns: 20px minmax(0, 1fr) 40px; gap: 5px; }
   body.dense .ch { grid-template-columns: 18px minmax(0, 1fr) 34px; }
@@ -1271,3 +1491,16 @@ body.dense .topbar { --top-h: 28px; --top-font: 13px; --top-pad: 10px; --top-gro
 /* Mini-Fenster: nur das Mini-Symbol (gedrückt, Klick = zurück), klein */
 body.compact .topbar { --top-h: 24px; --top-font: 11px; --top-pad: 8px; }
 body.compact .service-name { height: auto; }
+
+/* Die Ablauf-Liste richtet ihre Spalten nach der eigenen Breite (schmal z. B. neben „Kanäle“ bei Mehrspur):
+   erst entfällt der Zeitraum (steht im Tooltip), dann der Zustand. Unsichtbar statt display: none, sonst rutschen die
+   Spalten. Steht am Ende und mit `body`, damit es die Regeln für Fenstergrößen und die kompakte Ansicht überstimmt. */
+.panel-flow { container-type: inline-size; container-name: flow; }
+@container flow (max-width: 640px) {
+  body .panel-flow .item { --tw: 0px; }
+  body .panel-flow .item .time { visibility: hidden; }
+}
+@container flow (max-width: 460px) {
+  body .panel-flow .item { --stw: 0px; }
+  body .panel-flow .item .st { visibility: hidden; }
+}
