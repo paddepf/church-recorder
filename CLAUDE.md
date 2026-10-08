@@ -75,9 +75,14 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 ### Aufnahme, Fortsetzen, Schutz
 - **Beim Start beginnt der erste offene Ablaufpunkt von selbst** (`Session.start` ruft `startNextPending(0)`; ohne Punkte
   passiert nichts; gilt nicht beim Anhängen mit „Fortsetzen“ und nicht beim Fortsetzen aus der Pause).
-- „Neue Aufnahme starten“ fragt nach, wenn eine beendete Aufnahme angezeigt wird,
-  und setzt deren Abschnitte zurück (Ablaufpunkte werden wieder offen). Dateinamen
-  werden nie überschrieben (`_freeBasePath` hängt `_2`, `_3` an).
+- **„Neue Aufnahme“ nach dem Beenden startet nicht gleich** (Wunsch des Nutzers, 2026-10-08): Nach der Rückfrage
+  („Neue Aufnahme vorbereiten?“, nennt ungesicherte Abschnitte) geht es zurück in „Vorbereiten“
+  (`prepareNewRecording` → IPC `session:new` mit `keepPlan` → `Session.prepareNext`): Gottesdienst und Ablauf bleiben,
+  die Punkte sind wieder offen, eigene Abschnitte (M) entfallen, die beendete Aufnahme bleibt als Datei. So lässt sich
+  vorher noch eine andere Vorlage oder ein anderer Termin wählen; gestartet wird ausdrücklich mit „Aufnahme starten“.
+  Gilt für den Knopf, „Neue Aufnahme“ im Mini-Fenster und `Strg`/`Cmd`+R nach dem Beenden; Companion (`record.start`)
+  startet weiter direkt (die Rückfrage in `startRecording` bleibt dafür). `reset()` setzt jetzt auch
+  `_restoredDuration` zurück. Dateinamen werden nie überschrieben (`_freeBasePath` hängt `_2`, `_3` an).
 - „Fortsetzen“ nach dem Beenden hängt an dieselbe WAV an
   (`WavWriter` mit `append`) und braucht dieselbe Abtastrate.
 - Pause: Der Eingang läuft weiter, die Oberfläche verwirft die Blöcke (sonst
@@ -723,6 +728,7 @@ dran?“; je Phase genau eine Hauptaktion, der Aufbau bleibt gleich, nur die Bet
 - **Beenden halten:** `bindHold` – Maus/Touch oder Enter/Leertaste 600 ms halten (Balken `.hold-bar`), zu kurz → Hinweis.
   Beim Loslassen zählt die tatsächlich gehaltene Zeit (`performance.now()`), weil Chromium Timer im Hintergrundfenster
   drosselt – im Test kam der 600-ms-Timer erst nach dem Loslassen. `Strg`/`Cmd`+R und Companion beenden sofort.
+- Das Eingabefeld unter der Liste „Ablauf“ hat bewusst keinen Platzhaltertext (Wunsch des Nutzers).
 - **Liste „Ablauf“** (`#flow-list`, `renderFlow`/`flowRow`/`fullRow`) ersetzt Ablaufplan, Abschnitte und Export:
   gesetzte Abschnitte nach Zeit (`data-state` done/now), dahinter offene Punkte nach `order` (open, der erste während
   der Aufnahme „als Nächstes“), nach dem Beenden „Gesamte Aufnahme“ (full). Spalten fest per Variablen (`--tw` Zeitraum,

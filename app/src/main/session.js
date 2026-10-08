@@ -113,7 +113,31 @@ class Session extends EventEmitter {
     this._bucketAcc = 0;
     this._bucketFrames = 0;
     this._clipUntil = 0;
+    this._restoredDuration = 0;
     this._dirty = false;
+  }
+
+  /**
+   * „Neue Aufnahme“ nach dem Beenden: zurück in den Zustand vor dem Start, ohne gleich aufzunehmen. Die beendete
+   * Aufnahme bleibt als Datei erhalten (vorher gespeichert); Gottesdienst und Ablauf bleiben, die Punkte des Ablaufs
+   * sind wieder offen, eigene Abschnitte (M) entfallen – wie beim Start einer neuen Aufnahme. So lässt sich vor dem
+   * nächsten Start noch eine andere Vorlage oder ein anderer Gottesdienst wählen.
+   */
+  prepareNext() {
+    const keep = {
+      service: this.service,
+      agendaOrigin: this.agendaOrigin,
+      sections: this.sections
+        .filter((x) => x.source !== 'manual')
+        .map((x) => ({ ...x, start: null, end: null })),
+      colorSeq: this._colorSeq
+    };
+    this.reset();
+    this.service = keep.service;
+    this.agendaOrigin = keep.agendaOrigin;
+    this.sections = keep.sections;
+    this._colorSeq = keep.colorSeq;
+    this._lastEdit = this._editJson();
   }
 
   /* ------------------------------------------------------------------ Zustand */

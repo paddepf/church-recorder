@@ -177,3 +177,26 @@ test('Punkt vor dem Start hineingezogen läuft ab 0:00 offen mit', () => withSes
   s.startNextPending(s.duration);
   assert.equal(labels(s), 'A:0-3 | B:3-null');
 }));
+
+test('Neue Aufnahme vorbereiten: zurück vor den Start, Ablauf wieder offen, nichts läuft', () => withSession(async (s) => {
+  s.setService({ name: 'Gottesdienst', date: '2026-10-11' });
+  s.setAgenda([{ id: null, title: 'Einleitung' }, { id: null, title: 'Predigt' }], 'plan');
+  s.start({ sampleRate: 8000, channels: 2 });
+  s.pushAudio(silence(3));
+  s.startNextPending();
+  s.pushAudio(silence(2));
+  s.toggleSection({});
+  s.toggleSection({ label: 'Eigener' });
+  s.pushAudio(silence(1));
+  s.stop();
+  await s.whenWritten();
+  const wav = s.wavPath;
+  s.prepareNext();
+  assert.equal(s.status, 'idle');
+  assert.equal(s.wavPath, null);
+  assert.equal(s.duration, 0);
+  assert.equal(s.service.name, 'Gottesdienst');
+  assert.deepEqual(s.pendingSections().map((x) => x.label), ['Einleitung', 'Predigt']);   // eigener Abschnitt (M) entfällt
+  assert.equal(s.placedSections().length, 0);
+  assert.ok(fs.existsSync(wav));                                                           // die beendete Aufnahme bleibt
+}));

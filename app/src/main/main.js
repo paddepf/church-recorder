@@ -1632,12 +1632,13 @@ ipcMain.handle('session:recoverable', () => {
   return ok({ sessions: unfinished });
 });
 
-ipcMain.handle('session:new', () => {
+/* Neue, leere Session; mit `keepPlan` (Knopf „Neue Aufnahme“ nach dem Beenden) bleiben Gottesdienst und Ablauf. */
+ipcMain.handle('session:new', (_e, { keepPlan } = {}) => {
   if (session.status === 'recording' || session.status === 'paused') {
     return fail('Es läuft noch eine Aufnahme.');
   }
   multitrack.stopPlayback().catch(() => {});
-  session.reset();
+  if (keepPlan) session.prepareNext(); else session.reset();
   session.emit('state', session.snapshot());
   return ok({ state: session.snapshot() });
 });

@@ -36,7 +36,8 @@ contextBridge.exposeInMainWorld('api', {
     list: () => invoke('session:list'),
     open: (path) => invoke('session:open', { path }),
     recoverable: () => invoke('session:recoverable'),
-    reset: () => invoke('session:new')
+    reset: () => invoke('session:new'),
+    prepareNext: () => invoke('session:new', { keepPlan: true })
   },
 
   record: {

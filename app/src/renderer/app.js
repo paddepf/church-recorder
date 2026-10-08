@@ -1007,6 +1007,46 @@
     }
   }
 
+  /**
+   * „Neue Aufnahme“ nach dem Beenden: nicht gleich aufnehmen, sondern zurück in „Vorbereiten“. Gottesdienst und Ablauf
+   * bleiben (Punkte wieder offen), so lässt sich noch eine andere Vorlage oder ein anderer Termin wählen; gestartet
+   * wird danach ausdrücklich mit „Aufnahme starten“. Companion (`record.start`) startet weiterhin direkt.
+   */
+  async function prepareNewRecording() {
+    const s = state.session;
+    if (!s || isLive() || state.starting) return;
+    if (s.status === 'stopped' && hasAudio(s)) {
+      const unsaved = s.mode === 'multitrack' ? 0 : unsavedSegments().length;
+      const go = await confirmDialog(
+        'Neue Aufnahme vorbereiten?',
+        unsaved
+          ? `${unsaved} ${unsaved === 1 ? 'Abschnitt ist' : 'Abschnitte sind'} noch nicht als MP3 gesichert.`
+          : 'Die bisherige Aufnahme bleibt gespeichert.',
+        'Neue Aufnahme vorbereiten'
+      );
+      if (!go) return;
+    }
+    $('player').pause();
+    $('player').removeAttribute('src');
+    monitor.pause();
+    const res = await window.api.session.prepareNext();
+    if (!res.ok) return toast('error', res.error);
+    state.exportSeen.clear();
+    state.exportChecked.clear();
+    state.selectedSectionId = null;
+    state.selectedSegmentId = null;
+    state.cursorT = null;
+    state.playheadT = null;
+    state.clipLatched = false;
+    state.peaks = [];
+    wave.peaks = state.peaks;
+    setLoudness([]);
+    wave.update({ playhead: null, selectedSegment: null });
+    setDefaultZoom();
+    setExportResult('');
+    applyState(res.state, []);
+  }
+
   /* ------------------------------------------------- Wächter für den Eingang */
 
   const WATCHDOG_MS = 2500;      // so lange darf der Eingang schweigen, bevor neu verbunden wird
@@ -1720,6 +1760,8 @@
   function bindUi() {
     $('btn-record').addEventListener('click', () => {
       if (state.session?.status === 'paused') return window.api.record.resume();
+      // Nach dem Beenden: erst zurück in „Vorbereiten“, gestartet wird danach ausdrücklich
+      if (document.body.dataset.phase === 'save') return prepareNewRecording();
       startRecording();
     });
     $('btn-pause').addEventListener('click', async () => {
@@ -2308,7 +2350,9 @@
       }
       if (e.ctrlKey && e.key.toLowerCase() === 'r') {
         e.preventDefault();
-        if (isLive()) stopRecording(); else startRecording();
+        if (isLive()) stopRecording();
+        else if (document.body.dataset.phase === 'save') prepareNewRecording();
+        else startRecording();
         return;
       }
       if (e.key.toLowerCase() === 'm' && !e.ctrlKey && !e.metaKey) {
@@ -2408,7 +2452,9 @@
     window.api.on('menu', ({ action }) => {
       if (action === 'settings') openModal('modal-settings');
       if (action === 'toggle-record') {
-        if (isLive()) stopRecording(); else startRecording();
+        if (isLive()) stopRecording();
+        else if (document.body.dataset.phase === 'save') prepareNewRecording();
+        else startRecording();
       }
       if (action === 'undo' || action === 'redo') {
         // In einem Textfeld wirkt Rückgängig dort, sonst auf Abschnitte und Schnitte.

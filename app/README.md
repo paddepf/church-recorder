@@ -125,7 +125,9 @@ Bereich **„Jetzt“** mit dem, was die Phase braucht.
    „Gesamte Aufnahme“. Der Hauptknopf oben nennt, was gespeichert wird („2 Abschnitte als MP3 sichern“); ist alles
    gesichert, steht dort „Alles gesichert ✓“. Rechts unter **„Sichern“** stehen Zielordner (ganzer Pfad im Tooltip),
    Format und Fortschritt; „An Aufnahme anhängen“ nimmt in dieselbe Datei weiter auf. „Neue Aufnahme“ steht bewusst
-   leise neben dem Sichern-Knopf. Nie begonnene Punkte erscheinen blass.
+   leise neben dem Sichern-Knopf; sie startet nicht gleich, sondern führt nach einer Rückfrage zurück zu
+   „Vorbereiten“: Gottesdienst und Ablauf bleiben, die Punkte sind wieder offen, und man kann noch eine andere Vorlage
+   oder einen anderen Termin wählen, bevor man mit „Aufnahme starten“ beginnt. Nie begonnene Punkte erscheinen blass.
    Ist ein Export-Oberordner eingestellt, wird ohne Rückfrage
    in dessen Unterordner `Datum_Gottesdienstname` gespeichert (bei gleichem Namen
    mit „ (2)“ usw.); ohne Oberordner wird ein Zielordner abgefragt. Die MP3s
@@ -325,7 +327,7 @@ anderen Programmen (Voreinstellung, abschaltbar). **Nach dem Beenden** der Aufna
 stattdessen zeigt das Mini-Fenster, wie viele Abschnitte noch nicht gesichert sind, und einen Knopf **„… als MP3
 sichern“** (angehakte bzw. noch nicht gesicherte oder seit dem Export geänderte Abschnitte, ohne Abschnitte die gesamte
 Aufnahme; ist alles gesichert, steht dort „alles gesichert ✓“ und der Knopf entfällt), dazu Fortschritt
-und „Im Ordner zeigen“. „Neue Aufnahme“ darunter beginnt die nächste. **„Groß“** bzw. **„Kompakt“** stellt die vorherige Größe
+und „Im Ordner zeigen“. „Neue Aufnahme“ darunter bereitet die nächste vor (zurück zu „Vorbereiten“). **„Groß“** bzw. **„Kompakt“** stellt die vorherige Größe
 wieder her. Öffnet sich ein Dialog (z. B. Rückfrage beim Start, Einstellungen, `?`), schaltet die App
 selbst auf das große Fenster um. Die Aufnahme läuft beim Umschalten unverändert weiter.
 
