@@ -294,6 +294,8 @@ export default class EbbtonInstance extends InstanceBase {
 			disk_free: { name: 'Freier Speicherplatz (GB)' },
 			disk_hours: { name: 'Aufnahmestunden, die noch Platz haben' },
 			cut_open: { name: 'Schnitt läuft gerade (ja/nein)' },
+			recording_mode: { name: 'Aufnahmeart (Stereo / Mehrspur)' },
+			routing_status: { name: 'Routing am Mischpult (ok / falsch / unbekannt / -)' },
 		}
 	}
 
@@ -314,6 +316,8 @@ export default class EbbtonInstance extends InstanceBase {
 			disk_free: '-',
 			disk_hours: '-',
 			cut_open: 'nein',
+			recording_mode: '-',
+			routing_status: '-',
 		})
 	}
 
@@ -341,8 +345,14 @@ export default class EbbtonInstance extends InstanceBase {
 			disk_free: s.health?.disk ? (s.health.disk.freeBytes / 1073741824).toFixed(1) : '-',
 			disk_hours: s.health?.disk ? this.formatHours(s.health.disk.hoursLeft) : '-',
 			cut_open: (s.cuts || []).some((c) => c.end == null) ? 'ja' : 'nein',
+			// recordingMode: gültige Aufnahmeart (laufende Aufnahme, sonst eingestellt); ältere Ebbton-Versionen senden sie nicht.
+			recording_mode: { stereo: 'Stereo', multitrack: 'Mehrspur' }[s.recordingMode || s.mode] || '-',
+			routing_status: { ok: 'ok', mismatch: 'falsch', unknown: 'unbekannt' }[s.health?.routing] || '-',
 		})
-		this.checkFeedbacks('recording', 'paused', 'has_pending', 'input_problem', 'write_problem', 'disk_warn', 'disk_low', 'cut_open')
+		this.checkFeedbacks(
+			'recording', 'paused', 'has_pending', 'input_problem', 'write_problem', 'disk_warn', 'disk_low', 'cut_open',
+			'routing_mismatch', 'multitrack',
+		)
 	}
 
 	formatHours(h) {
@@ -430,6 +440,24 @@ export default class EbbtonInstance extends InstanceBase {
 				options: [],
 				callback: () => this.command('redo'),
 			},
+			mode_set: {
+				name: 'Aufnahmeart wählen (Stereo / Mehrspur)',
+				description: 'Wirkt auf die nächste Aufnahme; während einer Aufnahme lehnt Ebbton ab. Am Pult das Routing passend umstellen.',
+				options: [
+					{
+						type: 'dropdown',
+						id: 'mode',
+						label: 'Aufnahmeart',
+						default: 'toggle',
+						choices: [
+							{ id: 'toggle', label: 'Umschalten' },
+							{ id: 'stereo', label: 'Stereo' },
+							{ id: 'multitrack', label: 'Mehrspur' },
+						],
+					},
+				],
+				callback: (action) => this.command('mode.set', { mode: action.options.mode || 'toggle' }),
+			},
 			template_apply: {
 				name: 'Vorlage für Programmpunkte laden',
 				options: [
@@ -506,6 +534,27 @@ export default class EbbtonInstance extends InstanceBase {
 				options: [],
 				callback: () => ['error', 'slow'].includes(this.state?.health?.write),
 			},
+			routing_mismatch: {
+				type: 'boolean',
+				name: 'Routing am Mischpult passt nicht zur Aufnahmeart',
+				description: 'Z. B. Mehrspur eingestellt, die USB-Ausgänge liefern aber die Stereo-Matrix (oder umgekehrt). „Unbekannt“ (Pult nicht erreichbar) löst nicht aus.',
+				defaultStyle: {
+					bgcolor: combineRgb(220, 40, 30),
+					color: combineRgb(255, 255, 255),
+				},
+				options: [],
+				callback: () => this.state?.health?.routing === 'mismatch',
+			},
+			multitrack: {
+				type: 'boolean',
+				name: 'Aufnahmeart ist Mehrspur',
+				defaultStyle: {
+					bgcolor: combineRgb(40, 80, 160),
+					color: combineRgb(255, 255, 255),
+				},
+				options: [],
+				callback: () => (this.state?.recordingMode || this.state?.mode) === 'multitrack',
+			},
 			disk_warn: {
 				type: 'boolean',
 				name: 'Speicherplatz wird knapp (unter 3 Stunden)',
@@ -554,7 +603,7 @@ export default class EbbtonInstance extends InstanceBase {
 	/** Gliederung der Presets in Companion (API 2.x: getrennt von den Definitionen). */
 	buildPresetStructure() {
 		return [
-			{ id: 'aufnahme', name: 'Aufnahme', definitions: ['record_toggle', 'pause'] },
+			{ id: 'aufnahme', name: 'Aufnahme', definitions: ['record_toggle', 'pause', 'mode'] },
 			{ id: 'abschnitte', name: 'Abschnitte', definitions: ['marker', 'marker_predigt', 'cut', 'undo'] },
 			{ id: 'ablaufplan', name: 'Ablaufplan', definitions: ['next_item'] },
 			{ id: 'anzeige', name: 'Anzeige', definitions: ['status', 'health'] },
@@ -578,6 +627,14 @@ export default class EbbtonInstance extends InstanceBase {
 				style: { ...base, text: 'REC\\n$(ebbton:timecode)' },
 				steps: [{ down: [{ actionId: 'record_toggle' }], up: [] }],
 				feedbacks: [fb('recording')],
+			},
+			mode: {
+				type: 'simple',
+				name: 'Aufnahmeart umschalten (zeigt Art und Routing)',
+				style: { ...base, size: '7', text: '$(ebbton:recording_mode)\\nRouting:\\n$(ebbton:routing_status)' },
+				steps: [{ down: [{ actionId: 'mode_set', options: { mode: 'toggle' } }], up: [] }],
+				// Reihenfolge: Die spätere Rückmeldung gewinnt – Routing-Warnung (rot) vor Mehrspur (blau).
+				feedbacks: [fb('multitrack'), fb('routing_mismatch')],
 			},
 			pause: {
 				type: 'simple',
@@ -630,7 +687,7 @@ export default class EbbtonInstance extends InstanceBase {
 					text: 'Eingang: $(ebbton:input_status)\\nSpeicher: $(ebbton:disk_free) GB\\n$(ebbton:disk_hours)',
 				},
 				steps: [{ down: [], up: [] }],
-				feedbacks: [fb('input_problem'), fb('write_problem'), fb('disk_warn'), fb('disk_low')],
+				feedbacks: [fb('input_problem'), fb('write_problem'), fb('routing_mismatch'), fb('disk_warn'), fb('disk_low')],
 			},
 			status: {
 				type: 'simple',

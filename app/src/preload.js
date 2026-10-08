@@ -51,6 +51,30 @@ contextBridge.exposeInMainWorld('api', {
     chunk: (arrayBuffer) => ipcRenderer.send('audio:chunk', arrayBuffer)
   },
 
+  multitrack: {
+    /** Geräte für die Mehrspuraufnahme (unter Windows ASIO); simulate: nachgebautes 32-Kanal-Pult. */
+    devices: (simulate) => invoke('multitrack:devices', { simulate }),
+    /** Abhören vor dem Start: {active, info: {device, inputs, sampleRate …}, error, stalled}. */
+    state: () => invoke('multitrack:state'),
+    /** Beendete Mehrspuraufnahme zum Pult zurückspielen (Sekunden; loop: {start, end} oder null). */
+    play: (start, loop) => invoke('multitrack:play', { start, loop }),
+    seek: (seconds) => invoke('multitrack:seek', { seconds }),
+    loop: (loop) => invoke('multitrack:loop', { loop }),
+    stopPlayback: () => invoke('multitrack:stopPlay')
+  },
+
+  mixer: {
+    /** Verbindung, Kanalnamen, Routing der Kartenausgänge und dessen Bewertung. */
+    state: () => invoke('mixer:state'),
+    /** Pulte im Netz suchen. */
+    discover: () => invoke('mixer:discover'),
+    /** Aktuelles Routing als 'stereo' bzw. 'multitrack' merken. */
+    learn: (mode) => invoke('mixer:learn', { mode }),
+    forget: () => invoke('mixer:forget'),
+    /** Nur Pult-Simulator: Routing umstellen ('stereo' | 'multitrack'). */
+    simulateRouting: (kind) => invoke('mixer:simulateRouting', { kind })
+  },
+
   section: {
     /** Abschnitt beginnen bzw. den laufenden beenden. */
     toggle: (params) => invoke('section:toggle', params),
@@ -109,7 +133,7 @@ contextBridge.exposeInMainWorld('api', {
 
   on: (channel, handler) => {
     const allowed = ['state', 'levels', 'toast', 'command', 'menu', 'health', 'compact',
-      'network-status', 'update-status', 'export-progress'];
+      'network-status', 'update-status', 'export-progress', 'mixer', 'multitrack', 'track-levels', 'multitrack-play', 'settings'];
     if (!allowed.includes(channel)) return () => {};
     const listener = (_event, payload) => handler(payload);
     ipcRenderer.on(channel, listener);

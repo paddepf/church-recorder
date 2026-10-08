@@ -21,6 +21,7 @@
     <div class="top-actions">
       <span id="disk-badge" class="badge" data-level="ok" title="Freier Speicherplatz auf dem Laufwerk der Aufnahmen">Speicher</span>
       <button id="btn-update" class="update-btn" hidden title="Update anzeigen">Update</button>
+      <button id="btn-mode-badge" class="mode-badge" hidden title="Mehrspuraufnahme ist eingestellt – Klick: Aufnahmeart in den Einstellungen ändern">● Mehrspur</button>
       <button id="btn-library" class="ghost" title="Frühere Aufnahmen">Aufnahmen</button>
       <button id="btn-settings" class="ghost" title="Einstellungen">Einstellungen</button>
       <label class="ontop compact-only" title="Das Mini-Fenster bleibt über anderen Programmen"><input type="checkbox" id="chk-ontop" checked /> <span class="ontop-long">Immer </span>oben</label>
@@ -67,6 +68,7 @@
       <button id="btn-next-item" class="secondary" disabled title="Laufenden Abschnitt beenden und den nächsten Ablaufpunkt beginnen (N)"><span class="nb-label">Nächster Ablaufpunkt</span><span id="next-name" class="nb-name" hidden></span></button>
       <div class="spacer"></div>
       <button id="btn-play" class="secondary" disabled title="Abspielen bzw. während der Aufnahme ab dem Cursor mithören (Leertaste)">Abspielen</button>
+      <label class="follow" id="loop-wrap" hidden title="Beim Zurückspielen zum Pult den gewählten Abschnitt (sonst die ganze Aufnahme) wiederholen"><input type="checkbox" id="chk-loop" /> Schleife</label>
       <label class="follow"><input type="checkbox" id="chk-follow" checked /> Ansicht folgt</label>
       <div class="zoom">
         <button id="btn-zoom-out" class="icon" title="Herauszoomen" aria-label="Herauszoomen">−</button>
@@ -123,6 +125,18 @@
       <div id="export-progress" class="progress" hidden><i></i></div>
       <div id="export-result" class="export-result"></div>
     </div>
+
+    <div class="panel panel-channels">
+      <div class="panel-head">
+        <h2>Kanäle</h2>
+        <span class="export-select">
+          <button id="ch-all" class="mini" title="Alle Kanäle aufnehmen">Alle</button>
+          <button id="ch-named" class="mini" title="Nur Kanäle aufnehmen, die am Pult einen Namen haben">Nur benannte</button>
+        </span>
+      </div>
+      <div id="ch-status" class="ch-status"></div>
+      <div id="ch-list" class="ch-list" role="group" aria-label="Kanäle: Klick wählt für die Aufnahme an oder ab"></div>
+    </div>
   </section>
 
   <footer class="keybar">
@@ -144,6 +158,7 @@
       <div class="settings-layout">
       <nav class="settings-nav" role="tablist" aria-label="Bereiche">
         <button type="button" data-tab="audio" aria-selected="true">Audio</button>
+        <button type="button" data-tab="mischpult" aria-selected="false">Mischpult</button>
         <button type="button" data-tab="ablage" aria-selected="false">Ablage &amp; Export</button>
         <button type="button" data-tab="churchtools" aria-selected="false">ChurchTools</button>
         <button type="button" data-tab="vorlagen" aria-selected="false">Vorlagen</button>
@@ -167,6 +182,61 @@
           </label>
         </fieldset>
 
+        <fieldset data-tab="audio">
+          <legend>Mehrspuraufnahme</legend>
+          <label>Aufnahmeart
+            <select id="set-rec-mode" class="select">
+              <option value="stereo">Stereo – Eingang oben (z. B. Matrix auf USB 1–2)</option>
+              <option value="multitrack">Mehrspur – alle Kanäle des Mischpults einzeln</option>
+            </select>
+            <small>Für Mehrspur am Mischpult die USB-Ausgänge auf die Kanäle 1–32 legen. Je Kanal entsteht eine 24-Bit-WAV, MP3-Export gibt es dann nicht.</small>
+          </label>
+          <label>Mehrspur-Gerät
+            <span class="row">
+              <select id="set-mt-device" class="select"></select>
+              <button id="btn-mt-refresh" class="secondary" type="button">Suchen</button>
+            </span>
+            <small id="mt-device-info"></small>
+          </label>
+          <label class="check"><input type="checkbox" id="set-mt-simulate" /> Simuliertes Pult (32 Kanäle, zum Ausprobieren ohne Mischpult)</label>
+        </fieldset>
+
+        <fieldset data-tab="mischpult">
+          <legend>Mischpult (Midas M32)</legend>
+          <label>Adresse (IP) des Pults
+            <span class="row">
+              <input id="set-mixer-host" type="text" placeholder="z. B. 192.168.1.62 – leer: keine Verbindung" />
+              <button id="btn-mixer-discover" class="secondary" type="button">Suchen</button>
+            </span>
+            <small id="mixer-found"></small>
+          </label>
+          <div id="mixer-status" class="mixer-line"></div>
+          <small>Ebbton liest vom Pult nur: die Kanalnamen und -farben (Namen der Spuren bei Mehrspur) und das Routing
+            der USB-Kartenausgänge. Am Pult wird nichts verstellt.</small>
+        </fieldset>
+
+        <fieldset data-tab="mischpult">
+          <legend>Routing der USB-Ausgänge</legend>
+          <div id="mixer-routing" class="mixer-line"></div>
+          <small>Ebbton warnt, wenn das Routing nicht zur Aufnahmeart passt. Am sichersten: am Pult das Stereo-Routing
+            einstellen und „Als Stereo merken“, dann das Mehrspur-Routing einstellen und „Als Mehrspur merken“.
+            Ohne das gilt: Liegen auf USB 1–8 Ausgänge des Pults (Matrix), ist es Stereo, liegen dort Eingänge, Mehrspur.</small>
+          <span class="row">
+            <button id="btn-mixer-learn-stereo" class="secondary" type="button">Als Stereo merken</button>
+            <button id="btn-mixer-learn-multi" class="secondary" type="button">Als Mehrspur merken</button>
+            <button id="btn-mixer-forget" class="secondary" type="button">Gemerktes vergessen</button>
+          </span>
+          <span class="row" id="mixer-sim-row" hidden>
+            <button id="btn-mixer-sim-stereo" class="secondary" type="button">Simulator: Stereo-Routing</button>
+            <button id="btn-mixer-sim-multi" class="secondary" type="button">Simulator: Mehrspur-Routing</button>
+          </span>
+        </fieldset>
+
+        <fieldset data-tab="mischpult">
+          <legend>Kanäle am Pult</legend>
+          <div id="mixer-channels" class="mixer-channels"></div>
+        </fieldset>
+
         <fieldset data-tab="ablage">
           <legend>Ordner</legend>
           <label>Ordner für Aufnahmen
@@ -183,6 +253,14 @@
               <button id="btn-clear-export-dir" class="secondary" title="Zurücksetzen">×</button>
             </span>
             <small>Darin entsteht je Gottesdienst ein Unterordner „Datum_Gottesdienstname“, die MP3-Dateien werden ohne Rückfrage dort abgelegt.</small>
+          </label>
+          <label>Ordner für Mehrspuraufnahmen
+            <span class="row">
+              <input id="set-mt-dir" type="text" readonly placeholder="Nicht gesetzt – Unterordner „Mehrspur“ im Aufnahmeordner" />
+              <button id="btn-choose-mt-dir" class="secondary">Wählen</button>
+              <button id="btn-clear-mt-dir" class="secondary" title="Zurücksetzen">×</button>
+            </span>
+            <small>Je Aufnahme ein Unterordner mit einer WAV je Kanal (etwa 16,6 GB je Stunde bei 32 Kanälen). Kann auf einem anderen Laufwerk liegen.</small>
           </label>
         </fieldset>
 

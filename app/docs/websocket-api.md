@@ -66,6 +66,9 @@ Wird direkt nach der Anmeldung und bei jeder Änderung gesendet (max. 10×/s).
     "sampleRate": 48000,
     "channels": 2,
     "levels": { "l": 0.42, "r": 0.39, "clip": false },
+    "mode": "stereo",
+    "recordingMode": "stereo",
+    "tracks": [],
     "sections": [
       { "id": "sec_x1", "label": "Predigt", "category": "Verkündigung", "color": 2,
         "start": 1420.5, "end": null, "source": "churchtools" },
@@ -85,6 +88,7 @@ Wird direkt nach der Anmeldung und bei jeder Änderung gesendet (max. 10×/s).
       "input": "ok",
       "write": "ok",
       "writeMessage": null,
+      "routing": "ok",
       "disk": { "freeBytes": 52000000000, "hoursLeft": 75.2, "level": "ok" }
     }
   }
@@ -95,6 +99,9 @@ Wird direkt nach der Anmeldung und bei jeder Änderung gesendet (max. 10×/s).
 Schnitt läuft). `health.input` ist `ok`, `silent` (seit über 20 s kaum Pegel) oder `lost`
 (Eingang ausgefallen, wird neu verbunden); `health.write` ist `ok`, `slow` (Laufwerk kommt nicht
 hinterher, Audio wird gepuffert) oder `error` (Schreibfehler, z. B. Platte voll – Text in `writeMessage`);
+`health.routing` sagt, ob das Routing der USB-Ausgänge am Mischpult zur Aufnahmeart passt: `ok`, `mismatch`
+(z. B. Mehrspur eingestellt, Pult liefert aber die Stereo-Matrix), `unknown` (Pult nicht erreichbar oder Routing
+nicht eindeutig) oder `null` (keine Pult-Verbindung eingerichtet).
 `health.disk.level` ist `ok`, `warn` (unter
 3 Stunden Platz) oder `low` (unter 30 Minuten). `health` ändert sich unabhängig von der
 Aufnahme; der Speicherwert wird alle 30 Sekunden erneuert. Während einer Aufnahme kommt der Zustand
@@ -102,6 +109,15 @@ zusätzlich alle 5 Sekunden, auch ohne Änderung.
 
 `status` ist einer von `idle`, `recording`, `paused`, `stopped`.
 Alle Zeitangaben sind Sekunden seit Aufnahmebeginn.
+
+`mode` ist die Art der angezeigten Aufnahme, `recordingMode` die gerade gültige Aufnahmeart (während einer
+Aufnahme deren Art, sonst die eingestellte – das, was die nächste Aufnahme wird). Beide sind `stereo` oder
+`multitrack` (Mehrspuraufnahme aller Kanäle des Mischpults). Bei
+`multitrack` nennt `tracks` die aufgenommenen Kanäle (`[{ "channel": 0, "name": "Kanal 1" }, …]`, `channel`
+0-basiert), `wavPath` ist `null`, `channels` die Zahl der Spuren und `levels` der Pegel des lautesten
+aufgenommenen Kanals (in `l` und `r` gleich). `health.input` wird `lost`, wenn das Mischpult keine Daten mehr
+liefert. Befehle und Ereignisse sind in beiden Modi gleich. Spuren tragen zusätzlich `color` (Kanalfarbe am Pult,
+0–15 wie beim X32/M32, ab 8 invertiert; `null`, wenn das Pult nicht erreichbar war).
 
 ### `levels` – Pegel
 
@@ -155,6 +171,7 @@ Getrennt vom Zustand und auf 5×/s gedrosselt, damit das Netz nicht geflutet wir
 | `cut.toggle` | Schnitt an der aktuellen Stelle beginnen bzw. beenden (nur während der Aufnahme); Antwort `change`: `started`, `ended` oder `discarded` |
 | `undo` / `redo` | Letzte Änderung an Abschnitten oder Schnitten zurücknehmen bzw. wiederholen |
 | `template.apply` | Vorlage für Programmpunkte laden: `params.name` (oder `params.id`), ohne Angabe die Standardvorlage; ersetzt die offenen Punkte |
+| `mode.set` | Aufnahmeart für die nächste Aufnahme: `params.mode` `stereo`, `multitrack` oder `toggle`; Antwort enthält `mode`. Während einer Aufnahme `ok:false`. Das Routing am Pult stellt Ebbton dabei nicht um |
 
 Antwort:
 

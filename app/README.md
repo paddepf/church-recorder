@@ -411,6 +411,20 @@ src/main/        Hauptprozess
   netserver.js   WebSocket-Schnittstelle
   updater.js     Updates über GitHub Releases
   settings.js    Einstellungen, Token-Verschlüsselung
+  multitrack/    Mehrspuraufnahme
+    engine.js    Gerät öffnen (audify/ASIO), Pegel, Aussetzer erkennen, Gerät neu öffnen
+    writer.js    eine 24-Bit-Mono-WAV je Spur
+    simulator.js nachgebautes 32-Kanal-Pult für Entwicklung und Tests
+    player.js    Zurückspielen: Spuren lesen, Ausgabeblöcke für alle Ausgänge, Springen, Schleife
+    host.js      Einstieg des eigenen Mehrspur-Prozesses (Electron utilityProcess)
+    manager.js   Hauptprozess-Seite: startet den Prozess, Befehle und Ereignisse
+    probe.js     Technik-Test (siehe unten)
+  mixer/         Verbindung zum Mischpult (M32, OSC, nur lesend)
+    osc.js       OSC kodieren/lesen
+    m32.js       Adressen, Farben, Routing-Werte und -Bewertung des M32
+    client.js    Verbindung (Namen, Farben, Routing, /xremote), Pultsuche
+    simulator.js nachgebautes M32 für Entwicklung und Tests
+    link.js      Verbindung passend zu den Einstellungen, Routing-Prüfung
 src/shared/      Von Hauptprozess und Oberfläche gemeinsam genutzt
   sections.js    Regeln für Abschnitte (Verschieben ohne Überlappung)
   roles.js       Zuordnung Dienst (ChurchTools) zu Programmpunkt
@@ -430,6 +444,63 @@ zu **RF64**, der WAV-Erweiterung für große Dateien – es bleibt eine Datei, d
 Programme (Audacity, VLC, Reaper …) öffnen. Der Hauptprozess
 berechnet Pegel und Wellenform-Spitzenwerte und führt die einzige gültige
 Version des Zustands – Oberfläche, Netzwerk und Companion sehen alle dasselbe.
+
+### Mehrspuraufnahme (am echten Pult noch ungeprüft)
+
+Für Aufnahmen aller 32 Kanäle des Midas M32 (DN32-USB-Karte, ASIO) gibt es einen eigenen Aufnahmeweg:
+Ein eigener Prozess öffnet das Gerät über `audify` (RtAudio; unter Windows ASIO) und schreibt je
+Kanal eine 24-Bit-Mono-WAV. Die Oberfläche erfasst dabei nichts selbst.
+
+**Bedienung:** Die Aufnahmeart wird unter *Einstellungen → Audio → Aufnahmeart* gewählt (oder per Companion); im
+Normalfall Stereo. Ist Mehrspur eingestellt, steht oben rechts ein farbiges Schild **„● Mehrspur“** – ein Klick darauf
+öffnet die Einstellung. Im Mehrspur-Modus ersetzt der Bereich **Kanäle** den Export: alle Kanäle mit
+Name und Farbe vom Pult und Pegel – schon vor dem Start, denn das Gerät ist im Mehrspur-Modus ständig offen.
+Ein Klick auf einen Kanal wählt ihn für die nächste Aufnahme ab bzw. wieder an (durchgestrichen = wird nicht
+aufgenommen), „Alle“ und „Nur benannte“ (Kanäle mit Namen am Pult) wählen schnell aus. Rot umrandet = übersteuert,
+gelb umrandet = seit über 20 s still während der Aufnahme (die Namen stehen auch oben im Bereich). Darüber stehen
+Gerät, Abtastrate, Zahl der gewählten Kanäle und der Platz in Stunden; fehlt das Gerät (Pult aus), versucht
+Ebbton es alle 10 s erneut. Der große Pegel zeigt den lautesten gewählten Kanal.
+Gerät wählen unter *Einstellungen → Audio → Mehrspuraufnahme* („Suchen“ fragt die Geräte ab, unter Windows die
+ASIO-Treiber; nur außerhalb einer Aufnahme) oder „Automatisch“ (Gerät mit den meisten Eingängen). „Simuliertes
+Pult“ nimmt ein nachgebautes 32-Kanal-Pult auf (zum Ausprobieren). Aufnehmen wie gewohnt: Start, Pause, Abschnitte,
+Beenden, „An Aufnahme anhängen“, auch per Companion. Am Mischpult müssen die USB-Ausgänge dafür auf den Kanälen
+1–32 liegen. Die Spuren landen je Aufnahme in einem Unterordner des Mehrspur-Ordners (*Ablage & Export*, sonst
+`Mehrspur` im Aufnahmeordner), zusammen mit der Session-Datei; die Liste „Aufnahmen“ zeigt sie mit an.
+MP3-Export, Mithören während der Aufnahme und Cue-Marker gibt es bei Mehrspuraufnahmen nicht; das Mini-Fenster
+zeigt nach dem Beenden nur „Mehrspur: n Spuren gespeichert“.
+
+**Zurückspielen zum Pult** (virtueller Soundcheck, Nachmischen): Bei einer beendeten Mehrspuraufnahme (Aufnahmeart
+Mehrspur; bei Aufnahmeart Stereo ist der Knopf gesperrt) spielt
+„Zum Pult abspielen“ (oder die Leertaste) die Spuren über die USB-Ausgänge – Spur von Kanal 5 auf USB-Ausgang 5 –,
+ab der Marke in der Wellenform. Klick in die Wellenform springt, Klick auf einen Abschnitt springt an dessen Anfang;
+mit „Schleife“ wird der gewählte Abschnitt (sonst die ganze Aufnahme) wiederholt. Im Kanal-Bereich steht die
+Position. Am Mischpult müssen die Kanäle dafür die USB-Karte als Quelle haben – das stellt Ebbton bewusst nicht
+selbst um. Eine neue Aufnahme beendet das Abspielen.
+
+**Mischpult (Einstellungen → Mischpult):** IP des M32 eintragen oder „Suchen“ (findet Pulte im selben Netz).
+Ebbton liest dann per OSC – nur lesend – die Kanalnamen und -farben (die Spuren heißen wie am Pult,
+z. B. `01_Predigt.wav`; ist das Pult nicht erreichbar, „Kanal 1“ …) und das Routing der USB-Kartenausgänge. Passt
+das Routing nicht zur Aufnahmeart (Mehrspur eingestellt, aber Matrix auf USB 1–2, oder umgekehrt), erscheint ein
+Warnbalken, auch vor dem Start, und Companion sieht `health.routing = mismatch`. Am zuverlässigsten wird die Prüfung,
+wenn man beide Routings einmal anlernt: am Pult Stereo einstellen → „Als Stereo merken“, Mehrspur einstellen →
+„Als Mehrspur merken“. Ohne Anlernen gilt die Faustregel „Ausgänge des Pults auf USB 1–8 = Stereo, Eingänge = Mehrspur“.
+Mit „Simuliertes Pult“ (Audio) und ohne IP läuft ein eingebauter Pult-Simulator mit Beispielnamen; dessen Routing
+lässt sich zum Ausprobieren der Warnung umschalten.
+
+**Technik-Test**, läuft statt der App und prüft Gerät, Prozess und Schreiben – auch mit der installierten App:
+
+```
+EBBTON_MT_PROBE=list      Geräte auflisten
+EBBTON_MT_PROBE=auto      Gerät mit den meisten Eingängen 10 s aufnehmen
+EBBTON_MT_PROBE=<id>      dieses Gerät aufnehmen
+EBBTON_MT_PROBE=simulate  simuliertes 32-Kanal-Pult aufnehmen
+EBBTON_MT_SECONDS=30      Dauer ändern
+```
+
+Windows (Eingabeaufforderung): `set EBBTON_MT_PROBE=auto` und danach
+`"%LOCALAPPDATA%\Programs\Ebbton\Ebbton.exe"` bzw. im Ordner `app/` `npx electron .`;
+macOS/Entwicklung: `EBBTON_MT_PROBE=auto npx electron .`. Ergebnis als Dialog und in
+`logs/mt-probe.log` im Einstellungsordner; die Testaufnahme bleibt im Temp-Ordner (Pfad im Protokoll).
 
 Tests: `npm test` im Ordner `app/` (Node-Testrunner, ohne Electron). Sie liegen in `test/` und
 laufen bei jedem Push automatisch auf Windows und macOS (`.github/workflows/test.yml`).

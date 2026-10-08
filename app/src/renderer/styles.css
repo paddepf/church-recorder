@@ -333,6 +333,7 @@ body[data-status="recording"] .timecode { color: var(--tally-text); }
 .wave-toolbar button { font-size: 16px; padding: 10px 20px; }
 .wave-toolbar .spacer { flex: 1; }
 .follow { color: var(--muted); font-size: 16px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.follow[hidden] { display: none; }   /* sonst gewinnt display: flex gegen das hidden-Attribut („Schleife“) */
 .follow input { width: 20px; height: 20px; accent-color: var(--plan); cursor: pointer; }
 .zoom { display: flex; gap: 8px; }
 .wave-toolbar .zoom button { font-size: 22px; padding: 6px 16px; }
@@ -602,6 +603,60 @@ label small { color: var(--muted); font-size: 11px; }
 .row input { flex: 1; }
 .row button { flex-shrink: 0; }
 .inline-result { font-size: 12px; color: var(--muted); }
+
+/* Mehrspur: Kanal-Bereich statt Export (body.mt) */
+body.mt .panel-export { display: none; }
+body:not(.mt) .panel-channels { display: none; }
+.panel-channels { padding: 0; }
+.ch-status { margin: 10px 14px 0; color: var(--muted); font-size: 13px; line-height: 1.4; flex-shrink: 0; }
+.ch-status .bad { color: var(--amber); }
+.ch-list {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 10px;
+  padding: 10px 14px 14px; overflow-y: auto; min-height: 0; align-content: start;
+}
+.ch {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) 64px; align-items: center; gap: 6px;
+  padding: 3px 6px 3px 4px; border: 1px solid transparent; border-left: 4px solid var(--line); border-radius: 4px;
+  background: var(--panel-2); color: var(--text); font-size: 13px; text-align: left; cursor: pointer; min-width: 0;
+}
+.ch:hover:not(:disabled) { border-color: var(--hover-border); }
+.ch:disabled { cursor: default; opacity: 1; color: var(--text); }   /* während der Aufnahme gesperrt, aber gut lesbar */
+.ch b { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; }
+.ch .ch-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch .ch-meter { position: relative; height: 8px; background: var(--bar-bg); border-radius: 2px; overflow: hidden; }
+.ch .ch-meter i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--manual); }
+.ch .ch-meter i[data-level="hot"] { background: var(--amber); }
+.ch .ch-meter i[data-level="clip"] { background: var(--tally); }
+.ch .ch-meter u { position: absolute; top: 0; bottom: 0; width: 2px; left: 0; background: var(--text); opacity: .7; }
+.ch[data-armed="false"] { opacity: .38; }
+.ch[data-armed="false"] .ch-name { text-decoration: line-through; }
+.ch[data-clip="true"] { border-color: var(--tally); }
+.ch[data-silent="true"] { border-color: var(--amber); }
+.ch[data-color="red"] { border-left-color: #E5484D; }
+.ch[data-color="green"] { border-left-color: #30A46C; }
+.ch[data-color="yellow"] { border-left-color: #F5D90A; }
+.ch[data-color="blue"] { border-left-color: #3E63DD; }
+.ch[data-color="magenta"] { border-left-color: #D6409F; }
+.ch[data-color="cyan"] { border-left-color: #05A2C2; }
+.ch[data-color="white"] { border-left-color: #EDEDED; }
+body.dense .ch { font-size: 12px; padding: 2px 5px 2px 3px; grid-template-columns: 20px minmax(0, 1fr) 44px; }
+body.dense .ch-list { padding: 8px 10px 10px; gap: 2px 6px; }
+
+/* Einstellungen → Mischpult */
+.mixer-line { font-size: 14px; line-height: 1.5; }
+.mixer-line .ok { color: var(--manual); }
+.mixer-line .bad { color: var(--amber); }
+.mixer-channels { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 12px; font-size: 13px; }
+.mixer-ch { display: flex; gap: 6px; align-items: baseline; min-width: 0; border-left: 4px solid var(--line); padding-left: 6px; }
+.mixer-ch b { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+.mixer-ch span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mixer-ch[data-color="red"] { border-left-color: #E5484D; }
+.mixer-ch[data-color="green"] { border-left-color: #30A46C; }
+.mixer-ch[data-color="yellow"] { border-left-color: #F5D90A; }
+.mixer-ch[data-color="blue"] { border-left-color: #3E63DD; }
+.mixer-ch[data-color="magenta"] { border-left-color: #D6409F; }
+.mixer-ch[data-color="cyan"] { border-left-color: #05A2C2; }
+.mixer-ch[data-color="white"] { border-left-color: #EDEDED; }
 .divider { text-align: center; color: var(--muted); font-size: 12px; }
 
 .list { display: grid; gap: 6px; max-height: 46vh; overflow-y: auto; }
@@ -1012,3 +1067,39 @@ body.compact .topbar .view-switch button { font-size: 11px; padding: 2px 6px; }
 .update-notes { white-space: pre-wrap; max-height: 220px; overflow-y: auto; margin-top: 8px; font-size: 14px; color: var(--muted); }
 #version-info[data-level="error"] { color: var(--cut-text); }
 #update-page { margin-right: auto; }
+
+/* Mehrspur: Der Kanal-Bereich braucht mehr Breite als der Export (sonst nur „Pr…“ statt der Kanalnamen). */
+body.mt .panels { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(380px, 1.25fr); }
+body.dense.mt .panels { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(330px, 1.25fr); }
+@media (max-width: 1180px) {
+  .ch { grid-template-columns: 20px minmax(0, 1fr) 40px; gap: 5px; }
+  body.dense .ch { grid-template-columns: 18px minmax(0, 1fr) 34px; }
+}
+
+/* ------------------------------------------------- Kopfleiste (aufgeräumt) */
+/* Alle Bedienelemente der Kopfleiste gleich hoch und gleich groß beschriftet, rechts in drei Gruppen mit
+   sichtbarem Abstand: Aufnahmeart · Aufnahmen/Einstellungen · Ansicht. Steht am Ende, damit es die
+   früheren Einzelgrößen (groß, schmal, kompakt) überschreibt. */
+.topbar { --top-h: 40px; --top-font: 15px; --top-pad: 16px; --top-group: 14px; }
+@media (max-width: 1180px) { .topbar { --top-h: 36px; --top-font: 14px; --top-pad: 12px; --top-group: 10px; } }
+body.dense .topbar { --top-h: 28px; --top-font: 13px; --top-pad: 10px; --top-group: 10px; }
+
+.service-name { height: var(--top-h); box-sizing: border-box; padding-top: 0; padding-bottom: 0; align-items: center; }
+.top-actions { gap: 6px; }
+.top-actions > button,
+.top-actions > .view-switch { height: var(--top-h); box-sizing: border-box; }
+.topbar .top-actions > button { font-size: var(--top-font); padding: 0 var(--top-pad); }
+.topbar .view-switch button { height: 100%; font-size: var(--top-font); padding: 0 calc(var(--top-pad) - 2px); }
+.top-actions > #btn-library,
+.top-actions > .view-switch { margin-left: var(--top-group); }
+
+/* Aufnahmeart: Stereo ist der Normalfall und wird nicht angezeigt; nur bei Mehrspur erscheint ein farbiges Schild
+   (Klick → Einstellungen). Umgestellt wird in den Einstellungen oder per Companion. */
+.topbar .mode-badge { border: 1px solid var(--plan); background: rgba(108,124,224,.18); color: var(--strong); font-weight: 600; }
+.topbar .mode-badge:hover { background: rgba(108,124,224,.3); }
+.mode-badge[hidden] { display: none; }
+
+/* Mini-Fenster: nur der Ansicht-Umschalter bleibt, klein wie bisher */
+body.compact .topbar { --top-h: 24px; --top-font: 11px; --top-pad: 8px; }
+body.compact .service-name { height: auto; }
+body.compact .top-actions > .view-switch { margin-left: 0; }

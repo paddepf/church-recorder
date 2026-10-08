@@ -50,6 +50,7 @@ die Verbindung abbricht.
 | Schnitt starten / beenden | erster Druck beginnt einen Schnitt, der nächste beendet ihn; die Stelle fehlt in den MP3-Exporten |
 | Rückgängig / Wiederholen | letzte Änderung an Abschnitten oder Schnitten zurücknehmen bzw. wiederholen |
 | Vorlage für Programmpunkte laden | lädt eine Vorlage (Name, leer = Standardvorlage) und ersetzt die offenen Punkte |
+| Aufnahmeart wählen (Stereo / Mehrspur) | Umschalten, Stereo oder Mehrspur – gilt für die nächste Aufnahme; während einer Aufnahme lehnt Ebbton ab. Das Routing am Mischpult muss man selbst passend umstellen |
 
 ## Verbindung
 
@@ -80,13 +81,16 @@ die Verbindung abbricht.
 | Speicherplatz wird knapp | Taste wird orange (unter 3 Stunden Platz) |
 | Speicherplatz fast voll | Taste wird rot (unter 30 Minuten) |
 | Schnitt läuft gerade | Taste wird violett |
+| Routing am Mischpult passt nicht zur Aufnahmeart | Taste wird rot: z. B. Mehrspur eingestellt, die USB-Ausgänge liefern aber die Stereo-Matrix (oder umgekehrt); „unbekannt“ (Pult nicht erreichbar) löst nicht aus |
+| Aufnahmeart ist Mehrspur | Taste wird blau |
 
 ## Variablen
 
 `status`, `timecode`, `service_name`, `current_item`, `next_item`,
 `marker_count`, `pending_count`, `level_left`, `level_right`, `clipping`,
 `input_status` (ok / leise / ausgefallen), `write_status` (ok / langsam / Fehler), `disk_free` (GB),
-`disk_hours`, `cut_open`
+`disk_hours`, `cut_open`, `recording_mode` (Stereo / Mehrspur), `routing_status` (ok / falsch / unbekannt / -;
+„-“ = keine Pult-Verbindung in Ebbton eingerichtet)
 
 Beispiel für eine Tastenbeschriftung:
 
@@ -100,3 +104,8 @@ $(ebbton:current_item)
 Unter **Aufnahme**, **Abschnitte**, **Ablaufplan** und **Anzeige** liegen fertige
 Tasten, unter anderem eine Aufnahmetaste mit Laufzeit, eine Taste „Predigt“ und
 eine Weiter-Taste, die den nächsten Programmpunkt anzeigt.
+
+Seit 2.1.0: **Aufnahmeart umschalten** (unter *Aufnahme*) zeigt Aufnahmeart und Routing-Status, wird blau bei
+Mehrspur und rot, wenn das Routing am Pult nicht passt; ein Druck schaltet um. Die Anzeige-Taste **Eingang und
+Speicher** warnt jetzt auch bei falschem Routing. Bereits platzierte Tasten übernehmen geänderte Presets nicht –
+dort die Rückmeldung „Routing am Mischpult passt nicht …“ von Hand hinzufügen oder die Taste neu aus dem Preset ziehen.

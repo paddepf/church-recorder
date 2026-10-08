@@ -130,6 +130,8 @@
     setInterval(refreshDisk, 30000);
     await refreshDevices();
     applySettingsToForm();
+    window.api.mixer.state().then((r) => { if (r.ok) renderMixer(r.mixer); });
+    window.api.multitrack.state().then((r) => { if (r.ok) { mt.monitor = r.monitor; renderChannels(); } });
     await updateBadges(info);
     $('version-info').textContent = `Version ${info.version}`;
     if (info.update) {
@@ -148,6 +150,8 @@
     // Die Oberfläche wurde mitten in einer Aufnahme neu geladen (Absturz o. Ä.): Die Aufnahme läuft im
     // Hauptprozess weiter, nur die Erfassung fehlt – sofort wieder mit dem Eingang verbinden.
     if (isLive()) {
+      // Mehrspur: Erfasst wird im Mehrspur-Prozess, die Oberfläche muss nichts wieder verbinden.
+      if (isMultitrack()) return;
       state.lastChunkAt = 0;
       toast('warn', 'Die Oberfläche wurde neu geladen – der Audioeingang wird wieder verbunden.', 8000);
       recoverCapture({ quiet: true });
@@ -255,8 +259,9 @@
     state.duration = session.duration || 0;
 
     document.body.dataset.status = session.status;
-    // Nach dem Beenden zeigt das Mini-Fenster statt der Aufnahmeknöpfe den MP3-Export.
-    document.body.classList.toggle('review', session.status === 'stopped' && Boolean(session.wavPath));
+    // Nach dem Beenden zeigt das Mini-Fenster statt der Aufnahmeknöpfe den MP3-Export (bei Mehrspur die Zusammenfassung).
+    document.body.classList.toggle('review', session.status === 'stopped' && hasAudio(session));
+    applyMode();
     $('service-name').textContent = session.service?.name || 'Kein Gottesdienst gewählt';
     $('service-date').textContent = session.service?.date || '';
     {
@@ -291,7 +296,7 @@
     // In der Pause setzt der Pause-Knopf fort; der Aufnahmeknopf zeigt nur den Zustand.
     $('record-label').textContent = rec ? 'Aufnahme läuft' : (paused ? 'Aufnahme pausiert' : 'Neue Aufnahme starten');
     $('btn-record').disabled = rec || paused || state.starting;
-    $('btn-continue').hidden = !(stopped && session.wavPath);
+    $('btn-continue').hidden = !(stopped && hasAudio(session));
     $('btn-continue').disabled = state.starting;
     $('btn-pause').disabled = !(rec || paused);
     $('btn-pause').textContent = paused ? 'Fortsetzen' : 'Pause';
@@ -311,8 +316,7 @@
     $('next-name').hidden = !nextText;
     $('btn-next-item').title = 'Laufenden Abschnitt beenden und den nächsten Ablaufpunkt beginnen (N)' +
       (nextPoint ? ` – nächster: ${nextPoint.label}` : '');
-    $('btn-play').disabled = !((stopped && session.wavPath) || rec || paused);
-    updatePlayButton();
+    applyPlayControls();
 
     if (stopped && session.wavPath) {
       const url = fileUrl(session.wavPath);
@@ -374,7 +378,7 @@
     try {
       // Eine angezeigte, beendete Aufnahme würde sonst aus der Ansicht verschwinden. Per Fernsteuerung
       // nicht nachfragen (niemand am PC); die Datei bleibt ohnehin gespeichert.
-      if (!opts.remote && state.session?.status === 'stopped' && state.session.wavPath) {
+      if (!opts.remote && state.session?.status === 'stopped' && hasAudio(state.session)) {
         const go = await confirmDialog(
           'Neue Aufnahme starten?',
           'Die bisherige Aufnahme bleibt unter „Aufnahmen“ gespeichert. Abschnitte werden zurückgesetzt.',
@@ -392,12 +396,22 @@
       // Eine noch laufende Erfassung stammt nie von einer aktiven Aufnahme (deren Status wurde oben geprüft):
       // schließen, damit capture.start() wirklich neu öffnet und eine Abtastrate liefert.
       if (capture.running) await capture.stop();
-      const result = await capture.start(state.settings.inputDeviceId, state.settings.sampleRate);
-      state.sampleRate = result.sampleRate;
-      state.lastChunkAt = Date.now();
-      warnDeviceFallback(result);
-
-      const rec = await window.api.record.start({ sampleRate: result.sampleRate, channels: 2 });
+      // Mehrspur: Gerät und Dateien öffnet der Mehrspur-Prozess, die Oberfläche erfasst nichts.
+      const multi = state.settings.recordingMode === 'multitrack';
+      // Läuft noch das Zurückspielen einer Mehrspuraufnahme: anhalten (und bei Stereo das Gerät freigeben), bevor
+      // die Erfassung startet.
+      if (mt.play?.playing) await window.api.multitrack.stopPlayback();
+      let rec;
+      if (multi) {
+        rec = await window.api.record.start({});
+        if (rec.ok) state.sampleRate = rec.sampleRate;
+      } else {
+        const result = await capture.start(state.settings.inputDeviceId, state.settings.sampleRate);
+        state.sampleRate = result.sampleRate;
+        state.lastChunkAt = Date.now();
+        warnDeviceFallback(result);
+        rec = await window.api.record.start({ sampleRate: result.sampleRate, channels: 2 });
+      }
       if (!rec.ok) {
         await capture.stop();
         toast('error', rec.error || 'Die Aufnahme konnte nicht gestartet werden.');
@@ -453,6 +467,12 @@
       showAudioWarning(true, `Audio kann nicht gespeichert werden – Laufwerk prüfen! (${h.writeMessage || 'Schreibfehler'})`, 'lost');
     } else if (h && h.write === 'slow' && isLive()) {
       showAudioWarning(true, 'Das Laufwerk ist zu langsam – die Aufnahme wird im Speicher gepuffert.', 'silent');
+    } else if (h && h.routing === 'mismatch') {
+      // Auch vor dem Start: genau dann soll es auffallen.
+      const multi = state.mixer?.mode === 'multitrack';
+      showAudioWarning(true, multi
+        ? 'Mischpult-Routing passt nicht: Die USB-Ausgänge liefern die Stereo-Matrix, Ebbton nimmt aber Mehrspur auf.'
+        : 'Mischpult-Routing passt nicht: Die USB-Ausgänge liefern einzelne Kanäle, Ebbton nimmt aber Stereo auf.', 'silent');
     } else if (h && h.input === 'silent' && state.session?.status === 'recording') {
       showAudioWarning(true, 'Seit über 20 Sekunden kaum Pegel – Mischpult oder Kabel prüfen?', 'silent');
     } else {
@@ -506,7 +526,7 @@
   }
 
   setInterval(() => {
-    if (state.session?.status !== 'recording' || state.starting || state.recovering) return;
+    if (state.session?.status !== 'recording' || state.starting || state.recovering || isMultitrack()) return;
     // Erfassung läuft nicht (z. B. nach Neuladen der Oberfläche) oder liefert keine Daten mehr.
     if (!capture.running || Date.now() - state.lastChunkAt > WATCHDOG_MS) recoverCapture();
   }, 1000);
@@ -514,6 +534,16 @@
   function isLive() {
     const st = state.session?.status;
     return st === 'recording' || st === 'paused';
+  }
+
+  /** Die angezeigte Aufnahme hat Audio (Stereo-WAV oder Mehrspur-Spuren). */
+  function hasAudio(session) {
+    return Boolean(session?.wavPath) || (session?.mode === 'multitrack' && (session.tracks || []).length > 0);
+  }
+
+  /** Die angezeigte Aufnahme ist eine Mehrspuraufnahme (erfasst im Mehrspur-Prozess, nicht hier). */
+  function isMultitrack() {
+    return state.session?.mode === 'multitrack';
   }
 
   /** Ist das gewählte Gerät nicht verfügbar, nimmt der Browser still den Standardeingang – das deutlich melden. */
@@ -530,13 +560,15 @@
     $('btn-continue').disabled = true;
     try {
       const rate = state.session.sampleRate;
-      const result = await capture.start(state.settings.inputDeviceId, rate);
-      if (result.sampleRate !== rate) {
-        await capture.stop();
-        return toast('error', `Der Eingang läuft mit ${result.sampleRate} Hz, die Aufnahme hat ${rate} Hz – Fortsetzen nicht möglich.`);
+      if (!isMultitrack()) {
+        const result = await capture.start(state.settings.inputDeviceId, rate);
+        if (result.sampleRate !== rate) {
+          await capture.stop();
+          return toast('error', `Der Eingang läuft mit ${result.sampleRate} Hz, die Aufnahme hat ${rate} Hz – Fortsetzen nicht möglich.`);
+        }
+        state.sampleRate = result.sampleRate;
+        state.lastChunkAt = Date.now();
       }
-      state.sampleRate = result.sampleRate;
-      state.lastChunkAt = Date.now();
       const res = await window.api.record.continue();
       if (!res.ok) {
         await capture.stop();
@@ -723,6 +755,11 @@
         state.selectedSectionId = x.id;
         wave.scrollTo(x.start);
         renderLists();
+        // Mehrspur: an den Abschnittsanfang springen; mit Schleife wird dieser Abschnitt wiederholt.
+        if (isMultitrack() && state.session.status === 'stopped') {
+          setPlayhead(x.start, true);
+          if (mt.play?.playing) window.api.multitrack.loop(playbackLoop());
+        }
       });
       li.querySelector('[data-rename]').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -861,6 +898,14 @@
       });
     }
 
+    // Angezeigt wird eine Mehrspuraufnahme (Umschalter auf Stereo): kein MP3-Export, dafür ein Hinweis.
+    if (session?.mode === 'multitrack') {
+      list.innerHTML = '<div class="empty">Mehrspuraufnahmen werden nicht als MP3 exportiert – die Spuren liegen als WAV im Aufnahmeordner.</div>';
+      $('export-target').textContent = '';
+      $('btn-export').disabled = true;
+      return;
+    }
+
     if (segments.length === 0) {
       list.innerHTML = '<div class="empty">Abschnitt starten und beenden, um ihn zu exportieren.</div>';
       $('export-target').textContent = '';
@@ -954,6 +999,11 @@
       return;
     }
     wave.update({ playhead: t });
+    state.playheadT = t;
+    if (isMultitrack()) {
+      if (seekPlayer && mt.play?.playing) window.api.multitrack.seek(t);
+      return;
+    }
     if (seekPlayer && $('player').src && state.session?.status === 'stopped') {
       $('player').currentTime = t;
     }
@@ -961,6 +1011,7 @@
 
   /** Leertaste / Abspielen-Knopf: Wiedergabe der fertigen Datei oder Mithören der laufenden Aufnahme. */
   function togglePlayback() {
+    if (isMultitrack()) return multitrackView() ? toggleMultitrackPlayback() : undefined;
     const status = state.session?.status;
     if (status === 'recording' || status === 'paused') {
       if (monitor.playing) return monitor.pause();
@@ -977,9 +1028,34 @@
     if (player.paused) player.play(); else player.pause();
   }
 
+  /**
+   * Abspielen/Mithören und Schleife. Mehrspuraufnahmen spielen nur in der Mehrspur-Ansicht zum Pult (beendet, nicht
+   * während der Aufnahme); in der Stereo-Ansicht bleibt der Knopf mit Hinweis gesperrt, die Schleife ausgeblendet.
+   */
+  function applyPlayControls() {
+    const s = state.session;
+    if (!s) return;
+    const stopped = s.status === 'stopped';
+    const live = isLive();
+    const multi = s.mode === 'multitrack';
+    $('btn-play').disabled = multi ? !(stopped && multitrackView()) : !((stopped && s.wavPath) || live);
+    $('loop-wrap').hidden = !(multi && stopped && multitrackView());
+    updatePlayButton();
+  }
+
   function updatePlayButton() {
     const status = state.session?.status;
     const live = status === 'recording' || status === 'paused';
+    if (state.session?.mode === 'multitrack') {
+      if (!multitrackView()) {
+        $('btn-play').textContent = 'Abspielen';
+        $('btn-play').title = 'Mehrspuraufnahme: zum Zurückspielen zum Pult die Aufnahmeart (Einstellungen → Audio) auf Mehrspur stellen';
+        return;
+      }
+      $('btn-play').textContent = mt.play?.playing ? 'Stopp' : 'Zum Pult abspielen';
+      $('btn-play').title = 'Spuren über die USB-Ausgänge zum Mischpult spielen, ab der Marke in der Wellenform (Leertaste)';
+      return;
+    }
     const playing = live ? monitor.playing : state.playing;
     $('btn-play').textContent = playing ? 'Pause' : (live ? 'Mithören' : 'Abspielen');
   }
@@ -1513,6 +1589,8 @@
       $('meter-l').style.width = Math.min(100, levels.l * 100) + '%';
       $('meter-r').style.width = Math.min(100, levels.r * 100) + '%';
       $('clip').dataset.on = String(Boolean(levels.clip));
+      // Mehrspur: Die Wellenform kommt fertig aus dem Mehrspur-Prozess (Stereo rechnet sie hier aus den Blöcken).
+      if (levels.buckets) for (const b of levels.buckets) state.peaks.push(b);
       state.duration = levels.duration;
       $('timecode').textContent = longTime(levels.duration);
       updateSectionElapsed();
@@ -1520,6 +1598,21 @@
     });
 
     window.api.on('health', (h) => applyHealth(h));
+    window.api.on('mixer', (m) => renderMixer(m));
+    window.api.on('multitrack', (m) => { mt.monitor = m; renderChannels(); });
+    window.api.on('track-levels', (l) => applyTrackLevels(l));
+    window.api.on('multitrack-play', (p) => applyPlayback(p));
+    // Aufnahmeart von außen umgestellt (Companion): nur Umschalter und Ansicht nachziehen, ein offener
+    // Einstellungsdialog behält seine ungespeicherten Eingaben.
+    window.api.on('settings', (st) => {
+      state.settings = st;
+      $('set-rec-mode').value = settingMode();
+      applyMode();
+      refreshDisk();
+    });
+    $('chk-loop').addEventListener('change', () => {
+      if (mt.play?.playing) window.api.multitrack.loop(playbackLoop()).then((r) => { if (!r.ok) toast('error', r.error); });
+    });
 
     window.api.on('toast', ({ level, message }) => toast(level, message));
 
@@ -1606,6 +1699,13 @@
   /** Mini-Fenster nach dem Beenden: Zusammenfassung und ein Knopf für den Export. */
   function updateCompactExport() {
     const session = state.session;
+    if (session?.mode === 'multitrack') {
+      // Mehrspur: kein MP3-Export, nur die Zusammenfassung.
+      const n = (session.tracks || []).length;
+      $('ce-summary').textContent = `Mehrspur: ${n} ${n === 1 ? 'Spur' : 'Spuren'} gespeichert ✓`;
+      $('ce-export').hidden = true;
+      return;
+    }
     const segments = session?.segments || [];
     const real = segments.filter((s) => s.markerId && !s.open);
     const unsaved = unsavedSegments();
@@ -1771,6 +1871,8 @@
     badge.title = `Freier Speicherplatz auf ${res.dir}: reicht für ca. ${formatHours(res.hoursLeft)} Aufnahme`;
     $('disk-info').textContent = `Frei: ${formatBytes(res.freeBytes)} – reicht für ca. ${formatHours(res.hoursLeft)} Aufnahme.`;
     badge.dataset.level = res.hoursLeft < DISK_LOW_HOURS ? 'low' : (res.hoursLeft < DISK_WARN_HOURS ? 'warn' : 'ok');
+    state.diskHoursLeft = res.hoursLeft;
+    if (multitrackView()) renderChannelStatus();
 
     if (res.hoursLeft < DISK_LOW_HOURS && state.session?.status === 'recording' && !diskLowToastShown) {
       diskLowToastShown = true;
@@ -1964,7 +2066,8 @@
       el.className = 'list-item' + (s.finalized ? '' : ' unfinished');
       el.innerHTML = '<span class="name"></span><span class="meta"></span>';
       el.querySelector('.name').textContent = s.name + (s.finalized ? '' : ' · unterbrochen');
-      el.querySelector('.meta').textContent = `${s.date} · ${fmt(s.duration)} · ${s.sectionCount} Abschnitte`;
+      const kind = s.mode === 'multitrack' ? ` · Mehrspur (${s.tracks} Spuren)` : '';
+      el.querySelector('.meta').textContent = `${s.date} · ${fmt(s.duration)} · ${s.sectionCount} Abschnitte${kind}`;
       el.addEventListener('click', () => openSession(s.path));
       list.appendChild(el);
     });
@@ -2020,6 +2123,355 @@
     applyOutputDevice();
   }
 
+  /** Pultfarben (Wert 0–15, ab 8 invertiert) als Name für CSS. */
+  const MIXER_COLORS = ['off', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'];
+
+  /** Einstellungen → Mischpult: Verbindung, Routing samt Bewertung, Kanalnamen. */
+  function renderMixer(m) {
+    state.mixer = m;
+    if (!m) return;
+    const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const st = $('mixer-status');
+    if (!m.configured) {
+      st.textContent = 'Keine Verbindung eingerichtet.';
+    } else if (m.status === 'connected') {
+      const i = m.info || {};
+      st.innerHTML = `<span class="ok">● Verbunden</span>: ${esc(i.model || 'Pult')} „${esc(i.name || '')}“ · Firmware ${esc(i.version || '?')} · ${esc(i.ip || m.host)}${m.simulated ? ' (simuliert)' : ''}`;
+    } else if (m.status === 'lost') {
+      st.innerHTML = `<span class="bad">● ${esc(m.host)} antwortet nicht mehr</span> (Pult aus oder Netzwerk getrennt?)`;
+    } else {
+      st.innerHTML = `<span class="bad">● Verbinde mit ${esc(m.host)} …</span> (antwortet bisher nicht – Pult aus?)`;
+    }
+
+    const kinds = { stereo: 'Stereo', multitrack: 'Mehrspur', unknown: 'unbekannt' };
+    const r = $('mixer-routing');
+    const c = m.check || {};
+    const learned = m.learned || {};
+    const learnedText = `Gemerkt: Stereo ${learned.stereo ? '✓' : '–'}, Mehrspur ${learned.multitrack ? '✓' : '–'}`;
+    if (!m.configured || m.status !== 'connected' || !c.labels) {
+      r.innerHTML = `Routing unbekannt (nicht verbunden).<br>${learnedText}`;
+    } else {
+      const verdict = c.status === 'ok'
+        ? `<span class="ok">passt zur Aufnahmeart ${kinds[m.mode]}</span>`
+        : c.status === 'mismatch'
+          ? `<span class="bad">passt NICHT zur Aufnahmeart ${kinds[m.mode]}</span>`
+          : '<span class="bad">nicht eindeutig – bitte anlernen</span>';
+      r.innerHTML = `USB-Ausgänge ${c.labels.map(esc).join(' · ')}<br>`
+        + `Erkannt: <b>${kinds[c.kind]}</b> (${c.learned ? 'gemerkt' : 'Faustregel'}) – ${verdict}<br>${learnedText}`;
+    }
+    $('btn-mixer-learn-stereo').disabled = !c.labels;
+    $('btn-mixer-learn-multi').disabled = !c.labels;
+    $('mixer-sim-row').hidden = !m.simulated;
+    // Warnbalken sofort richtig, auch wenn noch keine Gesundheitsmeldung kam (z. B. direkt nach dem Start).
+    state.health = { ...(state.health || {}), routing: c.status && c.status !== 'off' ? c.status : null };
+
+    const list = $('mixer-channels');
+    list.innerHTML = '';
+    const channels = m.status === 'connected' ? (m.channels || []) : [];
+    if (!channels.length) {
+      list.textContent = m.configured ? 'Keine Kanalnamen (nicht verbunden).' : 'Ohne Verbindung heißen die Spuren „Kanal 1“, „Kanal 2“ …';
+    }
+    channels.forEach((ch, i) => {
+      const el = document.createElement('div');
+      el.className = 'mixer-ch';
+      if (Number.isInteger(ch.color)) el.dataset.color = MIXER_COLORS[ch.color % 8];
+      el.innerHTML = `<b>${i + 1}</b><span>${esc(ch.name || '–')}</span>`;
+      el.title = ch.name || `Kanal ${i + 1} (ohne Namen)`;
+      list.appendChild(el);
+    });
+    applyHealth(state.health);
+    renderChannels();
+  }
+
+  /* ------------------------------------------------------------- Mehrspur */
+
+  const CH_SILENT_LEVEL = 0.001;     // etwa -60 dBFS
+  const CH_SILENT_AFTER_MS = 20000;  // so lange still → Kanal gilt als stumm (nur während der Aufnahme)
+  const mt = { monitor: null, rows: [], key: '', hold: [], holdAt: [], clipUntil: [], loudAt: [], silentText: '', play: null, playText: '' };
+
+  /** Eingestellte Aufnahmeart (für die nächste Aufnahme). */
+  function settingMode() {
+    return state.settings?.recordingMode === 'multitrack' ? 'multitrack' : 'stereo';
+  }
+
+  /**
+   * Mehrspur-Ansicht (Kanäle statt Export): folgt dem Umschalter; während einer Aufnahme gilt deren Art
+   * (der Umschalter ist dann gesperrt).
+   */
+  function multitrackView() {
+    if (isLive()) return state.session.mode === 'multitrack';
+    return settingMode() === 'multitrack';
+  }
+
+  /** Schild „Mehrspur“ in der Kopfzeile und Ansicht passend zur Aufnahmeart (Stereo ist der Normalfall: kein Schild). */
+  function applyMode() {
+    const live = isLive();
+    const mode = live ? (state.session.mode || 'stereo') : settingMode();
+    const badge = $('btn-mode-badge');
+    badge.hidden = mode !== 'multitrack';
+    badge.title = live
+      ? 'Es läuft eine Mehrspuraufnahme'
+      : 'Mehrspuraufnahme ist eingestellt – Klick: Aufnahmeart in den Einstellungen ändern';
+    document.body.classList.toggle('mt', multitrackView());
+    renderChannels();
+    applyPlayControls();
+  }
+
+  /** Schild „Mehrspur“: Einstellungen beim Reiter Audio öffnen, die Aufnahmeart im Blick. */
+  function openRecordingModeSetting() {
+    settingsTab = 'audio';
+    openModal('modal-settings');
+    setTimeout(() => {
+      $('set-rec-mode').scrollIntoView({ block: 'center' });
+      $('set-rec-mode').focus();
+    }, 50);
+  }
+
+  /**
+   * Kanäle für die Anzeige. Während einer Mehrspuraufnahme: deren Spuren (fest). Sonst: Anzahl vom Gerät, Namen
+   * und Farben vom Pult, Auswahl aus den Einstellungen (gilt für die nächste Aufnahme).
+   */
+  function channelModel() {
+    const s = state.session;
+    const live = isLive() && s.mode === 'multitrack';
+    const tracks = s?.mode === 'multitrack' ? (s.tracks || []) : [];
+    const pult = state.mixer?.status === 'connected' ? (state.mixer.channels || []) : [];
+    const byChannel = new Map(tracks.map((t) => [t.channel, t]));
+    const inputs = mt.monitor?.info?.inputs || Math.max(32, ...tracks.map((t) => t.channel + 1));
+    const armedSetting = state.settings?.multitrackArmed;
+    return Array.from({ length: inputs }, (_, c) => {
+      const t = byChannel.get(c);
+      const p = pult[c] || {};
+      // Aufgenommene Spuren behalten ihren Namen vom Start; die übrigen zeigen den aktuellen Namen am Pult.
+      const name = live && t ? t.name : (p.name || t?.name);
+      return {
+        c,
+        name: name || `Kanal ${c + 1}`,
+        named: Boolean(p.name),
+        color: live ? t?.color : (Number.isInteger(p.color) ? p.color : t?.color),
+        armed: live ? byChannel.has(c) : (!Array.isArray(armedSetting) || armedSetting.includes(c))
+      };
+    });
+  }
+
+  /** Pegelstellung 0..1 auf einer dB-Skala (−60 … 0 dBFS). */
+  function levelPos(p) {
+    if (!(p > 0)) return 0;
+    return Math.max(0, Math.min(1, (20 * Math.log10(p) + 60) / 60));
+  }
+
+  function renderChannels() {
+    if (!multitrackView()) return;
+    const model = channelModel();
+    const live = isLive();
+    const key = JSON.stringify([model, live]);
+    if (key !== mt.key) {
+      mt.key = key;
+      const list = $('ch-list');
+      list.replaceChildren();
+      mt.rows = model.map((m) => {
+        const el = document.createElement('button');
+        el.type = 'button';
+        el.className = 'ch';
+        el.dataset.armed = String(m.armed);
+        if (Number.isInteger(m.color)) el.dataset.color = MIXER_COLORS[m.color % 8];
+        el.disabled = live;
+        el.title = `${m.c + 1}: ${m.name}${m.armed ? '' : ' – wird nicht aufgenommen'}${live ? '' : ' (Klick: an- bzw. abwählen)'}`;
+        el.innerHTML = '<b></b><span class="ch-name"></span><span class="ch-meter"><i></i><u></u></span>';
+        el.querySelector('b').textContent = String(m.c + 1);
+        el.querySelector('.ch-name').textContent = m.name;
+        el.addEventListener('click', () => toggleArmed(m.c));
+        list.appendChild(el);
+        return { el, fill: el.querySelector('i'), hold: el.querySelector('u'), armed: m.armed, name: m.name };
+      });
+    }
+    $('ch-all').disabled = live;
+    $('ch-named').disabled = live;
+    renderChannelStatus(model);
+  }
+
+  function renderChannelStatus(model = channelModel()) {
+    const el = $('ch-status');
+    const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const armed = model.filter((m) => m.armed).length;
+    const parts = [];
+    const s = state.session;
+    if (isLive() && s.mode === 'multitrack') {
+      parts.push(`Aufnahme: ${armed} ${armed === 1 ? 'Spur' : 'Spuren'}`);
+    } else {
+      const m = mt.monitor;
+      if (m?.active && m.info) {
+        parts.push(`${esc(m.info.device)} · ${(m.info.sampleRate / 1000).toLocaleString('de-DE')} kHz · ${armed} von ${model.length} Kanälen ausgewählt`);
+      } else if (m?.error) {
+        parts.push(`<span class="bad">Gerät nicht verfügbar</span>: ${esc(m.error)} – neuer Versuch alle 10 s`);
+      } else if (settingMode() === 'multitrack') {
+        parts.push('Gerät wird geöffnet …');
+      }
+      if (s?.status === 'stopped' && s.mode !== 'multitrack' && s.wavPath) {
+        parts.push('Angezeigt wird eine Stereo-Aufnahme – zum Exportieren die Aufnahmeart (Einstellungen → Audio) auf Stereo stellen.');
+      }
+    }
+    if (mt.playText) parts.push(mt.playText);
+    if (mt.monitor?.stalled) parts.push('<span class="bad">Das Gerät liefert keine Daten (Mischpult aus?)</span>');
+    if (state.mixer?.configured && state.mixer.status !== 'connected') parts.push('<span class="bad">Mischpult nicht verbunden – Namen fehlen</span>');
+    if (state.diskHoursLeft != null && settingMode() === 'multitrack' && !isLive()) parts.push(`Platz für ca. ${formatHours(state.diskHoursLeft)}`);
+    if (mt.silentText) parts.push(`<span class="bad">${esc(mt.silentText)}</span>`);
+    el.innerHTML = parts.join('<br>');
+  }
+
+  async function saveArmed(list) {
+    const res = await window.api.settings.set({ multitrackArmed: list });
+    if (!res.ok) return toast('error', res.error);
+    state.settings = res.settings;
+    renderChannels();
+    refreshDisk();
+  }
+
+  /** Kanal für die nächste Aufnahme an- bzw. abwählen (alle gewählt = null: neue Gerätekanäle kommen automatisch dazu). */
+  function toggleArmed(c) {
+    if (isLive()) return;
+    const model = channelModel();
+    const armed = new Set(model.filter((m) => m.armed).map((m) => m.c));
+    if (armed.has(c)) armed.delete(c); else armed.add(c);
+    if (armed.size === 0) return toast('info', 'Mindestens ein Kanal muss aufgenommen werden.');
+    saveArmed(armed.size === model.length ? null : [...armed].sort((a, b) => a - b));
+  }
+
+  /* Zurückspielen zum Pult (beendete Mehrspuraufnahme) */
+
+  /** Schleife: gewählter Abschnitt, sonst die ganze Aufnahme; ohne Häkchen keine. */
+  function playbackLoop() {
+    if (!$('chk-loop').checked) return null;
+    const x = (state.session?.sections || []).find((y) => y.id === state.selectedSectionId && y.start != null && y.end != null);
+    return x ? { start: x.start, end: x.end } : { start: 0, end: state.session?.duration || 0 };
+  }
+
+  async function toggleMultitrackPlayback() {
+    const s = state.session;
+    if (!s || s.status !== 'stopped') return;
+    if (mt.play?.playing) {
+      const res = await window.api.multitrack.stopPlayback();
+      if (!res.ok) toast('error', res.error);
+      return;
+    }
+    if (!mt.playHintShown) {
+      mt.playHintShown = true;
+      toast('info', 'Die Spuren laufen über die USB-Ausgänge zum Mischpult. Zu hören sind sie nur, wenn dort die Kanäle die USB-Karte als Quelle haben.', 12000);
+    }
+    const start = state.playheadT != null && state.playheadT < (s.duration || 0) - 0.5 ? state.playheadT : 0;
+    const res = await window.api.multitrack.play(start, playbackLoop());
+    if (!res.ok) return toast('error', res.error);
+    applyPlayback(res.play);
+  }
+
+  /** Abspielstand: Knopf, Marke in der Wellenform, Zeile im Kanal-Bereich. */
+  function applyPlayback(play) {
+    const was = mt.play?.playing;
+    mt.play = play;
+    if (play?.playing) {
+      wave.update({ playhead: play.pos });
+      state.playheadT = play.pos;
+    }
+    const loopName = play?.loop
+      ? ((state.session?.sections || []).find((x) => x.id === state.selectedSectionId && Math.abs(x.start - play.loop.start) < 0.05)?.label || 'ganze Aufnahme')
+      : null;
+    const text = play?.playing
+      ? `▶ Spielt zum Pult: ${fmt(play.pos)} / ${fmt(play.length)}${loopName ? ` · Schleife: ${loopName}` : ''}`
+      : '';
+    if (text !== mt.playText) {
+      mt.playText = text;
+      if (multitrackView()) renderChannelStatus();
+    }
+    if (was !== play?.playing) updatePlayButton();
+  }
+
+  /** Kanalpegel (auch vor dem Start): Balken, Spitzenwert, Übersteuerung, stumme Kanäle während der Aufnahme. */
+  function applyTrackLevels({ peaks = [], clips = [], play }) {
+    if (play && (play.playing || mt.play?.playing)) applyPlayback(play);
+    if (!multitrackView() || !mt.rows.length) return;
+    const now = Date.now();
+    const recording = state.session?.status === 'recording' && state.session.mode === 'multitrack';
+    const silent = [];
+    let max = 0;
+    let anyClip = false;
+    mt.rows.forEach((row, c) => {
+      const p = peaks[c] || 0;
+      const pos = levelPos(p);
+      if (pos >= (mt.hold[c] || 0) || now - (mt.holdAt[c] || 0) > 1500) {
+        mt.hold[c] = pos;
+        mt.holdAt[c] = now;
+      }
+      if (clips[c]) mt.clipUntil[c] = now + 2000;
+      if (p > CH_SILENT_LEVEL || !recording || !row.armed) mt.loudAt[c] = now;
+      const clipping = now < (mt.clipUntil[c] || 0);
+      row.fill.style.width = `${pos * 100}%`;
+      row.fill.dataset.level = clipping ? 'clip' : (p > 0.5 ? 'hot' : 'ok');
+      row.hold.style.left = `calc(${mt.hold[c] * 100}% - 2px)`;
+      row.el.dataset.clip = String(clipping);
+      const isSilent = now - mt.loudAt[c] > CH_SILENT_AFTER_MS;
+      row.el.dataset.silent = String(isSilent);
+      if (isSilent) silent.push(row.name);
+      if (row.armed) {
+        max = Math.max(max, p);
+        anyClip = anyClip || clipping;
+      }
+    });
+    const text = silent.length ? `Seit über 20 s still: ${silent.join(', ')}` : '';
+    if (text !== mt.silentText) {
+      mt.silentText = text;
+      renderChannelStatus();
+    }
+    // Vor dem Start zeigt der große Pegel den lautesten gewählten Kanal (während der Aufnahme kommt er aus der Session).
+    if (!isLive()) {
+      $('meter-l').style.width = `${Math.min(100, max * 100)}%`;
+      $('meter-r').style.width = `${Math.min(100, max * 100)}%`;
+      $('clip').dataset.on = String(anyClip);
+    }
+  }
+
+  /**
+   * Auswahl des Mehrspur-Geräts. Gespeichert wird der Name; ein gewähltes, gerade nicht angeschlossenes
+   * Gerät (Mischpult aus) bleibt als Eintrag stehen. `devices` = null: nur die gespeicherte Wahl zeigen.
+   */
+  function fillMultitrackSelect(devices) {
+    const select = $('set-mt-device');
+    const wanted = select.value || state.settings.multitrackDevice || '';
+    select.innerHTML = '';
+    const add = (value, text) => {
+      const o = document.createElement('option');
+      o.value = value;
+      o.textContent = text;
+      select.appendChild(o);
+    };
+    add('', 'Automatisch (Gerät mit den meisten Eingängen)');
+    for (const d of devices || []) add(d.name, `${d.name} (${d.inputs} Eingänge)`);
+    if (wanted && ![...select.options].some((o) => o.value === wanted)) add(wanted, devices ? `${wanted} (nicht verbunden)` : wanted);
+    select.value = wanted;
+  }
+
+  /**
+   * Sucht Geräte für die Mehrspuraufnahme (im Mehrspur-Prozess, unter Windows ASIO). Nur auf Knopfdruck und
+   * nie während einer Aufnahme: Zum Suchen werden die ASIO-Treiber kurz geladen.
+   */
+  async function refreshMultitrackDevices() {
+    const info = $('mt-device-info');
+    if (isLive()) {
+      info.textContent = 'Während einer Aufnahme wird nicht nach Geräten gesucht.';
+      return;
+    }
+    info.textContent = 'Geräte werden gesucht …';
+    const res = await window.api.multitrack.devices(false);
+    if (!res.ok) {
+      info.textContent = `Geräte konnten nicht gelesen werden: ${res.error}`;
+      return;
+    }
+    const devices = res.devices.filter((d) => d.inputs > 0);
+    fillMultitrackSelect(devices);
+    info.textContent = devices.length
+      ? `Schnittstelle: ${res.api} · ${devices.length} Gerät(e) mit Eingängen`
+      : `Schnittstelle: ${res.api} · kein Gerät gefunden${navigator.platform.startsWith('Win') ? ' (ASIO-Treiber installiert, Mischpult an?)' : ''}`;
+  }
+
   /** Wendet das gewählte Ausgabegerät auf Mithören und Abspielen an. */
   function applyOutputDevice() {
     const id = state.settings.outputDeviceId || '';
@@ -2033,6 +2485,12 @@
   function applySettingsToForm() {
     const s = state.settings;
     $('set-samplerate').value = String(s.sampleRate);
+    $('set-rec-mode').value = s.recordingMode === 'multitrack' ? 'multitrack' : 'stereo';
+    $('set-mt-simulate').checked = Boolean(s.multitrackSimulate);
+    $('set-mt-device').value = s.multitrackDevice || '';
+    if (!$('set-mt-device').options.length || $('set-mt-device').value !== (s.multitrackDevice || '')) fillMultitrackSelect(null);
+    $('set-mt-dir').value = s.multitrackDir || '';
+    $('set-mixer-host').value = s.mixerHost || '';
     $('set-dir').value = s.recordingsDir;
     loadTemplatesDraft();
     renderTemplateEditor();
@@ -2232,6 +2690,42 @@
       if (res.ok && res.path) $('set-export-dir').value = res.path;
     });
     $('btn-clear-export-dir').addEventListener('click', () => { $('set-export-dir').value = ''; });
+    $('btn-choose-mt-dir').addEventListener('click', async () => {
+      const res = await window.api.settings.chooseFolder('Ordner für Mehrspuraufnahmen wählen', $('set-mt-dir').value || $('set-dir').value);
+      if (res.ok && res.path) $('set-mt-dir').value = res.path;
+    });
+    $('btn-clear-mt-dir').addEventListener('click', () => { $('set-mt-dir').value = ''; });
+    $('btn-mt-refresh').addEventListener('click', () => refreshMultitrackDevices());
+    $('btn-mode-badge').addEventListener('click', openRecordingModeSetting);
+    $('ch-all').addEventListener('click', () => saveArmed(null));
+    $('ch-named').addEventListener('click', () => {
+      if (state.mixer?.status !== 'connected') return toast('info', 'Das Mischpult ist nicht verbunden – die Namen sind nicht bekannt.');
+      const named = channelModel().filter((m) => m.named).map((m) => m.c);
+      if (!named.length) return toast('info', 'Am Mischpult hat kein Kanal einen Namen.');
+      saveArmed(named);
+    });
+    $('btn-mixer-discover').addEventListener('click', async () => {
+      const out = $('mixer-found');
+      out.textContent = 'Suche im Netz …';
+      const res = await window.api.mixer.discover();
+      if (!res.ok) { out.textContent = `Suche fehlgeschlagen: ${res.error}`; return; }
+      if (!res.found.length) { out.textContent = 'Kein Pult gefunden. Eingeschaltet und im selben Netz? Sonst die IP vom Pult (Setup → Network) eintragen.'; return; }
+      out.textContent = 'Gefunden: ' + res.found.map((f) => `${f.model} „${f.name}“ (${f.ip})`).join(', ') + ' – übernommen, bitte speichern.';
+      $('set-mixer-host').value = res.found[0].ip;
+    });
+    const learn = async (mode) => {
+      const res = await window.api.mixer.learn(mode);
+      if (!res.ok) toast('error', res.error);
+      else renderMixer(res.mixer);
+    };
+    $('btn-mixer-learn-stereo').addEventListener('click', () => learn('stereo'));
+    $('btn-mixer-learn-multi').addEventListener('click', () => learn('multitrack'));
+    $('btn-mixer-forget').addEventListener('click', async () => {
+      const res = await window.api.mixer.forget();
+      if (res.ok) renderMixer(res.mixer);
+    });
+    $('btn-mixer-sim-stereo').addEventListener('click', () => window.api.mixer.simulateRouting('stereo'));
+    $('btn-mixer-sim-multi').addEventListener('click', () => window.api.mixer.simulateRouting('multitrack'));
     $('btn-ct-test').addEventListener('click', async () => {
       $('ct-test-result').textContent = 'Wird geprüft …';
       await saveSettings(true);
@@ -2259,6 +2753,11 @@
       outputDeviceId: $('set-output').value,
       outputDeviceLabel: $('set-output').selectedOptions[0]?.textContent || '',
       sampleRate: Number($('set-samplerate').value),
+      recordingMode: $('set-rec-mode').value,
+      multitrackDevice: $('set-mt-device').value,
+      multitrackSimulate: $('set-mt-simulate').checked,
+      multitrackDir: $('set-mt-dir').value,
+      mixerHost: $('set-mixer-host').value.trim(),
       recordingsDir: $('set-dir').value,
       exportDir: $('set-export-dir').value,
       ...readTemplatesForSave(),
@@ -2284,6 +2783,7 @@
     state.settings = res.settings;
     applyTheme(state.settings.theme);
     applyOutputDevice();
+    applyMode();
     refreshDisk();
     $('set-ct-token').value = '';
     applySettingsToForm();

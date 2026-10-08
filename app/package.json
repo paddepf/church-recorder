@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
+    "audify": "1.10.1",
     "electron-updater": "^6.8.9",
     "ws": "^8.22.0"
   },
@@ -34,7 +35,9 @@
     },
     "files": [
       "src/**/*",
-      "package.json"
+      "package.json",
+      "!node_modules/audify/{vendor,src}/**",
+      "!node_modules/audify/{CMakeLists.txt,binding.gyp,tsconfig.json,.gitmodules}"
     ],
     "win": {
       "target": [

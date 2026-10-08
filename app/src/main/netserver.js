@@ -244,7 +244,7 @@ class NetServer extends EventEmitter {
     }
 
     const allowed = ['record.start', 'record.stop', 'record.pause', 'record.resume', 'record.toggle',
-      'marker.add', 'marker.next', 'cut.toggle', 'undo', 'redo', 'template.apply'];
+      'marker.add', 'marker.next', 'cut.toggle', 'undo', 'redo', 'template.apply', 'mode.set'];
     if (!allowed.includes(msg.action)) {
       return this._send(ws, { type: 'error', code: 'unknown_action', message: `Unbekannter Befehl: ${msg.action}` });
     }

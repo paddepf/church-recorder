@@ -1,5 +1,11 @@
 'use strict';
 
+// Technik-Test der Mehrspuraufnahme statt der App (siehe multitrack/probe.js).
+if (process.env.EBBTON_MT_PROBE) {
+  require('./multitrack/probe').run();
+  return;
+}
+
 const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu, screen, systemPreferences, powerSaveBlocker } = require('electron');
@@ -11,9 +17,14 @@ const { Updater } = require('./updater');
 const churchtools = require('./churchtools');
 const mp3 = require('./mp3');
 const RoleLogic = require('../shared/roles');
+const { MultitrackManager } = require('./multitrack/manager');
+const { MixerLink } = require('./mixer/link');
+const mixerDiscover = require('./mixer/client').discover;
 
 let win = null;
 const session = new Session();
+const multitrack = new MultitrackManager();
+const mixer = new MixerLink();
 const net = new NetServer();
 const updater = new Updater(() => session.status === 'recording' || session.status === 'paused');
 
@@ -49,17 +60,283 @@ const SILENT_AFTER_MS = 20000;
 /** Freier Platz auf dem Laufwerk der Aufnahmen (Stunden bezogen auf die aktuelle Abtastrate). */
 function diskInfo() {
   // Der Ordner kann noch nicht existieren: vom nächsten vorhandenen Elternordner messen.
-  let dir = settings.get('recordingsDir');
+  const multi = settings.get('recordingMode') === 'multitrack';
+  let dir = multi ? multitrackDir() : settings.get('recordingsDir');
   while (dir && !fs.existsSync(dir) && path.dirname(dir) !== dir) dir = path.dirname(dir);
   const st = fs.statfsSync(dir);
   const freeBytes = Number(st.bavail) * Number(st.bsize);
   const totalBytes = Number(st.blocks) * Number(st.bsize);
-  const bytesPerHour = (settings.get('sampleRate') || 48000) * 2 * 2 * 3600;   // 16 Bit, Stereo
-  return { freeBytes, totalBytes, hoursLeft: freeBytes / bytesPerHour, dir };
+  // Stereo: 16 Bit, 2 Kanäle. Mehrspur: 24 Bit je aufgenommenem Kanal (Rate der letzten Mehrspuraufnahme, sonst 48 kHz).
+  const bytesPerHour = multi
+    ? (lastMultitrackRate || 48000) * 3 * multitrackTrackCount() * 3600
+    : (settings.get('sampleRate') || 48000) * 2 * 2 * 3600;
+  return { freeBytes, totalBytes, hoursLeft: freeBytes / bytesPerHour, dir, mode: multi ? 'multitrack' : 'stereo' };
 }
+
+/* ------------------------------------------------------------- Mehrspuraufnahme */
+
+let lastMultitrackRate = null;
+
+/** Ordner der Mehrspuraufnahmen: eigene Einstellung, sonst Unterordner „Mehrspur“ der Aufnahmen. */
+function multitrackDir() {
+  return settings.get('multitrackDir') || path.join(settings.get('recordingsDir'), 'Mehrspur');
+}
+
+/** Gewählte Kanäle (0-basiert); `null` in den Einstellungen = alle des Geräts. */
+function multitrackChannels(inputs) {
+  const armed = settings.get('multitrackArmed');
+  if (!Array.isArray(armed)) return Array.from({ length: inputs }, (_, c) => c);
+  return armed.filter((c) => Number.isInteger(c) && c >= 0 && c < inputs).sort((a, b) => a - b);
+}
+
+function multitrackTrackCount() {
+  const armed = settings.get('multitrackArmed');
+  return Array.isArray(armed) ? Math.max(1, armed.length) : (monitorState.info?.inputs || 32);
+}
+
+/** Meiste Eingänge zuerst, bei Gleichstand das Standard-Eingabegerät des Systems (nicht zufällig das erste der Liste). */
+function byInputsThenDefault(a, b) {
+  return b.inputs - a.inputs || Number(Boolean(b.isDefault)) - Number(Boolean(a.isDefault));
+}
+
+/** Gerät für die Mehrspuraufnahme: das gewählte (per Name) oder das mit den meisten Eingängen. */
+async function multitrackDevice() {
+  const simulate = Boolean(settings.get('multitrackSimulate'));
+  const { devices } = await multitrack.devices({ simulate });
+  const wanted = settings.get('multitrackDevice');
+  const withInputs = devices.filter((d) => d.inputs > 0);
+  const device = wanted && !simulate
+    ? withInputs.find((d) => d.name === wanted)
+    : withInputs.sort(byInputsThenDefault)[0];
+  if (!device) {
+    throw new Error(wanted ? `Das Mehrspur-Gerät „${wanted}“ ist nicht verfügbar – Mischpult eingeschaltet und per USB verbunden?` : 'Kein Audiogerät mit Eingängen gefunden.');
+  }
+  return { device, simulate };
+}
+
+/** Dateiname einer Spur: Kanalnummer und Name, z. B. „03_Predigtmikro.wav“. */
+function trackFileName(t) {
+  return `${String(t.channel + 1).padStart(2, '0')}_${slug(t.name, 'Kanal')}.wav`;
+}
+
+async function startMultitrack() {
+  if (session.status === 'recording') return fail('Es läuft bereits eine Aufnahme.');
+  if (session.status === 'paused') return session.resume();
+  const { device, simulate } = await multitrackDevice();
+  const channels = multitrackChannels(device.inputs);
+  if (!channels.length) return fail('Für die Mehrspuraufnahme ist kein Kanal ausgewählt.');
+  // Namen und Farben vom Pult; ist es nicht erreichbar, heißen die Spuren „Kanal n“.
+  if (mixer.state().configured && !mixer.connected) {
+    toast('info', 'Mischpult nicht erreichbar – die Spuren heißen „Kanal 1“, „Kanal 2“ … statt wie am Pult.');
+  }
+  const check = routingCheck('multitrack');
+  if (check.status === 'mismatch') toast('warn', routingWarning(check, 'multitrack'));
+  const { folder, base } = session.multitrackTarget(multitrackDir());
+  const tracks = channels.map((c) => {
+    const ch = mixer.channel(c);
+    const t = { channel: c, name: ch.name || `Kanal ${c + 1}`, color: ch.color };
+    return { ...t, file: path.join(folder, trackFileName(t)) };
+  });
+  let info;
+  try {
+    info = await multitrack.start({ simulate, deviceId: device.id, tracks });
+  } catch (err) {
+    try { fs.rmdirSync(folder); } catch { /* nicht leer oder schon weg */ }
+    return fail(`Die Mehrspuraufnahme konnte nicht gestartet werden: ${err.message}`);
+  }
+  lastMultitrackRate = info.sampleRate;
+  const res = session.start({ multitrack: { writer: multitrack.writer(info), tracks, base, folder } });
+  if (!res.ok) {
+    await multitrack.stop().catch(() => {});
+    return res;
+  }
+  return { ...res, device: info.device, api: info.api, sampleRate: info.sampleRate, tracks: tracks.length };
+}
+
+/** Hängt an die angezeigte, beendete Mehrspuraufnahme an (dieselben Spurdateien). */
+async function continueMultitrack() {
+  const files = session.trackFiles();
+  const missing = files.filter((t) => !fs.existsSync(t.file));
+  if (!files.length || missing.length) {
+    return fail(`Spurdateien fehlen (${missing.length || 'alle'}) – Anhängen nicht möglich.`);
+  }
+  const { device, simulate } = await multitrackDevice();
+  if (files.some((t) => t.channel >= device.inputs)) {
+    return fail(`„${device.name}“ hat nur ${device.inputs} Eingänge – Anhängen nicht möglich.`);
+  }
+  let info;
+  try {
+    info = await multitrack.start({ simulate, deviceId: device.id, tracks: files, sampleRate: session.sampleRate, append: true });
+  } catch (err) {
+    return fail(`An die Mehrspuraufnahme kann nicht angehängt werden: ${err.message}`);
+  }
+  return session.continueRecording({ writer: multitrack.writer(info) });
+}
+
+multitrack.on('levels', (l) => {
+  session.pushTrackLevels(l);
+  send('track-levels', { peaks: l.peaks, clips: l.clips, play: l.play });   // Kanalpegel (auch vor dem Start), Abspielposition
+});
+
+/* Abhören: Im Mehrspur-Modus ist das Gerät auch ohne Aufnahme offen, damit die Kanalpegel schon vor dem Start
+   laufen. Die Aufnahme übernimmt den offenen Strom (ASIO erlaubt nur einen). Fehlt das Gerät (Pult aus),
+   wird es alle 10 s erneut versucht. */
+let monitorState = { active: false, info: null, error: null, stalled: false };
+let monitorTimer = null;
+let monitorQueue = Promise.resolve();
+let multitrackExits = [];                      // Zeitpunkte der letzten Abstürze des Mehrspur-Prozesses
+let reopenFailLogged = false;                  // „neu öffnen fehlgeschlagen“ schon protokolliert
+const MONITOR_RETRY_MS = 10000;
+
+function sendMultitrack() {
+  send('multitrack', monitorState);
+}
+
+function updateMonitor() {
+  monitorQueue = monitorQueue.then(doUpdateMonitor, doUpdateMonitor);
+  return monitorQueue;
+}
+
+async function doUpdateMonitor() {
+  clearTimeout(monitorTimer);
+  monitorTimer = null;
+  if (isBusy()) return;                       // die laufende Aufnahme hat das Gerät
+  if (settings.get('recordingMode') !== 'multitrack') {
+    if (monitorState.active || monitorState.error) {
+      await multitrack.unmonitor().catch(() => {});
+      monitorState = { active: false, info: null, error: null, stalled: false };
+      sendMultitrack();
+    }
+    return;
+  }
+  try {
+    const { device, simulate } = await multitrackDevice();
+    const info = await multitrack.monitor({ simulate, deviceId: device.id });
+    monitorState = { active: true, info, error: null, stalled: false };
+  } catch (err) {
+    monitorState = { active: false, info: null, error: err.message, stalled: false };
+    monitorTimer = setTimeout(updateMonitor, MONITOR_RETRY_MS);
+  }
+  sendMultitrack();
+}
+
+/* ---------------------------------------------------------------------- Mischpult */
+
+/** Gerade gültige Aufnahmeart: die der laufenden Aufnahme, sonst die eingestellte. */
+function activeMode() {
+  if (session.status === 'recording' || session.status === 'paused') return session.mode;
+  return settings.get('recordingMode') === 'multitrack' ? 'multitrack' : 'stereo';
+}
+
+function routingCheck(mode = activeMode()) {
+  return mixer.evaluate(mode, settings.get('mixerRouting'));
+}
+
+function routingWarning(check, mode = activeMode()) {
+  return mode === 'multitrack'
+    ? 'Routing am Mischpult passt nicht: Ebbton nimmt Mehrspur auf, die USB-Ausgänge liefern aber die Stereo-Matrix. Am Pult die Kartenausgänge auf die Kanäle legen.'
+    : 'Routing am Mischpult passt nicht: Ebbton nimmt Stereo auf, die USB-Ausgänge liefern aber einzelne Kanäle. Am Pult die Matrix auf USB 1–2 legen oder in Ebbton auf Mehrspur umstellen.';
+}
+
+function mixerState() {
+  return { ...mixer.state(), check: routingCheck(), mode: activeMode(), learned: settings.get('mixerRouting') };
+}
+
+/** Pult-Zustand an die Oberfläche; Routing als Gesundheitswert (auch für Companion), Warnung beim Wechsel. */
+let lastRoutingStatus = null;
+function onMixerChange() {
+  send('mixer', mixerState());
+  const check = routingCheck();
+  if (check.status === 'mismatch' && lastRoutingStatus !== 'mismatch') toast('warn', routingWarning(check));
+  lastRoutingStatus = check.status;
+  health.routing = check.status === 'off' ? null : check.status;
+  publishHealth();
+}
+mixer.on('change', onMixerChange);
+
+/** Zustand für Netzwerk-Clients: Session, Gesundheit und die gerade gültige Aufnahmeart (Companion zeigt sie an). */
+function netState(s = session.snapshot()) {
+  return { ...s, health: currentHealth(), recordingMode: activeMode() };
+}
+
+/**
+ * Aufnahmeart umstellen (Netzwerkbefehl `mode.set`; die Oberfläche speichert über `settings:set`).
+ * Während einer Aufnahme abgelehnt, wie der Umschalter in der Kopfzeile.
+ */
+function setRecordingMode(mode) {
+  if (isBusy()) return { ok: false, error: 'Während einer Aufnahme kann die Aufnahmeart nicht umgeschaltet werden.' };
+  const current = settings.get('recordingMode') === 'multitrack' ? 'multitrack' : 'stereo';
+  const next = mode === 'toggle' ? (current === 'multitrack' ? 'stereo' : 'multitrack') : mode;
+  if (next !== 'stereo' && next !== 'multitrack') return { ok: false, error: 'Unbekannte Aufnahmeart (stereo, multitrack oder toggle).' };
+  if (next !== current) {
+    settings.save({ recordingMode: next });
+    send('settings', settings.forRenderer());   // Oberfläche: Umschalter und Kanal-Bereich nachziehen
+    configureMixer();
+    updateMonitor();
+    refreshDisk();
+  }
+  return { ok: true, mode: next };
+}
+
+/** Verbindung passend zu den Einstellungen; den Pult-Simulator gibt es nur zum simulierten Mehrspur-Gerät. */
+function configureMixer() {
+  const simulate = settings.get('recordingMode') === 'multitrack' && Boolean(settings.get('multitrackSimulate'));
+  return mixer.configure({ host: settings.get('mixerHost'), simulate }).then(onMixerChange, (err) => console.warn('Mischpult:', err.message));
+}
+multitrack.on('stall', ({ recording }) => {
+  monitorState = { ...monitorState, stalled: true };
+  sendMultitrack();
+  if (!recording) return;                     // beim Abhören nur anzeigen, keine Meldung
+  health.inputLost = true;
+  publishHealth();
+  toast('error', 'Mehrspur: Das Mischpult liefert keine Daten mehr – das Gerät wird neu geöffnet.');
+});
+multitrack.on('gap', ({ at, seconds, recording }) => {
+  monitorState = { ...monitorState, stalled: false };
+  sendMultitrack();
+  if (!recording) return;
+  health.inputLost = false;
+  publishHealth();
+  const m = Math.floor(at / 60);
+  const sec = String(Math.floor(at % 60)).padStart(2, '0');
+  toast('warn', `Mehrspur: Eingang wieder da. Bei ${m}:${sec} fehlen etwa ${seconds.toFixed(1)} s in der Aufnahme.`);
+});
+multitrack.on('reopen', ({ ok: reopened, error }) => {
+  // Nur den ersten Fehlschlag protokollieren (sonst alle 3 s dieselbe Zeile, solange das Gerät fehlt).
+  if (reopened) reopenFailLogged = false;
+  else if (!reopenFailLogged) {
+    reopenFailLogged = true;
+    console.warn('Mehrspur: Gerät neu öffnen fehlgeschlagen (weitere Versuche ohne Protokoll):', error);
+  }
+});
+multitrack.on('device-error', ({ message }) => toast('error', `Mehrspur: ${message}`));
+multitrack.on('playback', (p) => {
+  send('multitrack-play', p);
+  // Zu Ende gespielt: im Stereo-Modus braucht niemand mehr das Gerät.
+  if (!p.playing && settings.get('recordingMode') !== 'multitrack') updateMonitor();
+});
+multitrack.on('device-warning', ({ message }) => console.warn('Mehrspur:', message));
+multitrack.on('exit', ({ code, wasRecording }) => {
+  console.error('Mehrspur-Prozess beendet, Code', code);
+  // Abhören wieder aufnehmen (startet den Prozess neu) – aber nicht endlos, falls er beim Öffnen immer wieder abstürzt.
+  const now = Date.now();
+  multitrackExits = multitrackExits.filter((t) => now - t < 60000).concat(now);
+  const giveUp = multitrackExits.length > 3;
+  monitorState = {
+    active: false, info: null, stalled: false,
+    error: giveUp ? 'Der Mehrspur-Prozess stürzt wiederholt ab (Treiber?). Ebbton neu starten.' : 'Mehrspur-Prozess beendet'
+  };
+  sendMultitrack();
+  if (giveUp) toast('error', 'Der Mehrspur-Prozess stürzt wiederholt ab – Mehrspur ist bis zum Neustart von Ebbton aus.');
+  else setTimeout(updateMonitor, 2000);
+  if (!wasRecording) return;
+  toast('error', 'Der Mehrspur-Prozess ist abgestürzt. Die Aufnahme wurde beendet; die Spuren bis hierher sind gespeichert.');
+  if (session.mode === 'multitrack' && (session.status === 'recording' || session.status === 'paused')) session.stop();
+});
 
 function currentHealth() {
   const input = health.inputLost || health.chunksStale ? 'lost' : (health.silent ? 'silent' : 'ok');
+  const routing = health.routing || null;
   const write = health.writeError ? 'error' : (health.writeSlow ? 'slow' : 'ok');
   const d = health.disk;
   const diskLevel = !d ? 'ok' : (d.hoursLeft < 0.5 ? 'low' : (d.hoursLeft < 3 ? 'warn' : 'ok'));
@@ -67,6 +344,7 @@ function currentHealth() {
     input,
     write,
     writeMessage: health.writeError || null,
+    routing,
     disk: d ? { freeBytes: d.freeBytes, hoursLeft: d.hoursLeft, level: diskLevel } : null
   };
 }
@@ -79,7 +357,7 @@ function publishHealth() {
   if (json === lastHealthJson) return;
   lastHealthJson = json;
   send('health', h);
-  net.publishState({ ...session.snapshot(), health: h });
+  net.publishState(netState());
 }
 
 /* Wächter im Hauptprozess: kommen während der Aufnahme keine Audioblöcke mehr an (Oberfläche hängt,
@@ -87,7 +365,8 @@ function publishHealth() {
 let lastChunkAt = 0;
 const CHUNK_TIMEOUT_MS = 5000;
 setInterval(() => {
-  const stale = session.status === 'recording' && Date.now() - lastChunkAt > CHUNK_TIMEOUT_MS;
+  // Mehrspur: Die Blöcke kommen nicht über die Oberfläche, der Mehrspur-Prozess wacht selbst ('stall').
+  const stale = session.status === 'recording' && session.mode !== 'multitrack' && Date.now() - lastChunkAt > CHUNK_TIMEOUT_MS;
   if (stale !== Boolean(health.chunksStale)) {
     health.chunksStale = stale;
     publishHealth();
@@ -116,7 +395,7 @@ function stateThrottle() {
       const s = pending;
       pending = null;
       send('state', s);
-      net.publishState({ ...s, health: currentHealth() });
+      net.publishState(netState(s));
     }, 100);
   };
 }
@@ -542,7 +821,9 @@ session.on('state', (s) => pushState(s));
 
 session.on('levels', (levels) => {
   send('levels', levels);
-  net.publishLevels(levels);
+  // Netzwerk: nur der Gesamtpegel (die Pegel aller Mehrspur-Kanäle und die Wellenform braucht dort niemand).
+  const { tracks, buckets, ...overall } = levels;
+  net.publishLevels(overall);
 
   // Stille: lange fast kein Pegel, obwohl aufgenommen wird (z. B. Mischpult stumm).
   const quiet = Math.max(levels.l, levels.r) < SILENT_LEVEL;
@@ -568,6 +849,7 @@ function preventSleep(on) {
 }
 
 session.on('recording-started', () => {
+  onMixerChange();                            // Aufnahmeart der laufenden Aufnahme gilt jetzt
   preventSleep(true);
   silentSince = null;
   health.silent = false;
@@ -579,6 +861,8 @@ session.on('recording-started', () => {
 });
 
 session.on('recording-stopped', (info) => {
+  onMixerChange();
+  session.whenWritten().then(updateMonitor);  // Aufnahmeart könnte inzwischen umgestellt sein
   preventSleep(false);
   silentSince = null;
   health.silent = false;
@@ -630,7 +914,7 @@ ipcMain.on('remote:result', (_e, { kind, ok: success, error } = {}) => {
 net.on('command', ({ action, params, reply }) => {
   const done = (result) => {
     reply(result);
-    net.publishState({ ...session.snapshot(), health: currentHealth() });
+    net.publishState(netState());
   };
   switch (action) {
     case 'record.start':
@@ -685,6 +969,8 @@ net.on('command', ({ action, params, reply }) => {
       return done(session.undo());
     case 'redo':
       return done(session.redo());
+    case 'mode.set':
+      return done(setRecordingMode(params.mode));
     case 'template.apply': {
       const tpl = findTemplate(params.name || params.id);
       if (!tpl) return done({ ok: false, error: 'Vorlage nicht gefunden.' });
@@ -749,6 +1035,12 @@ ipcMain.handle('settings:set', (_e, patch) => {
     }
     settings.save(clean);
     if (clean.recordingsDir) fs.mkdirSync(clean.recordingsDir, { recursive: true });
+    if (['mixerHost', 'recordingMode', 'multitrackSimulate'].some((k) => k in clean)) configureMixer();
+    if ('recordingMode' in clean) net.publishState(netState());
+    if (['recordingMode', 'multitrackDevice', 'multitrackSimulate', 'multitrackArmed'].some((k) => k in clean)) {
+      updateMonitor();
+      refreshDisk();
+    }
     if (networkChanged) {
       const result = settings.get('networkEnabled') ? net.restart() : (net.stop(), { ok: true });
       if (!result.ok) toast('warn', result.error);
@@ -882,14 +1174,74 @@ ipcMain.handle('session:service', (_e, service) => {
   return ok({ state: session.snapshot() });
 });
 
-ipcMain.handle('rec:start', (_e, { sampleRate, channels } = {}) => {
-  try { return session.start({ sampleRate, channels }); } catch (err) { return fail(err); }
+ipcMain.handle('rec:start', async (_e, { sampleRate, channels } = {}) => {
+  try {
+    if (settings.get('recordingMode') === 'multitrack') return await startMultitrack();
+    return session.start({ sampleRate, channels });
+  } catch (err) { return fail(err); }
 });
 ipcMain.handle('rec:continue', async () => {
   try {
     await session.whenWritten();      // die Datei der eben beendeten Aufnahme erst fertig schreiben lassen
+    if (session.mode === 'multitrack') return await continueMultitrack();
     return session.continueRecording();
   } catch (err) { return fail(err); }
+});
+ipcMain.handle('mixer:state', () => ok({ mixer: mixerState() }));
+ipcMain.handle('mixer:discover', async () => {
+  try { return ok({ found: await mixerDiscover() }); } catch (err) { return fail(err); }
+});
+/** Aktuelles Routing der Kartenausgänge als Stereo- bzw. Mehrspur-Routing merken. */
+ipcMain.handle('mixer:learn', (_e, { mode } = {}) => {
+  if (mode !== 'stereo' && mode !== 'multitrack') return fail('Unbekannte Aufnahmeart.');
+  const st = mixer.state();
+  if (st.status !== 'connected' || !st.routing) return fail('Das Routing des Mischpults ist nicht bekannt (nicht verbunden?).');
+  const learned = { stereo: null, multitrack: null, ...(settings.get('mixerRouting') || {}), [mode]: st.routing };
+  const other = mode === 'stereo' ? 'multitrack' : 'stereo';
+  if (learned[other] && learned[other].every((v, i) => v === st.routing[i])) learned[other] = null;   // eindeutig halten
+  settings.save({ mixerRouting: learned });
+  onMixerChange();
+  return ok({ mixer: mixerState() });
+});
+ipcMain.handle('mixer:forget', () => {
+  settings.save({ mixerRouting: { stereo: null, multitrack: null } });
+  onMixerChange();
+  return ok({ mixer: mixerState() });
+});
+ipcMain.handle('mixer:simulateRouting', (_e, { kind } = {}) => (mixer.simulateRouting(kind) ? ok() : fail('Kein simuliertes Pult.')));
+ipcMain.handle('multitrack:state', () => ok({ monitor: monitorState }));
+
+/* Zurückspielen einer beendeten Mehrspuraufnahme über die Ausgänge (virtueller Soundcheck, Nachmischen). */
+ipcMain.handle('multitrack:play', async (_e, { start = 0, loop = null } = {}) => {
+  try {
+    if (session.mode !== 'multitrack' || session.status !== 'stopped') return fail('Abspielen gibt es nur für eine beendete Mehrspuraufnahme.');
+    await session.whenWritten();
+    const files = session.trackFiles();
+    const missing = files.filter((t) => !fs.existsSync(t.file));
+    if (missing.length) return fail(`Spurdateien fehlen (${missing.length}).`);
+    // Gerät mit der Abtastrate der Aufnahme öffnen (bleibt offen; im Stereo-Modus schließt es nach dem Abspielen wieder).
+    const { device, simulate } = await multitrackDevice();
+    const info = await multitrack.monitor({ simulate, deviceId: device.id, sampleRate: session.sampleRate });
+    monitorState = { active: true, info, error: null, stalled: false };
+    sendMultitrack();
+    return ok({ play: await multitrack.play({ tracks: files, start, loop }) });
+  } catch (err) { return fail(err); }
+});
+ipcMain.handle('multitrack:seek', async (_e, { seconds } = {}) => {
+  try { return ok({ play: await multitrack.seek(seconds) }); } catch (err) { return fail(err); }
+});
+ipcMain.handle('multitrack:loop', async (_e, { loop } = {}) => {
+  try { return ok({ play: await multitrack.setLoop(loop || null) }); } catch (err) { return fail(err); }
+});
+ipcMain.handle('multitrack:stopPlay', async () => {
+  try {
+    const play = await multitrack.stopPlayback();
+    await updateMonitor();                    // im Stereo-Modus das Gerät wieder freigeben
+    return ok({ play });
+  } catch (err) { return fail(err); }
+});
+ipcMain.handle('multitrack:devices', async (_e, { simulate } = {}) => {
+  try { return ok(await multitrack.devices({ simulate: Boolean(simulate) })); } catch (err) { return fail(err); }
 });
 ipcMain.handle('rec:pause', () => {
   try { return session.pause(); } catch (err) { return fail(err); }
@@ -984,6 +1336,7 @@ ipcMain.handle('export:target', () => ok({ folder: exportTargetFolder() }));
 /** Ausgewählte Abschnitte nacheinander als MP3 speichern und als gesichert vermerken. */
 ipcMain.handle('export:batch', async (_e, { items } = {}) => {
   try {
+    if (session.mode === 'multitrack') return fail('Mehrspuraufnahmen werden nicht als MP3 exportiert.');
     if (!session.wavPath || !fs.existsSync(session.wavPath)) {
       return fail('Es ist keine Masteraufnahme vorhanden.');
     }
@@ -1051,6 +1404,7 @@ ipcMain.handle('file:reveal', (_e, { filePath } = {}) => {
   if (!filePath || !fs.existsSync(filePath)) return fail('Datei nicht gefunden.');
   const allowed = revealable.has(path.resolve(filePath))
     || isInside(filePath, settings.get('recordingsDir'))
+    || isInside(filePath, multitrackDir())
     || isInside(filePath, settings.get('exportDir'));
   if (!allowed) return fail('Dieser Ort wird nicht angezeigt.');
   shell.showItemInFolder(filePath);
@@ -1064,14 +1418,24 @@ ipcMain.handle('folder:open', () => {
 
 /* --- Aufnahmenliste / Wiederherstellung --- */
 
-function listSessions() {
-  const dir = settings.get('recordingsDir');
-  let files = [];
+/** Session-Dateien: Stereo direkt im Aufnahmeordner, Mehrspur je in einem Unterordner des Mehrspur-Ordners. */
+function sessionFiles() {
+  const list = (dir) => {
+    try { return fs.readdirSync(dir).filter((f) => f.endsWith('.session.json')).map((f) => path.join(dir, f)); } catch { return []; }
+  };
+  const files = list(settings.get('recordingsDir'));
+  const mdir = multitrackDir();
   try {
-    files = fs.readdirSync(dir).filter((f) => f.endsWith('.session.json'));
-  } catch { return []; }
-  return files.map((f) => {
-    const full = path.join(dir, f);
+    for (const entry of fs.readdirSync(mdir, { withFileTypes: true })) {
+      if (entry.isDirectory()) files.push(...list(path.join(mdir, entry.name)));
+    }
+  } catch { /* noch keine Mehrspuraufnahmen */ }
+  return files;
+}
+
+function listSessions() {
+  return sessionFiles().map((full) => {
+    const f = path.basename(full);
     try {
       const data = JSON.parse(fs.readFileSync(full, 'utf8'));
       return {
@@ -1084,8 +1448,12 @@ function listSessions() {
         sectionCount: Array.isArray(data.sections)
           ? data.sections.filter((x) => x.start != null).length
           : (data.markers || []).filter((m) => m.placed).length,
+        mode: data.mode === 'multitrack' ? 'multitrack' : 'stereo',
+        tracks: Array.isArray(data.tracks) ? data.tracks.length : 0,
         // Wie beim Öffnen: verschobene Aufnahmen über den Namen neben der Session-Datei finden.
-        wavExists: (data.wavPath && fs.existsSync(data.wavPath)) || fs.existsSync(full.replace(/\.session\.json$/, '.wav'))
+        wavExists: data.mode === 'multitrack'
+          ? Array.isArray(data.tracks) && data.tracks.some((t) => fs.existsSync(path.join(path.dirname(full), t.file)))
+          : (data.wavPath && fs.existsSync(data.wavPath)) || fs.existsSync(full.replace(/\.session\.json$/, '.wav'))
       };
     } catch {
       return null;
@@ -1100,6 +1468,7 @@ ipcMain.handle('session:open', (_e, { path: p }) => {
     if (session.status === 'recording' || session.status === 'paused') {
       return fail('Während einer laufenden Aufnahme kann keine andere Session geöffnet werden.');
     }
+    multitrack.stopPlayback().catch(() => {});
     return ok({ state: session.loadFromFile(p) });
   } catch (err) { return fail(err); }
 });
@@ -1113,6 +1482,7 @@ ipcMain.handle('session:new', () => {
   if (session.status === 'recording' || session.status === 'paused') {
     return fail('Es läuft noch eine Aufnahme.');
   }
+  multitrack.stopPlayback().catch(() => {});
   session.reset();
   session.emit('state', session.snapshot());
   return ok({ state: session.snapshot() });
@@ -1160,6 +1530,8 @@ if (!singleInstance) {
     updater.init();
     refreshDisk();
     setInterval(refreshDisk, 30000);   // Speicherplatz regelmäßig prüfen und an Netzwerk-Clients melden
+    configureMixer();
+    updateMonitor();
 
     // macOS verlangt zusätzlich zur Chromium-Freigabe eine Systemfreigabe.
     if (process.platform === 'darwin') {

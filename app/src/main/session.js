@@ -92,6 +92,9 @@ class Session extends EventEmitter {
     this._lastEdit = this._editJson();
     this._colorSeq = 0;
     this.peaks = [];                    // 0..255 je 50 ms
+    this.mode = 'stereo';               // stereo | multitrack (Mehrspuraufnahme, siehe multitrack/)
+    this.tracks = [];                   // Mehrspur: {channel (0-basiert), name, color (Pultfarbe 0–15), file (Dateiname im Spurordner)}
+    this.trackDir = null;               // Mehrspur: Ordner mit Spuren und Session-Datei
     this.writer = null;
     this.basePath = null;               // ohne Endung
     this.wavPath = null;
@@ -176,6 +179,8 @@ class Session extends EventEmitter {
       sampleRate: this.sampleRate,
       channels: this.channels,
       levels: this.levels,
+      mode: this.mode,
+      tracks: this.tracks.map(({ channel, name, color }) => ({ channel, name, color: color ?? null })),
       sections: this.sections,
       exports: this.exports,
       cuts: this.cuts,
@@ -628,25 +633,34 @@ class Session extends EventEmitter {
 
   /* ----------------------------------------------------------------- Aufnahme */
 
-  start({ sampleRate, channels } = {}) {
+  /**
+   * @param {object} [o]
+   * @param {{writer:object, tracks:object[], base:string, folder:string}} [o.multitrack] Mehrspuraufnahme: Die
+   *   Dateien hat der Mehrspur-Prozess schon angelegt (`multitrackTarget`), `writer` ist sein Stellvertreter.
+   */
+  start({ sampleRate, channels, multitrack } = {}) {
     if (this.status === 'recording') return { ok: false, error: 'Es läuft bereits eine Aufnahme.' };
     if (this.status === 'paused') return this.resume();
 
-    const rate = sampleRate || this.sampleRate;
-    const ch = channels || 2;
+    const rate = multitrack ? multitrack.writer.sampleRate : (sampleRate || this.sampleRate);
+    const ch = multitrack ? multitrack.tracks.length : (channels || 2);
 
-    const dir = settings.get('recordingsDir');
-    fs.mkdirSync(dir, { recursive: true });
-
-    // Erst die Datei anlegen: Scheitert das (Ordner nicht beschreibbar …), bleibt die bisher
-    // angezeigte Aufnahme samt Abschnitten unverändert.
-    const stamp = `${dateStamp()}_${new Date().toTimeString().slice(0, 5).replace(':', '')}`;
-    const base = this._freeBasePath(path.join(dir, `${stamp}_${slug(this.service.name, 'Gottesdienst')}`));
     let writer;
-    try {
-      writer = new WavWriter(`${base}.wav`, rate, ch);
-    } catch (err) {
-      return { ok: false, error: 'Die Aufnahmedatei konnte nicht angelegt werden: ' + err.message };
+    let base;
+    if (multitrack) {
+      ({ writer, base } = multitrack);
+    } else {
+      const dir = settings.get('recordingsDir');
+      fs.mkdirSync(dir, { recursive: true });
+
+      // Erst die Datei anlegen: Scheitert das (Ordner nicht beschreibbar …), bleibt die bisher
+      // angezeigte Aufnahme samt Abschnitten unverändert.
+      base = this._freeBasePath(path.join(dir, this._recordingName()));
+      try {
+        writer = new WavWriter(`${base}.wav`, rate, ch);
+      } catch (err) {
+        return { ok: false, error: 'Die Aufnahmedatei konnte nicht angelegt werden: ' + err.message };
+      }
     }
     this.flushSave();
 
@@ -658,7 +672,12 @@ class Session extends EventEmitter {
     this.sampleRate = rate;
     this.channels = ch;
     this.basePath = base;
-    this.wavPath = `${base}.wav`;
+    this.mode = multitrack ? 'multitrack' : 'stereo';
+    this.tracks = multitrack
+      ? multitrack.tracks.map(({ channel, name, color, file }) => ({ channel, name, color: color ?? null, file: path.basename(file) }))
+      : [];
+    this.trackDir = multitrack ? multitrack.folder : null;
+    this.wavPath = multitrack ? null : `${base}.wav`;
     this.writer = writer;
     this._attachWriter(writer);
     this.startedAt = new Date().toISOString();
@@ -678,8 +697,32 @@ class Session extends EventEmitter {
     this._changed({ undoable: false });
     this._resetUndo();
     this.save();                 // Session-Datei sofort anlegen, damit auch ein früher Absturz wiederherstellbar ist
-    this.emit('recording-started', { wavPath: this.wavPath, sampleRate: this.sampleRate, channels: this.channels });
-    return { ok: true, wavPath: this.wavPath };
+    this.emit('recording-started', { wavPath: this.wavPath, sampleRate: this.sampleRate, channels: this.channels, mode: this.mode });
+    return { ok: true, wavPath: this.wavPath, mode: this.mode, trackDir: this.trackDir };
+  }
+
+  /** Name einer neuen Aufnahme: Datum, Uhrzeit, Gottesdienst. */
+  _recordingName() {
+    const stamp = `${dateStamp()}_${new Date().toTimeString().slice(0, 5).replace(':', '')}`;
+    return `${stamp}_${slug(this.service.name, 'Gottesdienst')}`;
+  }
+
+  /**
+   * Ordner für eine neue Mehrspuraufnahme (wird angelegt, nie ein vorhandener) und Pfad der Session-Datei
+   * darin (ohne Endung). Die Spuren legt danach der Mehrspur-Prozess in diesem Ordner an.
+   */
+  multitrackTarget(dir) {
+    fs.mkdirSync(dir, { recursive: true });
+    const name = this._recordingName();
+    let folder = path.join(dir, name);
+    for (let n = 2; fs.existsSync(folder); n++) folder = path.join(dir, `${name}_${n}`);
+    fs.mkdirSync(folder);
+    return { folder, base: path.join(folder, path.basename(folder)) };
+  }
+
+  /** Mehrspur: Spuren mit vollem Pfad. */
+  trackFiles() {
+    return this.tracks.map((t) => ({ ...t, file: path.join(this.trackDir, t.file) }));
   }
 
   /** Hängt bei Namensgleichheit (gleiche Minute) eine Nummer an, damit nie eine Aufnahme überschrieben wird. */
@@ -726,16 +769,24 @@ class Session extends EventEmitter {
     }
   }
 
-  /** Setzt die beendete Aufnahme fort: neue Audiodaten werden an die WAV-Datei angehängt. */
-  continueRecording() {
+  /**
+   * Setzt die beendete Aufnahme fort: neue Audiodaten werden an die WAV-Datei angehängt.
+   * @param {{writer?: object}} [o] Mehrspur: Stellvertreter des Mehrspur-Prozesses, der bereits anhängt
+   */
+  continueRecording({ writer } = {}) {
     if (this.status !== 'stopped') return { ok: false, error: 'Es gibt keine beendete Aufnahme zum Fortsetzen.' };
-    if (!this.wavPath || !fs.existsSync(this.wavPath)) {
-      return { ok: false, error: 'Die Audiodatei dieser Aufnahme wurde nicht gefunden.' };
+    if (this.mode === 'multitrack') {
+      if (!writer) return { ok: false, error: 'Die Mehrspuraufnahme kann so nicht fortgesetzt werden.' };
+      this.writer = writer;
+    } else {
+      if (!this.wavPath || !fs.existsSync(this.wavPath)) {
+        return { ok: false, error: 'Die Audiodatei dieser Aufnahme wurde nicht gefunden.' };
+      }
+      const info = readInfo(this.wavPath);
+      this.sampleRate = info.sampleRate;
+      this.channels = info.channels;
+      this.writer = new WavWriter(this.wavPath, this.sampleRate, this.channels, { append: true });
     }
-    const info = readInfo(this.wavPath);
-    this.sampleRate = info.sampleRate;
-    this.channels = info.channels;
-    this.writer = new WavWriter(this.wavPath, this.sampleRate, this.channels, { append: true });
     this._cueKey = null;
     this._attachWriter(this.writer);
     this.status = 'recording';
@@ -750,8 +801,8 @@ class Session extends EventEmitter {
 
     this._startAutosave();
     this._changed();
-    this.emit('recording-started', { wavPath: this.wavPath, sampleRate: this.sampleRate, channels: this.channels });
-    return { ok: true, wavPath: this.wavPath, sampleRate: this.sampleRate, channels: this.channels };
+    this.emit('recording-started', { wavPath: this.wavPath, sampleRate: this.sampleRate, channels: this.channels, mode: this.mode });
+    return { ok: true, wavPath: this.wavPath, sampleRate: this.sampleRate, channels: this.channels, mode: this.mode };
   }
 
   /** Fehler und Engpässe des Schreib-Threads weitergeben (Platte voll, Laufwerk zu langsam …). */
@@ -768,7 +819,10 @@ class Session extends EventEmitter {
   pause() {
     if (this.status !== 'recording') return { ok: false, error: 'Es läuft keine Aufnahme.' };
     this.status = 'paused';
-    if (this.writer) this.writer.updateHeader();
+    if (this.writer) {
+      this.writer.updateHeader();
+      if (this.writer.pause) this.writer.pause();      // Mehrspur: der Mehrspur-Prozess verwirft dann das Audio
+    }
     this.save();
     this._changed();
     return { ok: true };
@@ -777,6 +831,7 @@ class Session extends EventEmitter {
   resume() {
     if (this.status !== 'paused') return { ok: false, error: 'Die Aufnahme ist nicht pausiert.' };
     this.status = 'recording';
+    if (this.writer && this.writer.resume) this.writer.resume();
     this._changed();
     return { ok: true };
   }
@@ -841,6 +896,26 @@ class Session extends EventEmitter {
   }
 
   /**
+   * Mehrspur: Pegel aus dem Mehrspur-Prozess (statt `pushAudio`). Der Pegel der Session ist der lauteste
+   * aufgenommene Kanal; die Wellenform wächst um die mitgelieferten Spitzenwerte (`buckets`, je 50 ms).
+   */
+  pushTrackLevels({ peaks = [], clips = [], buckets = [] } = {}) {
+    if (this.mode !== 'multitrack' || (this.status !== 'recording' && this.status !== 'paused')) return;
+    const grow = this.status === 'recording' ? buckets : [];
+    for (const b of grow) this.peaks.push(b);
+    let max = 0;
+    let clip = false;
+    for (const t of this.tracks) {
+      max = Math.max(max, peaks[t.channel] || 0);
+      if (clips[t.channel]) clip = true;
+    }
+    const now = Date.now();
+    if (clip) this._clipUntil = now + 2000;
+    this.levels = { l: max, r: max, clip: now < this._clipUntil };
+    this.emit('levels', { ...this.levels, duration: this.duration, tracks: { peaks, clips }, buckets: grow });
+  }
+
+  /**
    * Liest einen Ausschnitt der Aufnahme zum Mithören – auch während sie läuft.
    * Beim Schreiben wird jeder Block sofort in die Datei übergeben, daher
    * genügt ein separater Lesezugriff.
@@ -889,6 +964,8 @@ class Session extends EventEmitter {
       channels: this.channels,
       duration: this.duration,
       wavPath: this.wavPath,
+      mode: this.mode,
+      tracks: this.tracks,
       sections: this.sections,
       exports: this.exports,
       cuts: this.cuts,
@@ -911,7 +988,15 @@ class Session extends EventEmitter {
     const data = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
     this.reset();
     this.basePath = sessionPath.replace(/\.session\.json$/, '');
-    this.wavPath = data.wavPath && fs.existsSync(data.wavPath) ? data.wavPath : `${this.basePath}.wav`;
+    this.mode = data.mode === 'multitrack' ? 'multitrack' : 'stereo';
+    if (this.mode === 'multitrack') {
+      // Spuren liegen neben der Session-Datei: So bleibt die Aufnahme auch nach dem Verschieben des Ordners gültig.
+      this.tracks = Array.isArray(data.tracks) ? data.tracks : [];
+      this.trackDir = path.dirname(sessionPath);
+      this.wavPath = null;
+    } else {
+      this.wavPath = data.wavPath && fs.existsSync(data.wavPath) ? data.wavPath : `${this.basePath}.wav`;
+    }
     this.service = data.service || this.service;
     this.agendaOrigin = data.agendaOrigin || null;
     this.peaks = data.peaks || [];
@@ -924,7 +1009,8 @@ class Session extends EventEmitter {
 
     let duration = data.duration || 0;
     try {
-      if (fs.existsSync(this.wavPath)) duration = readInfo(this.wavPath).duration;
+      const audio = this.mode === 'multitrack' ? this.trackFiles().map((t) => t.file).find((f) => fs.existsSync(f)) : this.wavPath;
+      if (audio && fs.existsSync(audio)) duration = readInfo(audio).duration;
     } catch { /* Dauer aus der Session-Datei verwenden */ }
     this._restoredDuration = duration;
     this.sections = migrateSections(data, duration);

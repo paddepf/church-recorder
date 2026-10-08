@@ -335,6 +335,17 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   ausgeblendet · Karte des laufenden Abschnitts · M und N einzeilig („→ Predigt“, Beschriftung nur ohne offenen Punkt,
   per `:has`). „Immer oben“ heißt unter 380 px nur „oben“ (`.ontop-long`). Nach Änderungen alle vier Zustände bei 320×164
   messen (kein Überlauf, keine abgeschnittenen Knöpfe).
+- **Kopfleiste (aufgeräumt, Oktober 2026):** Alle Bedienelemente (Gottesdienst-Feld, Schild, Knöpfe, Umschalter) sind gleich
+  hoch und gleich groß beschriftet – Variablen `--top-h`/`--top-font`/`--top-pad` auf `.topbar` (groß 40 px/15 px,
+  unter 1180 px 36/14, kompakt 28/13, Mini 24/11; Block „Kopfleiste (aufgeräumt)“ am Ende von `styles.css`). Rechts
+  Gruppen mit Abstand (`--top-group` vor „Aufnahmen“ und vor dem Ansicht-Umschalter): [Schild „● Mehrspur“] ·
+  Aufnahmen/Einstellungen · Ansicht. Vorher: drei verschiedene Höhen (25/39/45 px) und kleinere Schrift in den
+  Umschaltern – wirkte unordentlich.
+- **Aufnahmeart in der Kopfzeile nur als Schild:** Stereo ist der Normalfall, Mehrspur wird selten genutzt. Deshalb kein
+  Umschalter „Stereo | Mehrspur“ mehr (gab es kurz), sondern nur bei Mehrspur das farbige Schild `#btn-mode-badge`
+  „● Mehrspur“ (`applyMode`; auch während einer Mehrspuraufnahme); Klick öffnet *Einstellungen → Audio* mit Fokus auf
+  „Aufnahmeart“ (`openRecordingModeSetting`). Umgestellt wird dort oder per Companion (`mode.set`). Gemessen: kein Überlauf, Timer
+  unverändert bei 1360/1024 groß und 960/760 kompakt, Mini 360 und 320 px.
 - **Ansicht-Umschalter** rechts oben: ein Segment „Groß | Kompakt | Mini“ (`.view-switch`, Knöpfe `#btn-view-large`,
   `#btn-dense`, `#btn-compact`, Zustand über `aria-pressed`) statt einzelner Knöpfe, damit er wenig Platz braucht; er
   bleibt auch im Mini-Fenster sichtbar (Wechsel Mini → Kompakt direkt). Renderer `setView(view)` → IPC
@@ -353,6 +364,9 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   langer Gottesdienstname) die Spalte breiter als das Fenster. Knöpfe der Kopfzeile und des Transports brechen nicht um
   (`nowrap`), stattdessen wird der Gottesdienstname mit „…“ gekürzt. Ab 1340 px hat der Transport 20 px Spaltenabstand,
   sonst passten die Knöpfe bei 1360 px nicht in die Außenspalte und brachen um.
+- **Fallstrick `hidden`:** Eine Klasse mit eigenem `display` (z. B. `.follow { display: flex }`) überstimmt das
+  `hidden`-Attribut – das Element bleibt sichtbar, obwohl der Code `hidden = true` setzt (so bei „Schleife“). Für
+  solche Elemente eine Regel `.klasse[hidden] { display: none; }` ergänzen; prüfen mit `getComputedStyle(el).display`.
 - Der rote Punkt im Aufnahmeknopf hat `flex-shrink: 0`: Im großen Fenster (1360 px, beendete Aufnahme mit „An Aufnahme
   anhängen“) war der Knopf so knapp, dass der Punkt auf 0 px schrumpfte (sah aus wie verschwunden, kam beim Ziehen am
   Fenster wieder). Kleine feste Elemente in Flex-Knöpfen immer mit `flex-shrink: 0`; nachgemessen wird im echten
@@ -434,6 +448,146 @@ Der Ordnername des lokalen Klons ist egal.
   `checkFeedbacks()` ohne Argument. `apiVersion` im Manifest trägt das Build-Werkzeug ein.
 - Paket: `npm install && npm run package` im Ordner `companion-module/` → `ebbton-<version>.tgz`, in Companion über
   „Import module package“. Die `.tgz` wird nicht eingecheckt.
+
+### Mehrspuraufnahme (Oktober 2026; seit 2026-10-08 in `main`, Test am echten Pult steht aus)
+- Ziel: Aufnahmeart Stereo/Mehrspur wählbar (Einstellungen, Companion; in der Kopfzeile nur ein Schild bei Mehrspur); im Mehrspur-Modus alle 32 Kanäle des M32 über die DN32-USB-Karte
+  (ASIO) aufnehmen, Kanalnamen/-farben per OSC vom Pult, später über die USB-Ausgänge zurückspielen (virtueller
+  Soundcheck, Nachmischen). **Mehrspur ersetzt Stereo:** Für Mehrspur stellt der Nutzer am Pult die Kartenausgänge auf
+  Kanal 1–32 um, die Matrix (sonst auf 1–2) fehlt dann. Kein eigener Stereo-Mix, kein MP3-Export im Mehrspur-Modus.
+  Routing-Erkennung per OSC soll warnen, wenn Schalter und Pult nicht zusammenpassen. Eingangsquellen am Pult schaltet
+  Ebbton **nicht** um (Gefahr: keine Mikros im Gottesdienst). Nur Windows; auf dem Mac nur Simulation bzw. CoreAudio.
+- Festlegungen: 32 Mono-WAVs, 24 Bit, Rate des Treibers, Ordner pro Aufnahme, Dateinamen nach Pultnamen; alle Kanäle
+  scharf, einzeln abwählbar; Abschnitte laufen mit; eigener Ordner für Mehrspur-Aufnahmen. Kanalübersicht als
+  Bereich „Kanäle“ an der Stelle des Exports; die Wellenform (Abschnitte!) bleibt, sie zeigt den lautesten Kanal. Kirchen-PC: Samsung PM981a NVMe 512 GB, etwa 16,6 GB je Stunde bei 32 Kanälen.
+- Reihenfolge: 1 Technik-Test (erledigt) → 2 Anbindung an die Session (erledigt) → 3 OSC/Routing mit Pult-Simulator (erledigt) →
+  4 Oberfläche (erledigt) → 5 Zurückspielen (erledigt) → 6 Test am Pult (offen). Auf Wunsch schon vor dem Pult-Test
+  nach `main` zusammengeführt (Branch `mehrspur` gelöscht, es wird nur noch auf `main` gearbeitet). Ohne Umstellung
+  bleibt alles Stereo; ASIO/DN32, OSC-Adressen und Routing-Werte sind weiter ungeprüft.
+- **Audio über `audify`** (MIT, RtAudio; N-API, also ohne Neubau für Electron; Windows-Builds mit ASIO). audify meldet
+  Überläufe des Treibers nicht (Status im Callback wird ignoriert) und verwirft Blöcke mit abweichender Framezahl
+  still. Deshalb eigene Aussetzererkennung in `engine.js`: 1 s ohne Block → `stall`, nach 3 s Gerät neu öffnen
+  (wiederholt, neues RtAudio-Objekt, Gerät per Name), danach `gap` mit Stelle und Länge; zusätzlich Fehlbetrag
+  gegen die Uhr über ein 5-s-Fenster (> 0,25 s → `gap`), damit Uhrendrift und verspätete Blöcke nicht zählen.
+  Lücken werden nicht mit Stille aufgefüllt. Format vom Gerät: Int32, die oberen 3 Bytes ergeben 24 Bit.
+- Puffer: unter ASIO `frameSize` 0 (= Einstellung im Treiber-Panel), sonst 512 (CoreAudio nähme sonst 15 Frames).
+  Der Strom wird mit Ausgängen geöffnet, wenn das Gerät welche hat: ASIO erlaubt meist nur einen Strom je Gerät, das
+  Zurückspielen muss über denselben laufen.
+- **Eigener Prozess** (`utilityProcess`, `host.js`/`manager.js`): Erfassung und Schreiben laufen nicht im Hauptprozess
+  (32 Kanäle ≈ 6 MB/s) und nicht in der Oberfläche. Schreiben: je Spur 0,5 s sammeln, dann ein asynchrones `pwrite`
+  (Thread-Pool von Node), Kopf alle 2 s, `fdatasync` alle 10 s; Dateien werden mit `wx` angelegt (nie überschreiben),
+  scheitert eine, werden die übrigen wieder gelöscht. `wav.buildHeader` hat dafür `bitsPerSample` bekommen (Standard 16).
+- Technik-Test `EBBTON_MT_PROBE` (`probe.js`, ganz oben in `main.js` abgezweigt, siehe `app/README.md`): läuft auch mit
+  der installierten App. Geprüft auf dem Mac (Oktober 2026): Simulation und echtes Mikrofon (CoreAudio), jeweils in
+  Entwicklung und gepackt (`electron-builder --mac dir`); audify wird von electron-builder entpackt
+  (`app.asar.unpacked`), Quellcode/`vendor` (17 MB) über `build.files` ausgeschlossen. **Noch nicht geprüft:** Windows mit
+  ASIO (erst mit ASIO4ALL/FlexASIO ohne Pult, dann DN32-USB mit 32 Kanälen) und der Windows-Build im Release-Workflow.
+  Der CI-Test „audify lädt“ prüft auf dem Windows-Runner, dass die ASIO-Schnittstelle vorhanden ist.
+- Gerätenamen von CoreAudio kommen bei Sonderzeichen verstümmelt an (audify); für ASIO („DN32-USB“) unerheblich.
+- „Automatisch“ (kein Mehrspur-Gerät gewählt): meiste Eingänge, bei Gleichstand das Standard-Eingabegerät
+  (`byInputsThenDefault`, `isDefault` aus `engine.devices`). Anlass: Auf dem Mac haben alle Eingänge einen Kanal,
+  gewählt wurde zufällig das iPhone-Mikrofon (Continuity), das dann verschwand. audify reicht Meldungen aller
+  RtAudio-Verbindungen an den zuletzt gesetzten Empfänger weiter; „no open stream to close“ (beim Aufräumen) wird
+  verworfen, „Gerät neu öffnen fehlgeschlagen“ nur einmal je Ausfall protokolliert (sonst alle 3 s).
+- **Anbindung an die Session (Schritt 2):** `session.mode` (`stereo`/`multitrack`), `tracks` (`{channel, name, file}`,
+  `file` nur Dateiname) und `trackDir`. Im Mehrspur-Modus steht statt des `WavWriter` ein `TrackWriterProxy`
+  (`manager.js`) in `session.writer`: Dauer aus den Pegelmeldungen, `pause()`/`resume()` (der Mehrspur-Prozess
+  verwirft in der Pause, das Gerät bleibt offen), `close()` = Stopp im Prozess. So laufen Start, Pause, Stopp,
+  Anhängen, Abschnitte, Autosave, Schlafsperre und `whenWritten` unverändert. Den Start macht der Hauptprozess
+  (`startMultitrack`/`continueMultitrack` in `main.js`): Gerät wählen, `session.multitrackTarget()` legt den Ordner
+  an, erst der Prozess die Dateien, dann `session.start({ multitrack })`; scheitert der Prozess, wird der leere
+  Ordner wieder entfernt. Die Oberfläche ruft weiter `rec:start`/`rec:continue`, startet im Mehrspur-Modus aber
+  keine eigene Erfassung, ihr Wächter und `recoverCapture` greifen dort nicht (`isMultitrack()`), ebenso nicht der
+  `chunksStale`-Wächter im Hauptprozess; stattdessen `stall`/`gap` des Prozesses → `health.inputLost` und Meldungen.
+- Mehrspur-Ablage: `<multitrackDir>/<Datum_Zeit_Gottesdienst>/` mit `NN_Kanalname.wav` und der Session-Datei; beim
+  Laden werden die Spuren neben der Session-Datei gesucht (Ordner darf verschoben werden). `listSessions` liest
+  zusätzlich die Unterordner des Mehrspur-Ordners. Gesucht wird nur auf Knopfdruck und nicht während einer
+  Aufnahme (`multitrack:devices`): RtAudio lädt dafür die ASIO-Treiber zur Probe, ob das eine laufende
+  WDM-Stereoaufnahme über denselben Treiber stört, ist ungeprüft.
+- Wellenform: Der Mehrspur-Prozess liefert je 50 ms den Spitzenwert über alle aufgenommenen Spuren (`buckets` in der
+  Pegelmeldung), Session und Oberfläche hängen sie an. Pegel der Session = lautester aufgenommener Kanal (`l` = `r`),
+  dazu `tracks: {peaks, clips}` aller Gerätekanäle für die Oberfläche; ins Netzwerk geht nur der Gesamtpegel.
+- Einstellungen: `recordingMode`, `multitrackDevice` (Name, leer = meiste Eingänge), `multitrackSimulate`,
+  `multitrackArmed` (0-basiert, `null` = alle), `multitrackDir` (leer = `Mehrspur` im Aufnahmeordner). Vorerst
+  in *Einstellungen → Audio*; Kanalwahl und Namen kommen mit Schritt 3/4 (bis dahin „Kanal n“).
+- Kein MP3-Export, kein Mithören, keine Cue-Marker bei Mehrspur (`export:batch` lehnt ab). Stürzt der Mehrspur-Prozess
+  während der Aufnahme ab, wird sie beendet (Spuren bleiben bis dahin lesbar); automatisches Neustarten und Anhängen
+  fehlt noch. Beim Stopp endet der laufende Abschnitt bei der zuletzt gemeldeten Dauer (bis etwa 50 ms vor Dateiende).
+- Geprüft (Mac, Simulator): Tests mit echter Engine (Session-Ablauf inkl. Laden/Anhängen) und die App per
+  WebSocket-Fernsteuerung sowie per Knöpfen (Start, Abschnitt, Pause, Stopp, Anhängen, Einstellungen).
+- **Oberfläche (Schritt 4):** Aufnahmeart = Einstellung `recordingMode` (in der Kopfzeile nur das Schild, siehe
+  „Oberfläche“). `body.mt` (`multitrackView()`: folgt der Einstellung, während einer Aufnahme deren Art) ersetzt den
+  Export-Bereich durch
+  den Bereich „Kanäle“ (`renderChannels`, `channelModel`, `applyTrackLevels`); die Spalte ist dann breiter
+  (`minmax(380px, 1.25fr)`, kompakt 330 px), damit die Namen passen. Passen Aufnahmeart und angezeigte Aufnahme nicht
+  zusammen: Stereo-Aufnahme bei „Mehrspur“ → Hinweis im Kanal-Bereich „zum Exportieren auf Stereo schalten“;
+  Mehrspuraufnahme bei „Stereo“ → Export-Bereich mit Hinweis „werden nicht als MP3 exportiert“. (Früher blieb der
+  Kanal-Bereich bei angezeigter Mehrspuraufnahme stehen, egal wie die Aufnahmeart stand – wirkte wie ein Fehler.)
+  Gemessen: kein Überlauf, Timer gleich in beiden Modi, keine gekürzten Kanalnamen bei 1360×880, 1024×680, kompakt
+  960×640 und 760×520.
+- **Abhören vor dem Start:** `engine.monitor()` öffnet das Gerät ohne Aufnahme; `start()` übernimmt den offenen Strom
+  (ASIO: nur einer), `stop()` lässt ihn beim Abhören offen, `open()` mit anderer Rate (Anhängen) öffnet neu, während der
+  Aufnahme wird ein Gerätewechsel abgelehnt. Hauptprozess `updateMonitor()` (Warteschlange, damit sich Aufrufe nicht
+  überholen): im Mehrspur-Modus und ohne laufende Aufnahme offen, im Stereo-Modus geschlossen (gemessen); fehlt das
+  Gerät, alle 10 s neuer Versuch; Aufrufe bei App-Start, Einstellungsänderung und nach `whenWritten` eines Stopps.
+  Aussetzer beim Abhören (`stall`/`gap` mit `recording: false`) nur als Status, keine Meldung. Stürzt der Prozess ab,
+  wird er nach 2 s neu gestartet, mehr als drei Abstürze je Minute → aus bis zum App-Neustart (Schutz vor
+  Absturzschleifen durch einen Treiber). Kanalpegel gehen als `track-levels` an die Oberfläche (auch vor dem Start).
+- Kanalwahl: Klick auf einen Kanal (nicht während der Aufnahme) schreibt `multitrackArmed`; alle gewählt → `null`
+  (neue Gerätekanäle kommen automatisch dazu), keiner → abgelehnt. Während der Aufnahme zeigt der Bereich die Spuren
+  der Aufnahme (fest), nicht aufgenommene Kanäle mit aktuellem Pultnamen. Stumm: gewählter Kanal 20 s unter 0,001 während
+  der Aufnahme (wie die Stereo-Stillewarnung), nur im Kanal-Bereich, keine Meldung.
+- Fehler aus Schritt 2 behoben: Die Oberfläche hing „An Aufnahme anhängen“, die Ansicht nach dem Beenden
+  (`body.review`) und die Rückfrage vor einer neuen Aufnahme an `session.wavPath` – bei Mehrspur `null`. Jetzt
+  `hasAudio(session)`. (Der damalige Test hatte den versteckten Knopf per Skript geklickt.)
+- Geprüft (Mac, Simulator, echte App per DevTools-Protokoll): Kanalwahl, Aufnahme, Sperren, Stummwarnung, Neuladen
+  der Oberfläche während der Aufnahme (Aufnahme läuft ungestört weiter), Beenden, Umschalten, Gerät im Stereo-Modus frei.
+- **Zurückspielen (Schritt 5):** `player.js` liest die Spuren (0,5-s-Zwischenspeicher je Spur) und baut Ausgabeblöcke
+  (Int32, alle Ausgänge, Spur auf Kanal k → Ausgang k, Kanäle ohne Spur still) mit Springen und Schleife (nahtlos).
+  `engine.play()` nur bei offenem Gerät und ohne Aufnahme; den Takt gibt das Gerät vor: audify ruft nach jedem
+  verbrauchten Block `frameOutputCallback`, dann wird nachgelegt (etwa 150 ms Vorlauf, `PLAY_AHEAD_SECONDS`); leere
+  Warteschlange = Stille. Position = Anfang des gerade laufenden Blocks. `start()` beendet das Abspielen. Der Simulator
+  verbraucht Ausgabeblöcke im Eingangstakt (`captureOutput` für Tests: lückenlos, richtige Reihenfolge, richtiger Ausgang).
+- Hauptprozess `multitrack:play/seek/loop/stopPlay`: öffnet das Gerät mit der Rate der Aufnahme (`monitor` mit
+  `sampleRate`); im Stereo-Modus wird es nach dem Ende bzw. Stopp per `updateMonitor()` wieder freigegeben (gemessen).
+  Laden einer anderen Session oder „Neu“ beendet das Abspielen; die Oberfläche stoppt es auch vor einem Stereo-Start
+  (bevor die Erfassung den Eingang öffnet). Oberfläche: „Zum Pult abspielen“/„Stopp“ (`toggleMultitrackPlayback`),
+  Wellenform-Klick/Abschnitt-Klick springen (`setPlayhead`), „Schleife“ (`#chk-loop`, `playbackLoop`: gewählter
+  Abschnitt, sonst ganze Aufnahme), Position im Kanal-Bereich, einmaliger Hinweis auf die Quelle am Pult.
+  Knopf und Schleife gibt es nur in der Mehrspur-Ansicht (`applyPlayControls`); in der Stereo-Ansicht ist der Knopf bei
+  einer Mehrspuraufnahme gesperrt (Tooltip: auf „Mehrspur“ schalten), die Schleife ausgeblendet. Umschalten auf
+  Stereo gibt das Gerät frei und beendet damit ein laufendes Abspielen.
+- Eingangsquellen am Pult schaltet Ebbton weiterhin nicht um. **Ungeprüft:** echte Ausgabe über ASIO/DN32 (Latenz,
+  ob audify bei ASIO die Ausgabe sauber taktet) – erst am Pult.
+- **Mischpult per OSC (Schritt 3, `src/main/mixer/`):** nur lesend, UDP 10023, eigenes kleines OSC (`osc.js`, keine
+  Abhängigkeit). `client.js` liest `/ch/NN/config/name|color` und `/config/routing/CARD/1-8 … 25-32`, meldet sich mit
+  `/xremote` an (alle 8 s erneuern, Änderungen am Pult kommen sofort), Lebenszeichen per `/xinfo`; 12 s ohne Antwort
+  → `lost`, dann alle 5 s `/xinfo`, beim Wiederkommen alles neu lesen. Ein Lesevorgang, während dessen die Verbindung
+  abriss (`_epoch`), oder bei dem nicht alle Kanalnamen antworteten, zählt nicht (sonst blieben nach einem
+  Szenenwechsel bei ausgeschaltetem Pult alte Namen stehen – im Test gefunden). Routing-Antworten zählen dafür nicht
+  mit, damit falsche Adressen kein Dauer-Nachlesen auslösen. Pultsuche: `/xinfo` per Broadcast.
+- **Adressen und Routing-Werte sind nicht am echten M32 geprüft** (aus der inoffiziellen X32-OSC-Doku: Wert 0–19 =
+  Eingangsblöcke AN/A/B/CARD, 20/21 = OUT1-8/OUT9-16 …). Deshalb Anlernen (`mixerRouting` `{stereo, multitrack}`,
+  je vier Werte, `mixer:learn`): gemerkte Werte haben Vorrang vor der Faustregel „Block 1–8 führt Ausgänge = Stereo,
+  Eingänge = Mehrspur“ (`m32.routingKind`). Am Pult prüfen, dann ggf. `ROUTING_SOURCES` korrigieren.
+- Spur k = Pultkanal k (so beschrieben: im Mehrspur-Routing liefern die USB-Ausgänge die Kanäle 1–32). Name leer →
+  „Kanal n“; Pult nicht erreichbar → Hinweis beim Start. Namen/Farben werden beim Start übernommen (`tracks[].color`),
+  spätere Umbenennungen am Pult ändern laufende Aufnahmen nicht.
+- Routing-Prüfung (`main.js`: `routingCheck`, `onMixerChange`): verglichen wird mit der Aufnahmeart der laufenden
+  Aufnahme, sonst der eingestellten (`activeMode`). Ergebnis als `health.routing` (`ok`/`mismatch`/`unknown`, `null` ohne
+  Pult), Warnung beim Wechsel zu `mismatch` und beim Mehrspur-Start, Warnbalken in der Oberfläche auch vor dem Start.
+  Gilt auch im Stereo-Modus (Mehrspur-Routing vergessen zurückzustellen → Aufnahme hätte nur Kanal 1/2 roh).
+- Pult-Simulator (`mixer/simulator.js`, Beispielnamen und -farben): läuft in der App nur bei Aufnahmeart Mehrspur mit
+  „Simuliertes Pult“ und leerer IP (`configureMixer`); im Stereo-Modus nie, sonst meldete er ständig falsches Routing.
+  Umschalten seines Routings über Knöpfe in *Einstellungen → Mischpult* (`mixer:simulateRouting`).
+- Companion (Modul 2.1.0): Variablen `recording_mode`/`routing_status`, Rückmeldungen `routing_mismatch` (nur bei
+  `mismatch`, nicht bei `unknown`, sonst stünde die Taste bei nicht erreichbarem Pult dauernd auf Rot) und
+  `multitrack`, Aktion `mode_set` → WebSocket `mode.set` (`stereo`/`multitrack`/`toggle`, während der Aufnahme
+  abgelehnt; `setRecordingMode` in `main.js` speichert, schickt `settings` an die Oberfläche – die zieht nur Schild
+  und Ansicht nach, ein offener Einstellungsdialog behält seine Eingaben –, stellt Pult-Verbindung und Abhören um).
+  Der Zustand für Netzwerk-Clients trägt dafür `recordingMode` (`netState()`: Art der laufenden, sonst der eingestellten
+  Aufnahme). Preset „Aufnahmeart umschalten“, Rückmeldung zusätzlich im Preset „Eingang und Speicher“.
+  Geprüft: Paketbau, Befehl gegen die echte App (umschalten, ablehnen, Oberfläche zieht mit); das Modul selbst in
+  Companion noch nicht.
 
 ### Entfernt: Mitschrift
 Die lokale Transkription (whisper.cpp, Mitschrift-Panel, Einstellungen) wurde

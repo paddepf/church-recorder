@@ -154,15 +154,16 @@ Regeln, die für die Abschnitte gelten:
   als Marker). Die WAV deshalb mit ffmpeg dekodieren, nicht selbst parsen und nicht die Dateigröße als
   Audiolänge nehmen. Die Marker in der WAV nicht verwenden, maßgeblich ist die Session-Datei.
 
-### Demnächst: Mehrspuraufnahmen (Branch `mehrspur`, noch nicht in `main`)
+### Mehrspuraufnahmen (seit 2026-10-08 in `main`, selten genutzt)
 
-Ebbton bekommt einen Mehrspur-Modus (32 Kanäle vom Pult). Er **ersetzt** dann die Stereoaufnahme, es gibt
-also keine Stereo-WAV. Das Format, Stand Branch:
+Ebbton hat einen Mehrspur-Modus (32 Kanäle vom Pult). Er **ersetzt** die Stereoaufnahme, es gibt dann also
+keine Stereo-WAV. Normalfall bleibt Stereo. Das Format:
 
 - Je Aufnahme ein **Ordner** `<YYYY-MM-DD>_<HHMM>_<Name>/` mit der Session-Datei
   `<YYYY-MM-DD>_<HHMM>_<Name>.session.json` und je Kanal einer Mono-WAV, z. B. `01_Predigt.wav`,
-  `02_Moderation.wav`. Bisher liegen diese Ordner in einem Unterordner `Mehrspur/` des Aufnahmeordners, das
-  kann sich bis zum Merge noch ändern.
+  `02_Moderation.wav`. Diese Ordner liegen standardmäßig in einem Unterordner `Mehrspur/` des Aufnahmeordners;
+  in den Ebbton-Einstellungen („Ordner für Mehrspuraufnahmen“) kann aber auch ein anderer Ordner gewählt sein –
+  dann liegt er womöglich nicht im Aufnahmeordner und wird nicht mit auf die NAS kopiert.
 - In der Session: `"mode": "multitrack"`, `"wavPath": null`,
   `"tracks": [{ "channel": 0, "name": "Predigt", "color": 1, "file": "01_Predigt.wav" }, …]`. Abschnitte und
   Zeiten funktionieren wie bei Stereo. Fehlt `mode`, ist es `stereo`.
@@ -187,7 +188,8 @@ Nicht vorab bauen, aber so anlegen, dass „Referenzton einer Session laden“ e
 ### 1. Bestand erfassen
 
 - Alle Videos im OBS-Ordner, alle Sessions im Ebbton-Ordner.
-- Eine Session ist bereit, wenn `status == stopped`, `finalized == true`, die WAV vorhanden ist und
+- Eine Session ist bereit, wenn `status == stopped`, `finalized == true`, die WAV (bei Mehrspur: die Spuren aus
+  `tracks[].file` neben der Session-Datei) vorhanden ist und
   Session-Datei und WAV seit mindestens 10 min unverändert sind. Die Kopie beim Herunterfahren kann mitten
   im Lauf sein.
 - Bereits bearbeitete Videos erkennen (siehe „Merken“).
