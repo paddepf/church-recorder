@@ -249,6 +249,8 @@ export default class EbbtonInstance extends InstanceBase {
 					level_right: Math.round((msg.payload.r || 0) * 100),
 					clipping: msg.payload.clip ? 'ja' : 'nein',
 					timecode: this.formatTime(msg.payload.duration || 0),
+					section_elapsed: this.sectionElapsed(msg.payload.duration),
+					...this.loudnessValues(msg.payload.loudness),
 				})
 				this.checkFeedbacks('clipping')
 				break
@@ -284,6 +286,12 @@ export default class EbbtonInstance extends InstanceBase {
 			service_name: { name: 'Name des Gottesdienstes' },
 			current_item: { name: 'Aktueller Programmpunkt' },
 			next_item: { name: 'Nächster offener Programmpunkt' },
+			current_artist: { name: 'Interpret des aktuellen Abschnitts (nur mit Steuer-Passwort)' },
+			next_artist: { name: 'Interpret des nächsten Programmpunkts (nur mit Steuer-Passwort)' },
+			section_elapsed: { name: 'Laufzeit des aktuellen Abschnitts' },
+			item_index: { name: 'Ablauf: Anzahl begonnener Punkte' },
+			item_total: { name: 'Ablauf: Anzahl aller Punkte' },
+			item_progress: { name: 'Ablauf: Fortschritt („3 / 5“)' },
 			marker_count: { name: 'Anzahl gesetzter Abschnitte' },
 			pending_count: { name: 'Anzahl offener Programmpunkte' },
 			level_left: { name: 'Pegel links (0-100)' },
@@ -296,6 +304,10 @@ export default class EbbtonInstance extends InstanceBase {
 			cut_open: { name: 'Schnitt läuft gerade (ja/nein)' },
 			recording_mode: { name: 'Aufnahmeart (Stereo / Mehrspur)' },
 			routing_status: { name: 'Routing am Mischpult (ok / falsch / unbekannt / -)' },
+			loudness_momentary: { name: 'Lautheit momentan (LUFS, 0,4 s)' },
+			loudness_short: { name: 'Lautheit kurzzeitig (LUFS, 3 s)' },
+			loudness_integrated: { name: 'Lautheit der ganzen Aufnahme (LUFS)' },
+			loudness_section: { name: 'Lautheit des aktuellen Abschnitts (LUFS)' },
 		}
 	}
 
@@ -306,6 +318,12 @@ export default class EbbtonInstance extends InstanceBase {
 			service_name: '-',
 			current_item: '-',
 			next_item: '-',
+			current_artist: '-',
+			next_artist: '-',
+			section_elapsed: '00:00',
+			item_index: 0,
+			item_total: 0,
+			item_progress: '-',
 			marker_count: 0,
 			pending_count: 0,
 			level_left: 0,
@@ -318,6 +336,7 @@ export default class EbbtonInstance extends InstanceBase {
 			cut_open: 'nein',
 			recording_mode: '-',
 			routing_status: '-',
+			...this.loudnessValues(null),
 		})
 	}
 
@@ -332,12 +351,24 @@ export default class EbbtonInstance extends InstanceBase {
 		}
 		// Offene Punkte in der Reihenfolge des Ablaufplans (die App sortiert nach "order")
 		const pending = (s.pending || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0))
+		// Ablaufpunkte = alles außer von Hand gesetzten Abschnitten (M); begonnen sind die mit gesetztem Anfang.
+		const planStarted = (s.sections || []).filter((x) => x.start != null && x.source !== 'manual').length
+		const planTotal = planStarted + pending.length
+		const current = s.currentSegment
+		const currentSection = current ? (s.sections || []).find((x) => x.id === current.markerId) : null
 		this.setVariableValues({
 			status: labels[s.status] || s.status,
 			timecode: this.formatTime(s.duration || 0),
 			service_name: s.service?.name || '-',
 			current_item: s.currentSegment?.label || '-',
 			next_item: pending.length > 0 ? pending[0].label : '-',
+			// Mit dem Mitlese-Passwort schickt Ebbton keine Personennamen: dann bleibt es bei „-“.
+			current_artist: currentSection?.artist || '-',
+			next_artist: pending[0]?.artist || '-',
+			section_elapsed: this.sectionElapsed(s.duration),
+			item_index: planStarted,
+			item_total: planTotal,
+			item_progress: planTotal > 0 ? `${planStarted} / ${planTotal}` : '-',
 			marker_count: (s.sections || []).filter((x) => x.start != null).length,
 			pending_count: pending.length,
 			input_status: { ok: 'ok', silent: 'leise', lost: 'ausgefallen' }[s.health?.input] || '-',
@@ -351,8 +382,28 @@ export default class EbbtonInstance extends InstanceBase {
 		})
 		this.checkFeedbacks(
 			'recording', 'paused', 'has_pending', 'input_problem', 'write_problem', 'disk_warn', 'disk_low', 'cut_open',
-			'routing_mismatch', 'multitrack',
+			'routing_mismatch', 'multitrack', 'section_running',
 		)
+	}
+
+	/** Laufzeit des laufenden Abschnitts (mm:ss bzw. h:mm:ss), aus Dauer der Aufnahme und Anfang des Abschnitts. */
+	sectionElapsed(duration) {
+		const start = this.state?.currentSegment?.start
+		if (start == null) return '-'
+		const t = Math.max(0, Math.floor((duration ?? this.state?.duration ?? 0) - start))
+		const p = (n) => String(Math.floor(n)).padStart(2, '0')
+		return t >= 3600 ? `${Math.floor(t / 3600)}:${p((t % 3600) / 60)}:${p(t % 60)}` : `${p(t / 60)}:${p(t % 60)}`
+	}
+
+	/** Lautheit in LUFS mit einer Nachkommastelle; „-“ bei Stille oder wenn Ebbton keine misst (Mehrspur). */
+	loudnessValues(l) {
+		const f = (v) => (Number.isFinite(v) ? v.toFixed(1) : '-')
+		return {
+			loudness_momentary: f(l?.momentary),
+			loudness_short: f(l?.shortTerm),
+			loudness_integrated: f(l?.integrated),
+			loudness_section: f(l?.section),
+		}
 	}
 
 	formatHours(h) {
@@ -555,6 +606,29 @@ export default class EbbtonInstance extends InstanceBase {
 				options: [],
 				callback: () => (this.state?.recordingMode || this.state?.mode) === 'multitrack',
 			},
+			section_running: {
+				type: 'boolean',
+				name: 'Abschnitt läuft',
+				description: 'Aktiv, solange ein Abschnitt läuft. Mit Namen: nur, wenn der Name des laufenden Abschnitts dieses Wort enthält (z. B. „Predigt“).',
+				defaultStyle: {
+					bgcolor: combineRgb(40, 140, 70),
+					color: combineRgb(255, 255, 255),
+				},
+				options: [
+					{
+						type: 'textinput',
+						id: 'name',
+						label: 'Name enthält (leer = jeder Abschnitt)',
+						default: '',
+					},
+				],
+				callback: (feedback) => {
+					const label = this.state?.currentSegment?.label
+					if (label == null) return false
+					const wanted = String(feedback.options.name ?? '').trim().toLowerCase()
+					return !wanted || label.toLowerCase().includes(wanted)
+				},
+			},
 			disk_warn: {
 				type: 'boolean',
 				name: 'Speicherplatz wird knapp (unter 3 Stunden)',
@@ -606,7 +680,7 @@ export default class EbbtonInstance extends InstanceBase {
 			{ id: 'aufnahme', name: 'Aufnahme', definitions: ['record_toggle', 'pause', 'mode'] },
 			{ id: 'abschnitte', name: 'Abschnitte', definitions: ['marker', 'marker_predigt', 'cut', 'undo'] },
 			{ id: 'ablaufplan', name: 'Ablaufplan', definitions: ['next_item'] },
-			{ id: 'anzeige', name: 'Anzeige', definitions: ['status', 'health'] },
+			{ id: 'anzeige', name: 'Anzeige', definitions: ['status', 'current_section', 'loudness', 'health'] },
 		]
 	}
 
@@ -648,19 +722,19 @@ export default class EbbtonInstance extends InstanceBase {
 				name: 'Abschnitt starten / beenden',
 				style: { ...base, text: 'Abschnitt\\nStart/Ende' },
 				steps: [{ down: [{ actionId: 'marker_add', options: { label: '' } }], up: [] }],
-				feedbacks: [],
+				feedbacks: [fb('section_running')],
 			},
 			marker_predigt: {
 				type: 'simple',
 				name: 'Abschnitt „Predigt“ starten / beenden',
 				style: { ...base, text: 'Predigt' },
 				steps: [{ down: [{ actionId: 'marker_add', options: { label: 'Predigt' } }], up: [] }],
-				feedbacks: [],
+				feedbacks: [{ feedbackId: 'section_running', options: { name: 'Predigt' }, style: { ...feedbackDefs.section_running.defaultStyle } }],
 			},
 			next_item: {
 				type: 'simple',
 				name: 'Nächster Programmpunkt',
-				style: { ...base, text: 'Weiter\\n$(ebbton:next_item)' },
+				style: { ...base, text: 'Weiter\\n$(ebbton:next_item)\\n$(ebbton:item_progress)' },
 				steps: [{ down: [{ actionId: 'marker_next' }], up: [] }],
 				feedbacks: [fb('has_pending')],
 			},
@@ -699,6 +773,20 @@ export default class EbbtonInstance extends InstanceBase {
 				},
 				steps: [{ down: [], up: [] }],
 				feedbacks: [fb('recording')],
+			},
+			current_section: {
+				type: 'simple',
+				name: 'Aktueller Abschnitt mit Laufzeit',
+				style: { ...base, size: '7', text: '$(ebbton:current_item)\\n$(ebbton:current_artist)\\n$(ebbton:section_elapsed)' },
+				steps: [{ down: [], up: [] }],
+				feedbacks: [fb('section_running')],
+			},
+			loudness: {
+				type: 'simple',
+				name: 'Lautheit (LUFS)',
+				style: { ...base, size: '7', text: 'LUFS\\nM $(ebbton:loudness_momentary)\\nI $(ebbton:loudness_integrated)' },
+				steps: [{ down: [], up: [] }],
+				feedbacks: [],
 			},
 		}
 	}

@@ -481,6 +481,10 @@ Der Ordnername des lokalen Klons ist egal.
   `parseVariablesInString` gibt es nicht mehr (Companion setzt Variablen in `useVariables`-Feldern selbst ein);
   Presets `type: 'simple'` ohne `category`, Gliederung in `buildPresetStructure()`; `checkAllFeedbacks()` statt
   `checkFeedbacks()` ohne Argument. `apiVersion` im Manifest trägt das Build-Werkzeug ein.
+- **Modul 2.2.0:** Variablen `current_artist`/`next_artist` (Personennamen fehlen beim Mitlese-Passwort, dann „-“), `section_elapsed`
+  (im Modul aus `duration` − `currentSegment.start` gerechnet, tickt mit den `levels`), `item_index`/`item_total`/`item_progress`
+  (Ablaufpunkte = `source` ≠ `manual`; begonnen = Anfang gesetzt), `loudness_*` (aus `levels.loudness`, nur Stereo), Rückmeldung
+  `section_running` (optional mit Namensteil). Keine Änderung an der App-Schnittstelle nötig.
 - Paket: `npm install && npm run package` im Ordner `companion-module/` → `ebbton-<version>.tgz`, in Companion über
   „Import module package“. Die `.tgz` wird nicht eingecheckt.
 

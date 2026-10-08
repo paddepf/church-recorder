@@ -83,6 +83,7 @@ die Verbindung abbricht.
 | Schnitt läuft gerade | Taste wird violett |
 | Routing am Mischpult passt nicht zur Aufnahmeart | Taste wird rot: z. B. Mehrspur eingestellt, die USB-Ausgänge liefern aber die Stereo-Matrix (oder umgekehrt); „unbekannt“ (Pult nicht erreichbar) löst nicht aus |
 | Aufnahmeart ist Mehrspur | Taste wird blau |
+| Abschnitt läuft | Taste wird grün, solange ein Abschnitt läuft; mit Eintrag im Feld „Name enthält“ nur, wenn der laufende Abschnitt dieses Wort im Namen trägt (z. B. „Predigt“) |
 
 ## Variablen
 
@@ -91,6 +92,14 @@ die Verbindung abbricht.
 `input_status` (ok / leise / ausgefallen), `write_status` (ok / langsam / Fehler), `disk_free` (GB),
 `disk_hours`, `cut_open`, `recording_mode` (Stereo / Mehrspur), `routing_status` (ok / falsch / unbekannt / -;
 „-“ = keine Pult-Verbindung in Ebbton eingerichtet)
+
+Abschnitt und Ablauf (seit 2.2.0): `current_item` / `next_item` (Name des laufenden bzw. des nächsten offenen Abschnitts),
+`current_artist` / `next_artist` (Interpret, kommt nur mit dem Steuer-Passwort; mit dem Mitlese-Passwort „-“),
+`section_elapsed` (Laufzeit des laufenden Abschnitts, mm:ss), `item_index` / `item_total` / `item_progress`
+(begonnene und alle Punkte des Ablaufplans, z. B. „3 / 5"; von Hand gesetzte Abschnitte zählen nicht mit).
+
+Lautheit in LUFS (seit 2.2.0, nur Stereo, „-" bei Stille und bei Mehrspur): `loudness_momentary` (0,4 s),
+`loudness_short` (3 s), `loudness_integrated` (ganze Aufnahme), `loudness_section` (laufender Abschnitt).
 
 Beispiel für eine Tastenbeschriftung:
 
@@ -103,7 +112,9 @@ $(ebbton:current_item)
 
 Unter **Aufnahme**, **Abschnitte**, **Ablaufplan** und **Anzeige** liegen fertige
 Tasten, unter anderem eine Aufnahmetaste mit Laufzeit, eine Taste „Predigt“ und
-eine Weiter-Taste, die den nächsten Programmpunkt anzeigt.
+eine Weiter-Taste, die den nächsten Programmpunkt und den Fortschritt anzeigt. Seit 2.2.0 dazu unter *Anzeige*
+„Aktueller Abschnitt mit Laufzeit“ und „Lautheit (LUFS)“; die Tasten „Abschnitt“ und „Predigt“ leuchten grün, solange
+ein (bzw. der Predigt-)Abschnitt läuft.
 
 Seit 2.1.0: **Aufnahmeart umschalten** (unter *Aufnahme*) zeigt Aufnahmeart und Routing-Status, wird blau bei
 Mehrspur und rot, wenn das Routing am Pult nicht passt; ein Druck schaltet um. Die Anzeige-Taste **Eingang und
