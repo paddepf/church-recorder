@@ -433,6 +433,11 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   `npm run dev:tools`.
 - Tests: `npm test` im Ordner `app/`. Für eigene Prüfskripte: `settings`-Modul per `Module._load` ersetzen
   (siehe `test/helpers.js`), Aufnahmen mit `stop()` beenden und auf `whenWritten()` warten.
+- Mehrspur-Tests: Der Simulator tickt per `setInterval`; scheitert ein Test vor `unmonitor()`, endet der Testprozess nie
+  (Windows-CI hing so stundenlang, alle Läufe ab 1.0.6). `multitrack.test.js` hält deshalb nach jedem Test alle
+  Simulatoren an (`test.afterEach`). Blockgrößen sind systemabhängig (Windows öffnet mit `frameSize` 0, der Simulator
+  nimmt dann 256 statt 512): Zeiten in Sekunden prüfen, nicht in Blöcken. Windows lässt sich grob nachstellen mit
+  `process.platform = 'win32'` per `--require` plus `TEMP`; auf dem Mac gibt es kein `timeout` (`perl -e 'alarm …'`).
 - Tests dürfen keine Dateideskriptoren unter der Hand schließen: Die Nummer wird sofort neu vergeben (z. B.
   an den Kanal des Testrunners) und der Schreib-Thread schreibt dann dort hinein.
 

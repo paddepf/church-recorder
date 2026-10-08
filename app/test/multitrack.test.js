@@ -12,6 +12,13 @@ const { MultitrackManager } = require(src('main/multitrack/manager'));
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Scheitert ein Test, bevor er das Gerät schließt, liefe der Takt des Simulators weiter und der Testprozess
+// endete nie (so auf Windows geschehen: der Lauf hing stundenlang). Deshalb nach jedem Test alle anhalten.
+const runningSims = new Set();
+const simStart = SimulatedAudio.prototype.start;
+SimulatedAudio.prototype.start = function (...args) { runningSims.add(this); return simStart.apply(this, args); };
+test.afterEach(() => { for (const s of runningSims) s.stop(); runningSims.clear(); });
+
 /** Block mit `frames` Frames, Kanal c hat in Frame i den Wert (c+1)*65536*256 + i*256 (obere 3 Bytes eindeutig). */
 function block(frames, channels, offset = 0) {
   const buf = Buffer.alloc(frames * channels * 4);
@@ -362,7 +369,10 @@ test('Engine spielt im Takt des Geräts ab und hält am Ende an', async () => {
   engine.on('playback', (p) => events.push(p.playing));
   const info = engine.play({ tracks, start: 0 });
   assert.equal(info.playing, true);
-  assert.ok(sim.outQueue.length >= 2 && sim.outQueue.length <= 20, `Vorlauf ${sim.outQueue.length} Blöcke`);
+  // Vorlauf in Sekunden prüfen: Die Blockgröße hängt vom System ab (Windows öffnet mit 0 = Treiberwert,
+  // der Simulator nimmt dann 256 statt 512 Frames, also doppelt so viele Blöcke).
+  const ahead = (sim.outQueue.length * engine.frameSize) / 48000;
+  assert.ok(sim.outQueue.length >= 2 && ahead >= 0.1 && ahead <= 0.3, `Vorlauf ${sim.outQueue.length} Blöcke = ${ahead.toFixed(3)} s`);
   assert.throws(() => engine.start({ simulate: true, deviceId: SIM_DEVICE_ID, tracks: [] }), /Keine Spur ausgewählt/);   // Aufnahme beendet das Abspielen
   assert.equal(engine.playInfo().playing, false);
 
