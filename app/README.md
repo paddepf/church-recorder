@@ -119,9 +119,11 @@ Die Einstellungen sind in Reiter gegliedert (links: Audio, Ablage & Export, Chur
 
 **Lautheit (LUFS) in der Wellenform:** Der Schalter „LUFS“ unten links in der Wellenform blendet die Lautheit nach EBU R128
 als gelbe Linie ein (Skala rechts −10 … −40, gestrichelt das Ziel aus „Lautstärke angleichen“). Die Linie ist die
-Short-term-Lautheit, also das Mittel der letzten 3 s; herausgezoomt wird sie zusätzlich geglättet. Oben rechts stehen
-während der Aufnahme M (letzte 0,4 s), S (letzte 3 s) und die integrierte Lautheit der ganzen Aufnahme und des
-laufenden Abschnitts; danach die Werte an der Mausposition, gesamt und für den gewählten Abschnitt. Ältere
+Short-term-Lautheit, also das Mittel der letzten 3 s; herausgezoomt wird sie zusätzlich geglättet. Die Messwerte stehen
+in der Leiste über der Wellenform: während der Aufnahme S (letzte 3 s), M (letzte 0,4 s), I (integriert über die ganze
+Aufnahme) und der laufende Abschnitt; danach S an der Mausposition, I gesamt und der gewählte Abschnitt (Klick auf
+den Abschnitt in der Liste, auf sein Fähnchen oder auf den Namen in der Export-Liste). Bei wenig Platz fallen die
+hinteren Werte weg. Fährt man mit der Maus über die Anzeige, erklärt eine Infobox S, M und I. Ältere
 Aufnahmen werden beim Öffnen einmal im Hintergrund nachgemessen (etwa 6 s je Stunde). Nur bei Stereo.
 
 Die MP3-Dateien werden beim Export auf eine einheitliche Lautheit gebracht (Einstellungen → Ablage & Export →

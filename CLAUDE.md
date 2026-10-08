@@ -635,11 +635,25 @@ Der Ordnername des lokalen Klons ist egal.
   beim Laden (ältere/unterbrochene Aufnahme), misst `_computeLoudness` die WAV im Hintergrund nach (5-s-Stücke, Abbruch
   über `_loudJob`, wenn inzwischen etwas anderes geladen wird); 70 min dauerten etwa 6 s. Anhängen füllt die Kurve bis
   zur Dateilänge mit `null` auf. Mehrspur misst nicht (kein Mix; Schalter ausgeblendet).
-  Zeichnen: `Waveform._drawLoudness` (Skala −50…−5 LUFS, Linien alle 10 LU, Ziel = `loudnessTarget` gestrichelt);
-  herausgezoomt mittelt jeder Pixel über etwa 6 Pixel (mindestens 3 s), sonst zappelt die Linie bei Sprache. Die
-  Messwerte oben rechts stehen in der Zeichenfläche (kein Platz in der Werkzeugleiste): live M/S/I und laufender
-  Abschnitt, sonst S an der Mausposition (echte 3 s, kann daher von der geglätteten Linie abweichen), I gesamt und
-  gewählter Abschnitt. Netzwerk bekommt `levels.loudness` ohne `steps`.
+  Zeichnen: `Waveform._drawLoudness` (Skala −50…−5 LUFS; Hilfslinien je nach Höhe der Wellenform alle 10 LU, alle
+  20 LU oder keine; Ziel = `loudnessTarget` türkis gestrichelt). Die Zahlen stehen rechts in einer Spalte mit Hintergrund
+  (Linien enden davor), eine Zahl zu nah am Ziel entfällt. Herausgezoomt mittelt jeder Pixel über etwa 6 Pixel
+  (mindestens 3 s), sonst zappelt die Linie bei Sprache.
+  **Messwerte nicht in der Zeichenfläche:** Ein Kasten oben rechts und „Ziel −16“ links verdeckten je nach Größe viel
+  (bei 760×520 ist die Wellenform nur ~40 px hoch). Jetzt meldet `_emitLoudness` die Werte (nur bei Änderung) über
+  `onLoudness` an `#loud-readout` in der Werkzeugleiste: „LUFS · S · M · I · Abschnitt“, live M/S/I und laufender
+  Abschnitt, sonst S an der Mausposition (echte 3 s, kann von der geglätteten Linie abweichen), I gesamt und gewählter
+  Abschnitt (`wave.selectedSectionId` aus `state.selectedSectionId`, gesetzt in `renderLists`; vorher zählte nur der Klick
+  in der Export-Liste, die setzt jetzt auch `selectedSectionId`).
+  `renderLoudnessReadout` legt die Elemente einmal an und ändert danach nur Text/`hidden`: Live wechseln die Werte
+  mehrmals je Sekunde, neu angelegte Elemente unter der Maus verhinderten jeden Tooltip. Erklärung als eigene Infobox
+  `#loud-help` (CSS `:hover` + Geschwister, 0,35 s Verzögerung) statt `title` – der System-Tooltip erscheint auf dem Mac
+  nur im aktiven Fenster und lässt sich nicht gliedern. `.loud-readout` bleibt auch ohne Inhalt stehen (Platzhalter vor
+  dem Abspielknopf). Beim Abschnitt wird nur der Name mit „…“ gekürzt (höchstens 230 px), der Wert bleibt immer
+  sichtbar; der ganze Name steht im Tooltip. Zu wenig Platz: Die hinteren Werte rutschen in eine abgeschnittene zweite Zeile (`flex-wrap`, feste Höhe),
+  vorne bleibt S bzw. I. In flachen Wellenformen (`body.dense`, Fensterhöhe ≤ 820) sind die Schalter nur Symbole.
+  Gemessen bei 1360×880, 1024×680, kompakt 960×640 und 760×520, beendet und live. Netzwerk bekommt `levels.loudness`
+  ohne `steps`.
 - **Werkzeugleiste der Wellenform (überarbeitet):** Die Kästchen „LUFS“, „Ansicht folgt“ (jetzt „Folgen“) und „Schleife“
   sind kleine Schalter (eckig wie alle Knöpfe) unten links in der Wellenform (`.wave-chips` in `.wave-wrap`, Kästchen unsichtbar im Label,
   Zustand per `:has(input:checked)`, Farben: LUFS `--loud`, Folgen `--plan`, Schleife `--manual`). Unten links, weil

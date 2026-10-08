@@ -72,7 +72,17 @@
     <div class="wave-toolbar">
       <button id="btn-marker" class="secondary" disabled title="Abschnitt an der aktuellen Stelle beginnen bzw. beenden (M) – Namen danach per Doppelklick oder ✎ ändern">Abschnitt starten</button>
       <button id="btn-next-item" class="secondary" disabled title="Laufenden Abschnitt beenden und den nächsten Ablaufpunkt beginnen (N)"><span class="nb-label">Nächster Ablaufpunkt</span><span id="next-name" class="nb-name" hidden></span></button>
-      <div class="spacer"></div>
+      <div id="loud-readout" class="loud-readout" aria-describedby="loud-help"></div>
+      <div id="loud-help" class="loud-help" role="tooltip">
+        <strong>Lautheit in LUFS</strong> <span class="muted">(EBU R128 · näher an 0 = lauter)</span>
+        <dl>
+          <dt>S</dt><dd>Short-term: Mittel der letzten 3 s – die gelbe Linie. Ohne Aufnahme: an der Mausposition.</dd>
+          <dt>M</dt><dd>Momentary: letzte 0,4 s, springt schnell.</dd>
+          <dt>I</dt><dd>Integriert: Durchschnitt der ganzen Aufnahme, Pausen herausgerechnet.</dd>
+          <dt>Name</dt><dd>I des laufenden bzw. angeklickten Abschnitts.</dd>
+        </dl>
+        <span class="muted">Der Export gleicht I auf das Ziel an (türkise Linie, z. B. −16).</span>
+      </div>
       <button id="btn-play" class="secondary play-btn" data-icon="play" disabled aria-label="Abspielen" title="Abspielen bzw. während der Aufnahme ab dem Cursor mithören (Leertaste)">
         <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"/></svg>
         <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="5.5" width="3.8" height="13" rx="1"/><rect x="13.7" y="5.5" width="3.8" height="13" rx="1"/></svg>

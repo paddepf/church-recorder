@@ -70,6 +70,7 @@
       this.onCutAdd = opts.onCutAdd || (() => {});
       this.onCutMoveEnd = opts.onCutMoveEnd || (() => {});
       this.onCutRemove = opts.onCutRemove || (() => {});
+      this.onLoudness = opts.onLoudness || (() => {});   // Messwerte für die Anzeige außerhalb der Wellenform
 
       this._bind();
       this.resize();
@@ -189,6 +190,7 @@
 
       this._drawCuts(laneTop, h);
       if (this.loudnessOn && this.loudness) this._drawLoudness(laneTop, laneH);
+      this._emitLoudness();
       this._drawHandles(laneTop, h);
       this._drawPlayhead(h);
       this._drawHover(h);
@@ -198,15 +200,29 @@
 
     /** y-Lage eines LUFS-Werts in der Wellenform-Fläche (−50 unten … −5 oben). */
     _loudY(v, laneTop, laneH) {
-      const top = laneTop + 8;
-      const bottom = laneTop + laneH - 6;
+      const top = laneTop + 6;
+      const bottom = laneTop + laneH - 4;
       const f = (LOUD_MAX - Math.max(LOUD_MIN, Math.min(LOUD_MAX, v))) / (LOUD_MAX - LOUD_MIN);
       return top + f * (bottom - top);
     }
 
+    /** Zahl der Skala rechts mit Hintergrund, damit sie auf der Wellenform lesbar bleibt. */
+    _scaleLabel(text, y, color) {
+      const ctx = this.ctx;
+      const w = ctx.measureText(text).width;
+      const x = this.width - 4 - w;
+      ctx.fillStyle = this.colors.loudBox || 'rgba(16,20,25,0.8)';
+      ctx.beginPath();
+      ctx.roundRect(x - 3, y - 7, w + 6, 14, 3);
+      ctx.fill();
+      ctx.fillStyle = color;
+      ctx.fillText(text, x, y);
+    }
+
     /**
-     * Short-term-Lautheit (3 s) als Linie über der Wellenform, mit Skala, Ziellinie (Export-Lautheit) und Messwerten.
-     * Herausgezoomt wird über mehrere Pixel gemittelt (mindestens 3 s), damit die Linie ruhig bleibt.
+     * Short-term-Lautheit (3 s) als Linie über der Wellenform, Skala und Ziellinie (Export-Lautheit) rechts. Die
+     * Messwerte stehen nicht in der Zeichenfläche (dort verdeckten sie zu viel), sondern gehen über `onLoudness`
+     * an die Werkzeugleiste. Herausgezoomt wird über mehrere Pixel gemittelt, damit die Linie ruhig bleibt.
      */
     _drawLoudness(laneTop, laneH) {
       const ctx = this.ctx;
@@ -215,37 +231,33 @@
       const L = window.LoudnessCurve;
       const w = this.width;
       const color = c.loud || '#F2C14E';
+      const target = this.loudnessTarget;
+      const gutter = 34;          // rechts: Platz für die Zahlen der Skala
 
-      // Skala: feine Linien alle 10 LU, Beschriftung rechts
+      // Hilfslinien: je nach Höhe alle 10 LU, alle 20 LU oder gar keine (nur das Ziel)
+      const gridStep = laneH >= 110 ? 10 : (laneH >= 60 ? 20 : 0);
+      const grid = [];
+      if (gridStep) for (let v = gridStep === 20 ? -20 : -10; v >= -40; v -= gridStep) grid.push(v);
       ctx.font = '10px system-ui, "Segoe UI", sans-serif';
       ctx.textBaseline = 'middle';
-      ctx.textAlign = 'right';
-      // In flachen Wellenformen (kompakte Ansicht, kleine Fenster) nur jede zweite Linie, sonst überlappen die Zahlen.
-      const gridStep = laneH >= 110 ? 10 : 20;
-      for (let v = -10 - (gridStep === 20 ? 10 : 0); v >= -40; v -= gridStep) {
+      const targetY = target != null ? Math.round(this._loudY(target, laneTop, laneH)) + 0.5 : null;
+      grid.forEach((v) => {
         const y = Math.round(this._loudY(v, laneTop, laneH)) + 0.5;
         ctx.strokeStyle = c.loudGrid || 'rgba(242,193,78,0.12)';
         ctx.beginPath();
         ctx.moveTo(0, y);
-        ctx.lineTo(w - 30, y);
+        ctx.lineTo(w - gutter, y);
         ctx.stroke();
-        ctx.fillStyle = c.muted || '#7D8CA0';
-        ctx.fillText(lufsText(v, 0), w - 4, y);
-      }
-      if (this.loudnessTarget != null) {
-        const y = Math.round(this._loudY(this.loudnessTarget, laneTop, laneH)) + 0.5;
+      });
+      if (targetY != null) {
         ctx.strokeStyle = c.manual || '#2BB3A3';
         ctx.setLineDash([6, 4]);
         ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(w - 30, y);
+        ctx.moveTo(0, targetY);
+        ctx.lineTo(w - gutter, targetY);
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle = c.manual || '#2BB3A3';
-        ctx.textAlign = 'left';
-        ctx.fillText(`Ziel ${lufsText(this.loudnessTarget, 0)}`, 6, y - 8);
       }
-      ctx.textAlign = 'left';
 
       // Kurve
       const stepsPerPx = L.STEPS_PER_SECOND / this.pxPerSec;
@@ -254,7 +266,7 @@
       const span = Math.max(L.SHORT_TERM_STEPS, Math.round(stepsPerPx * 6));
       const lastX = Math.min(w, this.timeToX(curve.length / L.STEPS_PER_SECOND));
       ctx.strokeStyle = color;
-      ctx.lineWidth = 1.75;
+      ctx.lineWidth = laneH >= 80 ? 1.75 : 1.5;
       ctx.lineJoin = 'round';
       ctx.beginPath();
       let pen = false;
@@ -270,64 +282,51 @@
       ctx.stroke();
       ctx.lineWidth = 1;
 
-      this._drawLoudnessReadout(laneTop, laneH, color);
+      // Zahlen der Skala zuletzt (über der Linie); eine Hilfslinie zu nah am Ziel bekommt keine Zahl
+      grid.forEach((v) => {
+        const y = Math.round(this._loudY(v, laneTop, laneH)) + 0.5;
+        if (targetY != null && Math.abs(y - targetY) < 14) return;
+        this._scaleLabel(lufsText(v, 0), y, c.muted || '#7D8CA0');
+      });
+      if (targetY != null) this._scaleLabel(lufsText(target, 0), targetY, c.manual || '#2BB3A3');
     }
 
-    /** Messwerte oben rechts: live Momentary/Short-term/Integriert, sonst Werte an der Mausposition und gesamt. */
-    _drawLoudnessReadout(laneTop, laneH, color) {
-      const ctx = this.ctx;
-      const c = this.colors;
-      const curve = this.loudness;
-      const L = window.LoudnessCurve;
-      // Integrierte Werte nur neu rechnen, wenn sich Kurve oder Abschnitt ändern (gezeichnet wird bei jeder Mausbewegung).
-      const sel = this.selectedSegment;
-      const open = this.sections.find((x) => x.start != null && x.end == null);
-      const ref = this.loudnessLive ? open : (sel && sel.markerId ? this.sections.find((x) => x.id === sel.markerId) : null);
-      const liveTick = this.loudnessLive ? Math.floor(curve.length / L.STEPS_PER_SECOND) : curve.length;
-      const key = `${liveTick}|${ref ? `${ref.id}:${ref.start}:${ref.end}` : ''}`;
-      if (!this._loudCache || this._loudCache.key !== key) {
-        const range = ref ? [ref.start * L.STEPS_PER_SECOND, (ref.end != null ? ref.end : this.duration) * L.STEPS_PER_SECOND] : null;
-        this._loudCache = { key, all: curve.integrated(), section: range ? curve.integrated(range[0], range[1]) : null, label: ref ? ref.label : null };
+    /**
+     * Messwerte für die Anzeige außerhalb der Zeichenfläche: live Momentary/Short-term/integriert und laufender
+     * Abschnitt, sonst Short-term an der Mausposition, integriert gesamt und gewählter Abschnitt. Meldet nur Änderungen.
+     */
+    _emitLoudness() {
+      let data = null;
+      if (this.loudnessOn && this.loudness && this.loudness.length) {
+        const curve = this.loudness;
+        const L = window.LoudnessCurve;
+        const sel = this.selectedSegment;
+        const open = this.sections.find((x) => x.start != null && x.end == null);
+        // Beendet: der zuletzt gewählte Abschnitt (Abschnittsliste, Fähnchen, Export-Liste)
+        const chosen = this.selectedSectionId || (sel && sel.markerId) || null;
+        const ref = this.loudnessLive ? open : (chosen ? this.sections.find((x) => x.id === chosen && x.start != null) : null);
+        // Integrierte Werte nur neu rechnen, wenn sich Kurve (live: je Sekunde) oder Abschnitt ändern.
+        const liveTick = this.loudnessLive ? Math.floor(curve.length / L.STEPS_PER_SECOND) : curve.length;
+        const key = `${liveTick}|${ref ? `${ref.id}:${ref.start}:${ref.end}` : ''}`;
+        if (!this._loudCache || this._loudCache.key !== key) {
+          const range = ref ? [ref.start * L.STEPS_PER_SECOND, (ref.end != null ? ref.end : this.duration) * L.STEPS_PER_SECOND] : null;
+          this._loudCache = { key, all: curve.integrated(), section: range ? curve.integrated(range[0], range[1]) : null };
+        }
+        const hover = !this.loudnessLive && this.hoverTime != null && this.hoverTime >= 0 && this.hoverTime <= this.duration
+          ? this.hoverTime : null;
+        data = {
+          live: this.loudnessLive,
+          momentary: this.loudnessLive ? lufsText(curve.momentary()) : null,
+          shortTerm: this.loudnessLive ? lufsText(curve.shortTerm()) : (hover != null ? lufsText(curve.shortTerm(L.Curve.stepAt(hover))) : null),
+          at: hover != null ? fmt(hover) : null,
+          integrated: lufsText(this._loudCache.all),
+          section: ref ? { label: ref.label || 'Abschnitt', value: lufsText(this._loudCache.section) } : null
+        };
       }
-      const cache = this._loudCache;
-
-      const lines = [];
-      if (this.loudnessLive) {
-        lines.push([`M ${lufsText(curve.momentary())}   S ${lufsText(curve.shortTerm())} LUFS`, true]);
-        lines.push([`I ${lufsText(cache.all)} gesamt`, false]);
-      } else if (this.hoverTime != null && this.hoverTime >= 0 && this.hoverTime <= this.duration && curve.length) {
-        lines.push([`S ${lufsText(curve.shortTerm(L.Curve.stepAt(this.hoverTime)))} LUFS bei ${fmt(this.hoverTime)}`, true]);
-        lines.push([`I ${lufsText(cache.all)} gesamt`, false]);
-      } else {
-        lines.push([`I ${lufsText(cache.all)} LUFS gesamt`, true]);
-      }
-      if (cache.label != null) lines.push([`${this._fitText(cache.label, 140)}: ${lufsText(cache.section)}`, false]);
-      // Nur so viele Zeilen, wie in die Wellenform passen (mindestens die erste)
-      lines.length = Math.max(1, Math.min(lines.length, Math.floor((laneH - 22) / 17)));
-
-      ctx.font = '600 13px system-ui, "Segoe UI", sans-serif';
-      const big = lines.filter((l) => l[1]).map((l) => ctx.measureText(l[0]).width);
-      ctx.font = '12px system-ui, "Segoe UI", sans-serif';
-      const small = lines.filter((l) => !l[1]).map((l) => ctx.measureText(l[0]).width);
-      const boxW = Math.ceil(Math.max(...big, ...small)) + 20;
-      const boxH = lines.length * 17 + 10;
-      const x = this.width - boxW - 40;
-      const y = laneTop + 6;
-      ctx.fillStyle = c.loudBox || 'rgba(16,20,25,0.82)';
-      ctx.beginPath();
-      ctx.roundRect(x, y, boxW, boxH, 6);
-      ctx.fill();
-      ctx.strokeStyle = color;
-      ctx.globalAlpha = 0.5;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-      ctx.textBaseline = 'middle';
-      lines.forEach(([text, strong], i) => {
-        ctx.font = strong ? '600 13px system-ui, "Segoe UI", sans-serif' : '12px system-ui, "Segoe UI", sans-serif';
-        ctx.fillStyle = strong ? color : (c.text || '#E6EBF0');
-        ctx.fillText(text, x + 10, y + 13 + i * 17);
-      });
-      ctx.font = '12px system-ui, "Segoe UI", sans-serif';
+      const json = JSON.stringify(data);
+      if (json === this._loudEmitted) return;
+      this._loudEmitted = json;
+      this.onLoudness(data);
     }
 
     _drawSegmentBands(laneTop, laneH) {

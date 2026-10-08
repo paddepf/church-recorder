@@ -370,6 +370,43 @@ body[data-status="recording"] .timecode { color: var(--tally-text); }
 .wave-toolbar .zoom button:hover { color: var(--text); }
 .zoom svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; }
 
+/* Lautheit in der Werkzeugleiste: füllt den freien Platz, rechtsbündig vor dem Abspielknopf. Ist es zu eng, rutschen
+   die hinteren (unwichtigeren) Werte in eine zweite Zeile, die abgeschnitten ist – vorne bleibt immer S bzw. I stehen. */
+.loud-readout {
+  flex: 1; min-width: 0; height: 1.4em; overflow: hidden;
+  display: flex; flex-wrap: wrap; justify-content: flex-end; align-content: flex-start; align-items: baseline; column-gap: 14px;
+  white-space: nowrap; font-size: 15px; line-height: 1.4; font-variant-numeric: tabular-nums; color: var(--text);
+}
+.loud-readout .lr { flex-shrink: 0; }
+.loud-readout .lr[hidden] { display: none; }
+/* Erklärung beim Darüberfahren (eigene Infobox statt title: erscheint auch, wenn das Fenster nicht aktiv ist) */
+.wave-toolbar { position: relative; }
+.loud-readout { cursor: help; }
+.loud-help {
+  position: absolute; right: 0; top: calc(100% - 4px); z-index: 20; width: min(420px, 100%);
+  padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--line);
+  background: var(--panel); color: var(--text); box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  font-size: 13px; line-height: 1.45;
+  opacity: 0; visibility: hidden; transition: opacity .12s, visibility .12s; pointer-events: none;
+}
+.loud-readout:hover:has(.lr:not([hidden])) + .loud-help { opacity: 1; visibility: visible; transition-delay: .35s; }
+.loud-help .muted { color: var(--muted); }
+.loud-help dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 8px 0; }
+.loud-help dt { font-weight: 700; color: var(--loud); }
+.loud-help dd { margin: 0; }
+body.compact .loud-help { display: none; }
+.loud-readout .lr b { color: var(--muted); font-weight: 600; font-size: .85em; }
+.loud-readout .lr.main { color: var(--loud); font-weight: 600; }
+.loud-readout .lr.main b { color: var(--loud); }
+.loud-readout .lr small { color: var(--muted); font-weight: 400; font-size: .85em; }
+.loud-readout .unit { color: var(--muted); font-size: .8em; letter-spacing: .06em; font-weight: 600; }
+/* Abschnitt: der Name wird mit „…“ gekürzt, der Wert bleibt immer ganz sichtbar */
+.loud-readout .sec { display: inline-flex; align-items: baseline; gap: 4px; max-width: 230px; }
+.loud-readout .sec b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loud-readout .sec span, .loud-readout .sec small { flex-shrink: 0; }
+body.dense .loud-readout { font-size: 13px; gap: 10px; }
+body.compact .loud-readout { display: none; }
+
 /* Schalter direkt in der Wellenform, unten links (rechts stehen Live-Stelle, Skala und Messwerte) */
 .wave-wrap { position: relative; }
 .wave-chips {
@@ -397,6 +434,11 @@ body[data-status="recording"] .timecode { color: var(--tally-text); }
 .chip-loud:has(input:checked) { --chip: var(--loud); }
 .chip-loop:has(input:checked) { --chip: var(--manual); }
 body.compact .wave-chips { display: none; }
+/* Flache Wellenform (kompakte Ansicht, niedrige Fenster): Schalter nur als Symbol, Bedeutung im Tooltip */
+@media (max-height: 820px) {
+  .wave-chip span { display: none; }
+  .wave-chip { width: 26px; padding: 0; justify-content: center; }
+}
 
 canvas.wave {
   width: 100%;
@@ -1103,7 +1145,8 @@ body.dense .wave-toolbar .play-btn.with-label { width: auto; padding: 0 12px 0 8
 body.dense .play-btn svg { width: 17px; height: 17px; }
 body.dense .zoom svg { width: 17px; height: 17px; }
 body.dense .play-label { font-size: 13px; }
-body.dense .wave-chip { height: 22px; font-size: 11.5px; padding: 0 8px 0 6px; }
+body.dense .wave-chip { width: 24px; height: 22px; padding: 0; justify-content: center; }
+body.dense .wave-chip span { display: none; }
 body.dense .wave-chip svg { width: 13px; height: 13px; }
 body.dense .wave-chips { left: 6px; bottom: 6px; }
 body.dense .zoom { gap: 4px; }

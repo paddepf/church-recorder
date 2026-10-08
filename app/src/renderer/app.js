@@ -105,6 +105,7 @@
         if (!res.ok) toast('warn', res.error);
       },
       onCutMoveEnd: async (id, edge, time) => { await window.api.cut.moveEdge(id, edge, time); },
+      onLoudness: (data) => renderLoudnessReadout(data),
       onCutRemove: async (id) => {
         await window.api.cut.remove(id);
       },
@@ -412,6 +413,53 @@
     $('chk-follow').checked = on;
   }
 
+  /**
+   * Messwerte der Lautheit in der Werkzeugleiste (nicht in der Wellenform, dort verdeckten sie zu viel). Reihenfolge
+   * nach Wichtigkeit: Wird es eng, kürzt CSS von hinten.
+   */
+  function renderLoudnessReadout(data) {
+    const box = $('loud-readout');
+    // Die Elemente bleiben stehen, nur die Werte wechseln (live mehrmals je Sekunde). Würden sie jedes Mal neu
+    // angelegt, läge die Maus ständig über neuen Elementen und der Tooltip erschiene nie.
+    if (!box.firstChild) {
+      const make = (key, cls, label) => {
+        const el = document.createElement('span');
+        el.className = `lr ${cls}`;
+        el.dataset.key = key;
+        if (label != null) {
+          const b = document.createElement('b');
+          b.textContent = label;
+          el.append(b, ' ');
+        }
+        el.append(document.createElement('span'), document.createElement('small'));
+        box.appendChild(el);
+      };
+      make('unit', 'unit', null);
+      make('s', 'main', 'S');
+      make('m', '', 'M');
+      make('i', '', 'I');
+      make('sec', 'sec', '');
+      box.querySelector('[data-key="unit"] span').textContent = 'LUFS';
+    }
+    // Die Anzeige selbst bleibt (sie ist der Platzhalter vor dem Abspielknopf), nur ihr Inhalt verschwindet.
+    box.querySelectorAll('.lr').forEach((el) => { el.hidden = !data; });
+    if (!data) return;
+    const set = (key, value, { label, extra = '', main } = {}) => {
+      const el = box.querySelector(`[data-key="${key}"]`);
+      el.hidden = value == null;
+      if (value == null) return;
+      if (label != null) el.querySelector('b').textContent = label;
+      el.querySelector('span').textContent = value;
+      el.querySelector('small').textContent = extra ? ` ${extra}` : '';
+      if (main != null) el.classList.toggle('main', main);
+    };
+    set('s', data.shortTerm, { extra: data.at ? `bei ${data.at}` : '' });
+    set('m', data.momentary);
+    set('i', data.integrated, { main: data.shortTerm == null });
+    set('sec', data.section ? data.section.value : null, { label: data.section ? `${data.section.label}:` : '' });
+    box.querySelector('[data-key="sec"]').title = data.section ? `${data.section.label}: ${data.section.value} LUFS` : '';
+  }
+
   /** Schalter „LUFS“ (`state.loudOn`) und Ziellinie; bei Mehrspur gibt es keine Lautheit. */
   function applyLoudnessView() {
     if (state.loudOn == null) state.loudOn = loudnessDefault();
@@ -698,6 +746,11 @@
   /* ----------------------------------------------------------------- Listen */
 
   function renderLists() {
+    // Gewählter Abschnitt auch für die Lautheitsanzeige (I des Abschnitts)
+    if (wave.selectedSectionId !== state.selectedSectionId) {
+      wave.selectedSectionId = state.selectedSectionId;
+      wave.draw();
+    }
     // Tastaturfokus über das Neuaufbauen der Listen hinweg erhalten
     const focusedRow = document.activeElement?.closest?.('#pending-list .item, #marker-list .item');
     const focusId = focusedRow?.dataset.id;
@@ -997,7 +1050,9 @@
       name.title = 'Abschnitt in der Wellenform zeigen';
       name.addEventListener('click', () => {
         state.selectedSegmentId = state.selectedSegmentId === seg.id ? null : seg.id;
+        if (state.selectedSegmentId && seg.markerId) state.selectedSectionId = seg.markerId;
         renderSegments();
+        renderLists();
         wave.update({ selectedSegment: segments.find((x) => x.id === state.selectedSegmentId) || null });
         if (state.selectedSegmentId) wave.scrollTo(seg.start);
       });
