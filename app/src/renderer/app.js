@@ -1049,7 +1049,7 @@
     if (state.session?.mode === 'multitrack') {
       if (!multitrackView()) {
         $('btn-play').textContent = 'Abspielen';
-        $('btn-play').title = 'Mehrspuraufnahme: zum Zurückspielen zum Pult oben auf „Mehrspur“ schalten';
+        $('btn-play').title = 'Mehrspuraufnahme: zum Zurückspielen zum Pult die Aufnahmeart (Einstellungen → Audio) auf Mehrspur stellen';
         return;
       }
       $('btn-play').textContent = mt.play?.playing ? 'Stopp' : 'Zum Pult abspielen';
@@ -2203,30 +2203,28 @@
     return settingMode() === 'multitrack';
   }
 
-  /** Umschalter in der Kopfzeile und Ansicht passend zur Aufnahmeart. */
+  /** Schild „Mehrspur“ in der Kopfzeile und Ansicht passend zur Aufnahmeart (Stereo ist der Normalfall: kein Schild). */
   function applyMode() {
     const live = isLive();
     const mode = live ? (state.session.mode || 'stereo') : settingMode();
-    $('btn-mode-stereo').setAttribute('aria-pressed', String(mode !== 'multitrack'));
-    $('btn-mode-multi').setAttribute('aria-pressed', String(mode === 'multitrack'));
-    $('btn-mode-stereo').disabled = live;
-    $('btn-mode-multi').disabled = live;
-    const why = live ? ' – während der Aufnahme nicht umschaltbar' : '';
-    $('btn-mode-stereo').title = `Stereo: Eingang aus den Einstellungen, z. B. die Matrix auf USB 1–2${why}`;
-    $('btn-mode-multi').title = `Mehrspur: alle Kanäle des Mischpults einzeln (am Pult die USB-Ausgänge auf die Kanäle legen)${why}`;
+    const badge = $('btn-mode-badge');
+    badge.hidden = mode !== 'multitrack';
+    badge.title = live
+      ? 'Es läuft eine Mehrspuraufnahme'
+      : 'Mehrspuraufnahme ist eingestellt – Klick: Aufnahmeart in den Einstellungen ändern';
     document.body.classList.toggle('mt', multitrackView());
     renderChannels();
     applyPlayControls();
   }
 
-  async function setRecordingMode(mode) {
-    if (isLive() || settingMode() === mode) return;
-    const res = await window.api.settings.set({ recordingMode: mode });
-    if (!res.ok) return toast('error', res.error);
-    state.settings = res.settings;
-    $('set-rec-mode').value = mode;
-    applyMode();
-    refreshDisk();
+  /** Schild „Mehrspur“: Einstellungen beim Reiter Audio öffnen, die Aufnahmeart im Blick. */
+  function openRecordingModeSetting() {
+    settingsTab = 'audio';
+    openModal('modal-settings');
+    setTimeout(() => {
+      $('set-rec-mode').scrollIntoView({ block: 'center' });
+      $('set-rec-mode').focus();
+    }, 50);
   }
 
   /**
@@ -2310,7 +2308,7 @@
         parts.push('Gerät wird geöffnet …');
       }
       if (s?.status === 'stopped' && s.mode !== 'multitrack' && s.wavPath) {
-        parts.push('Angezeigt wird eine Stereo-Aufnahme – zum Exportieren oben auf „Stereo“ schalten.');
+        parts.push('Angezeigt wird eine Stereo-Aufnahme – zum Exportieren die Aufnahmeart (Einstellungen → Audio) auf Stereo stellen.');
       }
     }
     if (mt.playText) parts.push(mt.playText);
@@ -2698,8 +2696,7 @@
     });
     $('btn-clear-mt-dir').addEventListener('click', () => { $('set-mt-dir').value = ''; });
     $('btn-mt-refresh').addEventListener('click', () => refreshMultitrackDevices());
-    $('btn-mode-stereo').addEventListener('click', () => setRecordingMode('stereo'));
-    $('btn-mode-multi').addEventListener('click', () => setRecordingMode('multitrack'));
+    $('btn-mode-badge').addEventListener('click', openRecordingModeSetting);
     $('ch-all').addEventListener('click', () => saveArmed(null));
     $('ch-named').addEventListener('click', () => {
       if (state.mixer?.status !== 'connected') return toast('info', 'Das Mischpult ist nicht verbunden – die Namen sind nicht bekannt.');

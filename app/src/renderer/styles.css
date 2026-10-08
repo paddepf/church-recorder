@@ -607,7 +607,6 @@ label small { color: var(--muted); font-size: 11px; }
 /* Mehrspur: Kanal-Bereich statt Export (body.mt) */
 body.mt .panel-export { display: none; }
 body:not(.mt) .panel-channels { display: none; }
-body.compact .mode-switch { display: none; }
 .panel-channels { padding: 0; }
 .ch-status { margin: 10px 14px 0; color: var(--muted); font-size: 13px; line-height: 1.4; flex-shrink: 0; }
 .ch-status .bad { color: var(--amber); }
@@ -1076,3 +1075,31 @@ body.dense.mt .panels { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) min
   .ch { grid-template-columns: 20px minmax(0, 1fr) 40px; gap: 5px; }
   body.dense .ch { grid-template-columns: 18px minmax(0, 1fr) 34px; }
 }
+
+/* ------------------------------------------------- Kopfleiste (aufgeräumt) */
+/* Alle Bedienelemente der Kopfleiste gleich hoch und gleich groß beschriftet, rechts in drei Gruppen mit
+   sichtbarem Abstand: Aufnahmeart · Aufnahmen/Einstellungen · Ansicht. Steht am Ende, damit es die
+   früheren Einzelgrößen (groß, schmal, kompakt) überschreibt. */
+.topbar { --top-h: 40px; --top-font: 15px; --top-pad: 16px; --top-group: 14px; }
+@media (max-width: 1180px) { .topbar { --top-h: 36px; --top-font: 14px; --top-pad: 12px; --top-group: 10px; } }
+body.dense .topbar { --top-h: 28px; --top-font: 13px; --top-pad: 10px; --top-group: 10px; }
+
+.service-name { height: var(--top-h); box-sizing: border-box; padding-top: 0; padding-bottom: 0; align-items: center; }
+.top-actions { gap: 6px; }
+.top-actions > button,
+.top-actions > .view-switch { height: var(--top-h); box-sizing: border-box; }
+.topbar .top-actions > button { font-size: var(--top-font); padding: 0 var(--top-pad); }
+.topbar .view-switch button { height: 100%; font-size: var(--top-font); padding: 0 calc(var(--top-pad) - 2px); }
+.top-actions > #btn-library,
+.top-actions > .view-switch { margin-left: var(--top-group); }
+
+/* Aufnahmeart: Stereo ist der Normalfall und wird nicht angezeigt; nur bei Mehrspur erscheint ein farbiges Schild
+   (Klick → Einstellungen). Umgestellt wird in den Einstellungen oder per Companion. */
+.topbar .mode-badge { border: 1px solid var(--plan); background: rgba(108,124,224,.18); color: var(--strong); font-weight: 600; }
+.topbar .mode-badge:hover { background: rgba(108,124,224,.3); }
+.mode-badge[hidden] { display: none; }
+
+/* Mini-Fenster: nur der Ansicht-Umschalter bleibt, klein wie bisher */
+body.compact .topbar { --top-h: 24px; --top-font: 11px; --top-pad: 8px; }
+body.compact .service-name { height: auto; }
+body.compact .top-actions > .view-switch { margin-left: 0; }

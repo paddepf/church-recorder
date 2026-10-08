@@ -333,6 +333,17 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   ausgeblendet · Karte des laufenden Abschnitts · M und N einzeilig („→ Predigt“, Beschriftung nur ohne offenen Punkt,
   per `:has`). „Immer oben“ heißt unter 380 px nur „oben“ (`.ontop-long`). Nach Änderungen alle vier Zustände bei 320×164
   messen (kein Überlauf, keine abgeschnittenen Knöpfe).
+- **Kopfleiste (aufgeräumt, Oktober 2026):** Alle Bedienelemente (Gottesdienst-Feld, Schild, Knöpfe, Umschalter) sind gleich
+  hoch und gleich groß beschriftet – Variablen `--top-h`/`--top-font`/`--top-pad` auf `.topbar` (groß 40 px/15 px,
+  unter 1180 px 36/14, kompakt 28/13, Mini 24/11; Block „Kopfleiste (aufgeräumt)“ am Ende von `styles.css`). Rechts
+  Gruppen mit Abstand (`--top-group` vor „Aufnahmen“ und vor dem Ansicht-Umschalter): [Schild „● Mehrspur“] ·
+  Aufnahmen/Einstellungen · Ansicht. Vorher: drei verschiedene Höhen (25/39/45 px) und kleinere Schrift in den
+  Umschaltern – wirkte unordentlich.
+- **Aufnahmeart in der Kopfzeile nur als Schild:** Stereo ist der Normalfall, Mehrspur wird selten genutzt. Deshalb kein
+  Umschalter „Stereo | Mehrspur“ mehr (gab es kurz), sondern nur bei Mehrspur das farbige Schild `#btn-mode-badge`
+  „● Mehrspur“ (`applyMode`; auch während einer Mehrspuraufnahme); Klick öffnet *Einstellungen → Audio* mit Fokus auf
+  „Aufnahmeart“ (`openRecordingModeSetting`). Umgestellt wird dort oder per Companion (`mode.set`). Gemessen: kein Überlauf, Timer
+  unverändert bei 1360/1024 groß und 960/760 kompakt, Mini 360 und 320 px.
 - **Ansicht-Umschalter** rechts oben: ein Segment „Groß | Kompakt | Mini“ (`.view-switch`, Knöpfe `#btn-view-large`,
   `#btn-dense`, `#btn-compact`, Zustand über `aria-pressed`) statt einzelner Knöpfe, damit er wenig Platz braucht; er
   bleibt auch im Mini-Fenster sichtbar (Wechsel Mini → Kompakt direkt). Renderer `setView(view)` → IPC
@@ -437,7 +448,7 @@ Der Ordnername des lokalen Klons ist egal.
   „Import module package“. Die `.tgz` wird nicht eingecheckt.
 
 ### Mehrspuraufnahme (Oktober 2026, Branch `mehrspur`, im Aufbau)
-- Ziel: Schalter „Stereo | Mehrspur“ in der Kopfzeile; im Mehrspur-Modus alle 32 Kanäle des M32 über die DN32-USB-Karte
+- Ziel: Aufnahmeart Stereo/Mehrspur wählbar (Einstellungen, Companion; in der Kopfzeile nur ein Schild bei Mehrspur); im Mehrspur-Modus alle 32 Kanäle des M32 über die DN32-USB-Karte
   (ASIO) aufnehmen, Kanalnamen/-farben per OSC vom Pult, später über die USB-Ausgänge zurückspielen (virtueller
   Soundcheck, Nachmischen). **Mehrspur ersetzt Stereo:** Für Mehrspur stellt der Nutzer am Pult die Kartenausgänge auf
   Kanal 1–32 um, die Matrix (sonst auf 1–2) fehlt dann. Kein eigener Stereo-Mix, kein MP3-Export im Mehrspur-Modus.
@@ -499,14 +510,14 @@ Der Ordnername des lokalen Klons ist egal.
   fehlt noch. Beim Stopp endet der laufende Abschnitt bei der zuletzt gemeldeten Dauer (bis etwa 50 ms vor Dateiende).
 - Geprüft (Mac, Simulator): Tests mit echter Engine (Session-Ablauf inkl. Laden/Anhängen) und die App per
   WebSocket-Fernsteuerung sowie per Knöpfen (Start, Abschnitt, Pause, Stopp, Anhängen, Einstellungen).
-- **Oberfläche (Schritt 4):** Umschalter „Stereo | Mehrspur“ in der Kopfzeile (`.mode-switch`, `setRecordingMode`,
-  speichert `recordingMode`; während der Aufnahme gesperrt, im Mini-Fenster ausgeblendet). `body.mt`
-  (`multitrackView()`: folgt dem Umschalter, während einer Aufnahme deren Art) ersetzt den Export-Bereich durch
+- **Oberfläche (Schritt 4):** Aufnahmeart = Einstellung `recordingMode` (in der Kopfzeile nur das Schild, siehe
+  „Oberfläche“). `body.mt` (`multitrackView()`: folgt der Einstellung, während einer Aufnahme deren Art) ersetzt den
+  Export-Bereich durch
   den Bereich „Kanäle“ (`renderChannels`, `channelModel`, `applyTrackLevels`); die Spalte ist dann breiter
-  (`minmax(380px, 1.25fr)`, kompakt 330 px), damit die Namen passen. Passen Umschalter und angezeigte Aufnahme nicht
+  (`minmax(380px, 1.25fr)`, kompakt 330 px), damit die Namen passen. Passen Aufnahmeart und angezeigte Aufnahme nicht
   zusammen: Stereo-Aufnahme bei „Mehrspur“ → Hinweis im Kanal-Bereich „zum Exportieren auf Stereo schalten“;
   Mehrspuraufnahme bei „Stereo“ → Export-Bereich mit Hinweis „werden nicht als MP3 exportiert“. (Früher blieb der
-  Kanal-Bereich bei angezeigter Mehrspuraufnahme stehen, egal wie der Umschalter stand – wirkte wie ein Fehler.)
+  Kanal-Bereich bei angezeigter Mehrspuraufnahme stehen, egal wie die Aufnahmeart stand – wirkte wie ein Fehler.)
   Gemessen: kein Überlauf, Timer gleich in beiden Modi, keine gekürzten Kanalnamen bei 1360×880, 1024×680, kompakt
   960×640 und 760×520.
 - **Abhören vor dem Start:** `engine.monitor()` öffnet das Gerät ohne Aufnahme; `start()` übernimmt den offenen Strom
@@ -567,7 +578,7 @@ Der Ordnername des lokalen Klons ist egal.
 - Companion (Modul 2.1.0): Variablen `recording_mode`/`routing_status`, Rückmeldungen `routing_mismatch` (nur bei
   `mismatch`, nicht bei `unknown`, sonst stünde die Taste bei nicht erreichbarem Pult dauernd auf Rot) und
   `multitrack`, Aktion `mode_set` → WebSocket `mode.set` (`stereo`/`multitrack`/`toggle`, während der Aufnahme
-  abgelehnt; `setRecordingMode` in `main.js` speichert, schickt `settings` an die Oberfläche – die zieht nur Umschalter
+  abgelehnt; `setRecordingMode` in `main.js` speichert, schickt `settings` an die Oberfläche – die zieht nur Schild
   und Ansicht nach, ein offener Einstellungsdialog behält seine Eingaben –, stellt Pult-Verbindung und Abhören um).
   Der Zustand für Netzwerk-Clients trägt dafür `recordingMode` (`netState()`: Art der laufenden, sonst der eingestellten
   Aufnahme). Preset „Aufnahmeart umschalten“, Rückmeldung zusätzlich im Preset „Eingang und Speicher“.

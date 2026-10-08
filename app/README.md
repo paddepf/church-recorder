@@ -451,8 +451,9 @@ Für Aufnahmen aller 32 Kanäle des Midas M32 (DN32-USB-Karte, ASIO) gibt es ein
 Ein eigener Prozess öffnet das Gerät über `audify` (RtAudio; unter Windows ASIO) und schreibt je
 Kanal eine 24-Bit-Mono-WAV. Die Oberfläche erfasst dabei nichts selbst.
 
-**Bedienung:** Oben rechts „Stereo | Mehrspur“ wählt die Aufnahmeart (während einer Aufnahme gesperrt; dasselbe
-unter *Einstellungen → Audio*). Im Mehrspur-Modus ersetzt der Bereich **Kanäle** den Export: alle Kanäle mit
+**Bedienung:** Die Aufnahmeart wird unter *Einstellungen → Audio → Aufnahmeart* gewählt (oder per Companion); im
+Normalfall Stereo. Ist Mehrspur eingestellt, steht oben rechts ein farbiges Schild **„● Mehrspur“** – ein Klick darauf
+öffnet die Einstellung. Im Mehrspur-Modus ersetzt der Bereich **Kanäle** den Export: alle Kanäle mit
 Name und Farbe vom Pult und Pegel – schon vor dem Start, denn das Gerät ist im Mehrspur-Modus ständig offen.
 Ein Klick auf einen Kanal wählt ihn für die nächste Aufnahme ab bzw. wieder an (durchgestrichen = wird nicht
 aufgenommen), „Alle“ und „Nur benannte“ (Kanäle mit Namen am Pult) wählen schnell aus. Rot umrandet = übersteuert,
@@ -468,8 +469,8 @@ Beenden, „An Aufnahme anhängen“, auch per Companion. Am Mischpult müssen d
 MP3-Export, Mithören während der Aufnahme und Cue-Marker gibt es bei Mehrspuraufnahmen nicht; das Mini-Fenster
 zeigt nach dem Beenden nur „Mehrspur: n Spuren gespeichert“.
 
-**Zurückspielen zum Pult** (virtueller Soundcheck, Nachmischen): Bei einer beendeten Mehrspuraufnahme (Umschalter
-auf „Mehrspur“; in der Stereo-Ansicht ist der Knopf gesperrt) spielt
+**Zurückspielen zum Pult** (virtueller Soundcheck, Nachmischen): Bei einer beendeten Mehrspuraufnahme (Aufnahmeart
+Mehrspur; bei Aufnahmeart Stereo ist der Knopf gesperrt) spielt
 „Zum Pult abspielen“ (oder die Leertaste) die Spuren über die USB-Ausgänge – Spur von Kanal 5 auf USB-Ausgang 5 –,
 ab der Marke in der Wellenform. Klick in die Wellenform springt, Klick auf einen Abschnitt springt an dessen Anfang;
 mit „Schleife“ wird der gewählte Abschnitt (sonst die ganze Aufnahme) wiederholt. Im Kanal-Bereich steht die
