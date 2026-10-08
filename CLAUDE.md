@@ -490,7 +490,8 @@ Der Ordnername des lokalen Klons ist egal.
   (`app.asar.unpacked`), Quellcode/`vendor` (17 MB) über `build.files` ausgeschlossen. **Noch nicht geprüft:** Windows mit
   ASIO (erst mit ASIO4ALL/FlexASIO ohne Pult, dann DN32-USB mit 32 Kanälen) und der Windows-Build im Release-Workflow.
   Der CI-Test „audify lädt“ prüft auf dem Windows-Runner, dass die ASIO-Schnittstelle vorhanden ist.
-  Unter Linux wird er übersprungen: Die Release-Vorbereitung läuft auf Ubuntu, dort fehlt `libpulse` (so scheiterte v1.0.6).
+  Unter Linux wird er übersprungen (fehlendes `libpulse`; so scheiterte v1.0.6, als die Release-Vorbereitung noch auf
+  Ubuntu lief). Seitdem testet `vorbereiten` in `release.yml` auf `windows-latest` (Git Bash), also dort, wo die App läuft.
 - Gerätenamen von CoreAudio kommen bei Sonderzeichen verstümmelt an (audify); für ASIO („DN32-USB“) unerheblich.
 - „Automatisch“ (kein Mehrspur-Gerät gewählt): meiste Eingänge, bei Gleichstand das Standard-Eingabegerät
   (`byInputsThenDefault`, `isDefault` aus `engine.devices`). Anlass: Auf dem Mac haben alle Eingänge einen Kanal,

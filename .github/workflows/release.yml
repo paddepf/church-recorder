@@ -12,8 +12,14 @@ defaults:
 jobs:
   # Vor dem Bauen: Passt der Tag zur Version in package.json, laufen die Tests?
   # Danach wird ein Entwurf des Releases angelegt, in den beide Builds hochladen.
+  # Läuft auf Windows, wo die App wirklich läuft: Unter Ubuntu scheiterte v1.0.6 an einem Test,
+  # der dort eine fehlende Systembibliothek (libpulse) brauchte – irrelevant für die App.
   vorbereiten:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash          # Git Bash; die Schritte sind Shell-Skripte
+        working-directory: app
     permissions:
       contents: write
     steps:

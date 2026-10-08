@@ -143,7 +143,7 @@ test('Manager spricht mit dem Prozess und meldet dessen Ende', async () => {
   assert.deepEqual(await exit, { code: 1, wasRecording: true });
 });
 
-// Unter Linux (Release-Vorbereitung auf Ubuntu) fehlt libpulse; Zielsysteme sind nur Windows und macOS.
+// Unter Linux fehlt libpulse; Zielsysteme sind nur Windows und macOS (CI und Release testen nicht unter Linux).
 test('audify lädt (unter Windows mit ASIO)', { skip: process.platform === 'linux' && 'kein Zielsystem' }, () => {
   const { RtAudio, RtAudioApi } = require('audify');
   const rt = new RtAudio(process.platform === 'win32' ? RtAudioApi.WINDOWS_ASIO : RtAudioApi.UNSPECIFIED);
