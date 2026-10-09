@@ -480,14 +480,30 @@ canvas.overview {
   border: 1px solid var(--line); border-radius: 4px; background: var(--ruler-bg);
   cursor: pointer; touch-action: none;
 }
-body[data-phase="prep"] canvas.overview { display: none; }
 /* Vor dem Start: keine Werkzeuge (es gibt nichts zu zoomen oder abzuspielen), die Wellenform nur als Ablagefläche
-   für Ablaufpunkte – flacher, damit die Liste und die Prüfliste Platz haben. */
-body[data-phase="prep"] .wave-toolbar { display: none; }
+   für Ablaufpunkte – flacher, damit die Liste und die Prüfliste Platz haben. Beim Start (und zurück) gleiten
+   Werkzeugleiste, Übersicht und Wellenform weich auf ihre Größe statt zu springen; deshalb hier keine display: none,
+   sondern Höhe 0 (die Zeichenflächen zeichnen sich über ihren ResizeObserver bei jedem Schritt neu). */
+.wave-toolbar { max-height: 90px; transition: max-height .32s ease, padding .32s ease, opacity .25s ease .07s; }
+canvas.overview { transition: height .32s ease, margin .32s ease, opacity .25s ease .07s, border-width .32s ease; }
+canvas.wave { transition: height .32s ease; }
+body[data-phase="prep"] .wave-section .wave-toolbar {
+  max-height: 0; padding-bottom: 0; opacity: 0; overflow: hidden; visibility: hidden; pointer-events: none;
+  transition: max-height .32s ease, padding .32s ease, opacity .15s ease, visibility 0s linear .32s;
+}
+body[data-phase="prep"] .wave-section canvas.overview {
+  height: 0; margin-bottom: 0; border-width: 0; opacity: 0;
+  transition: height .32s ease, margin .32s ease, opacity .15s ease, border-width .32s ease;
+}
 body[data-phase="prep"]:not(.compact) canvas.wave { height: 110px; }
 body.dense[data-phase="prep"] canvas.wave { height: 80px; }
 body[data-phase="prep"] .wave-section { padding-top: 12px; }
 body.dense[data-phase="prep"] .wave-section { padding-top: 6px; }
+body.compact canvas.wave { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .wave-toolbar, canvas.overview, canvas.wave,
+  body[data-phase="prep"] .wave-section .wave-toolbar, body[data-phase="prep"] .wave-section canvas.overview { transition: none; }
+}
 
 /* Lautheit in der Werkzeugleiste: füllt den freien Platz, rechtsbündig vor dem Abspielknopf. Ist es zu eng, rutschen
    die hinteren (unwichtigeren) Werte in eine zweite Zeile, die abgeschnitten ist – vorne bleibt immer S bzw. I stehen. */

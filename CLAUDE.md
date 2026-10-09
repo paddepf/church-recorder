@@ -723,7 +723,12 @@ dran?“; je Phase genau eine Hauptaktion, der Aufbau bleibt gleich, nur die Bet
   (`nextItem`) · save = `#btn-export` (Hauptknopf) und `#btn-record` leise als
   „Neue Aufnahme“ (`order: 2`); bei Mehrspur (kein Export) „Neue Aufnahme starten“ und `#btn-continue`. Stereo hat
   „An Aufnahme anhängen“ als `#now-continue` unter „Sichern“. Vor dem Start entfallen Werkzeugleiste und Übersicht,
-  die Wellenform ist flacher (110 px, kompakt 80 px). M/N/X und Pause/Beenden sind aus der Werkzeugleiste bzw. ihren
+  die Wellenform ist flacher (110 px, kompakt 80 px) – bewusst: Eine gleich hohe Wellenform mit Hinweis wurde
+  ausprobiert und gefiel schlechter (2026-10-09). Der Wechsel ist dafür weich (0,32 s): Werkzeugleiste und Übersicht
+  klappen über `max-height`/`height` auf statt `display: none`, die Wellenform wächst per `transition: height` und
+  zeichnet sich über ihren `ResizeObserver` bei jedem Schritt neu; nicht im Mini-Fenster, nicht bei
+  `prefers-reduced-motion`. Die Regeln für „prep“ tragen `.wave-section` im Selektor, sonst gewinnen die späteren
+  `body.dense …`-Regeln (gleiche Spezifität). M/N/X und Pause/Beenden sind aus der Werkzeugleiste bzw. ihren
   alten Plätzen in den Transport gewandert; `#btn-cut` („✂ Schnitt“, nur rec) steht links über der Wellenform.
 - **Knopf-Rollen:** `.primary` (Indigo, Hauptaktion), `.go` (rot gefüllt, nur „Aufnahme starten“), normal (grau),
   `.ghost` (leise), `.danger` (rote Schrift, kein roter Grund). Kürzel als `kbd.k` im Knopf. Knöpfe geben beim Drücken
