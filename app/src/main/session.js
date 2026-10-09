@@ -215,6 +215,8 @@ class Session extends EventEmitter {
       sections: this.sections,
       exports: this.exports,
       cuts: this.cuts,
+      canUndo: this._undo.length > 0,
+      canRedo: this._redo.length > 0,
       pending: this.pendingSections(),
       segments: this.segments(),
       currentSegment: this.currentSegment(),

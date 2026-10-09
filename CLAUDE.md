@@ -241,7 +241,7 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   `.github/workflows/test.yml` auf Windows und macOS. Neue Logik dort mit Tests absichern.
 
 ### Rückgängig, Schnitte, Vorlagen, Health
-- **Rückgängig:** `Session._changed()` vergleicht `JSON({sections, cuts})` mit dem letzten Stand und legt
+- **Rückgängig:** Pfeilknöpfe `#btn-undo`/`#btn-redo` im Kopf der Liste „Ablauf“ (Zustand aus `canUndo`/`canRedo` im Snapshot). `Session._changed()` vergleicht `JSON({sections, cuts})` mit dem letzten Stand und legt
   Änderungen auf einen Verlauf (`_undo`/`_redo`, 60 Schritte). `{ undoable: false }` für Änderungen, die nicht
   zurückgenommen werden sollen (Start, Stop, Laden, Ablaufplan laden: dort `_resetUndo()`). Mac: Menü
   „Widerrufen“ (eigener Eintrag, sendet `menu` `undo`; in Textfeldern `document.execCommand`), sonst Strg+Z

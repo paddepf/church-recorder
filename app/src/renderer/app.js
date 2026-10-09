@@ -1249,7 +1249,14 @@
    * läuft), dahinter die offenen Punkte nach Reihenfolge. Nach dem Beenden tragen die Zeilen Häkchen und
    * Sicherungsstand, am Ende steht „Gesamte Aufnahme“.
    */
+  function renderUndoButtons() {
+    const u = $('btn-undo'), r = $('btn-redo');
+    if (u) u.disabled = !state.session?.canUndo;
+    if (r) r.disabled = !state.session?.canRedo;
+  }
+
   function renderLists() {
+    renderUndoButtons();
     // Gewählter Abschnitt auch für die Lautheitsanzeige (I des Abschnitts) und die Hinterlegung in der Wellenform
     if (wave.selectedSectionId !== state.selectedSectionId) {
       wave.selectedSectionId = state.selectedSectionId;
@@ -2095,6 +2102,9 @@
       $('confirm-ok').addEventListener('click', onOk);
     });
   }
+
+  $('btn-undo')?.addEventListener('click', () => undoEdit());
+  $('btn-redo')?.addEventListener('click', () => redoEdit());
 
   async function undoEdit() {
     const res = await window.api.edit.undo();

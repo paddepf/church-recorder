@@ -204,7 +204,7 @@ daneben speichert ebenfalls.
 
 ### Rückgängig, Schnitte und Warnungen
 
-- **Rückgängig / Wiederholen:** `Strg`/`Cmd` + `Z` nimmt die letzte Änderung an Abschnitten oder Schnitten
+- **Rückgängig / Wiederholen:** zwei Pfeilknöpfe im Kopf der Liste „Ablauf“ (grau, wenn nichts zu tun ist) oder `Strg`/`Cmd` + `Z` nehmen die letzte Änderung an Abschnitten oder Schnitten
   zurück (Marke gesetzt, verschoben, gelöscht, umbenannt …), `Umschalt` + `Strg`/`Cmd` + `Z` bzw. `Strg` + `Y`
   stellt sie wieder her. Bis zu 60 Schritte; auch das Laden einer Vorlage oder eines Ablaufplans lässt sich
   zurücknehmen. Mit „Beenden“, einer neuen Aufnahme oder dem Öffnen einer anderen beginnt der Verlauf neu. In Eingabefeldern wirkt

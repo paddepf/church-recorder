@@ -167,6 +167,14 @@
       <div class="panel-head">
         <h2>Ablauf</h2>
         <div class="head-actions">
+          <span class="undo-group">
+            <button id="btn-undo" class="ghost icon-btn" disabled aria-label="Rückgängig" title="Rückgängig (Strg+Z)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>
+            </button>
+            <button id="btn-redo" class="ghost icon-btn" disabled aria-label="Wiederholen" title="Wiederholen (Strg+Umschalt+Z)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg>
+            </button>
+          </span>
           <button id="btn-plan-service" class="ghost plan-only" title="Gottesdienst aus ChurchTools wählen">ChurchTools …</button>
           <select id="plan-template" class="select plan-only" title="Vorlage mit Programmpunkten laden" aria-label="Vorlage laden"></select>
           <span class="export-select save-only">

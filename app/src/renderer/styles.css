@@ -1622,3 +1622,12 @@ body.compact .top-text svg { display: none; }
 .calendar-list label { font-size: 15px; }
 .mixer-line { font-size: 15px; }
 .mixer-channels { font-size: 14px; }
+
+/* Rückgängig/Wiederholen im Kopf der Liste „Ablauf“ */
+.undo-group { display: inline-flex; gap: 2px; margin-right: 4px; }
+.undo-group .icon-btn { width: 34px; height: 34px; padding: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
+.undo-group .icon-btn:hover:not(:disabled) { color: var(--text); }
+.undo-group .icon-btn:disabled { opacity: .35; }
+.undo-group .icon-btn svg { width: 18px; height: 18px; }
+body.dense .undo-group .icon-btn { width: 26px; height: 26px; }
+body.dense .undo-group .icon-btn svg { width: 15px; height: 15px; }
